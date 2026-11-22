@@ -76,9 +76,11 @@ object Media {
 
     fun jellyfin(p: Prefs): List<JSONObject> {
         if (p.jellyfinUrl.isEmpty() || p.jellyfinKey.isEmpty()) return emptyList()
-        val h = mapOf("X-Emby-Token" to p.jellyfinKey)
+        // Jellyfin 12 accepteert de sleutel alleen nog in de Authorization-header.
+        val auth = "MediaBrowser Client=\"Thuis\", Device=\"Formuler\", DeviceId=\"thuis-formuler\", Version=\"1\", Token=\"${p.jellyfinKey}\""
+        val h = mapOf("Authorization" to auth)
         if (jfUser.isEmpty()) {
-            val users = JSONArray(Xtream.http.newCall(Request.Builder().url("${p.jellyfinUrl}/Users").header("X-Emby-Token", p.jellyfinKey).build())
+            val users = JSONArray(Xtream.http.newCall(Request.Builder().url("${p.jellyfinUrl}/Users").header("Authorization", auth).build())
                 .execute().use { it.body?.string() ?: "[]" })
             val admin = (0 until users.length()).map { users.getJSONObject(it) }
                 .firstOrNull { it.optJSONObject("Policy")?.optBoolean("IsAdministrator") == true } ?: users.optJSONObject(0)
@@ -95,7 +97,7 @@ object Media {
             val ud = m.optJSONObject("UserData")
             val ticks = m.optLong("RunTimeTicks", 0)
             val pos = ud?.optLong("PlaybackPositionTicks", 0) ?: 0
-            fun img(w: Int) = "${p.jellyfinUrl}/Items/$artId/Images/Backdrop?maxWidth=$w&quality=85&api_key=${enc(p.jellyfinKey)}"
+            fun img(w: Int) = "${p.jellyfinUrl}/Items/$artId/Images/Backdrop?maxWidth=$w&quality=85"
             out.add(JSONObject()
                 .put("source", "jellyfin")
                 .put("key", m.optString("Id"))
