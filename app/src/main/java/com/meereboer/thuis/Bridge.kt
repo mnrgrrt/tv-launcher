@@ -12,7 +12,7 @@ import java.util.concurrent.Executors
 class Bridge(private val act: MainActivity, private val web: WebView) {
     private val prefs = Prefs(act)
     private val pool = Executors.newFixedThreadPool(4)
-    private val epgPool = Executors.newFixedThreadPool(6)
+    private val epgPool = Executors.newFixedThreadPool(8)
 
     private fun reply(id: Int, ok: Boolean, data: String) {
         web.post {
@@ -53,31 +53,53 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         act.runOnUiThread { AppList.launch(act, pkg) }
     }
 
-    /** Zenders voor de rij "Nu live" op het startscherm, met nu/straks uit de korte gids. */
-    @JavascriptInterface fun liveHome(id: Int) = async(id) {
+    private fun channelJson(ch: Channel, epg: List<Programme>): JSONObject {
+        val o = JSONObject().put("id", ch.id).put("num", ch.num).put("name", ch.name)
+            .put("icon", ch.icon).put("cat", ch.categoryId)
+        epg.getOrNull(0)?.let {
+            o.put("now", JSONObject().put("title", it.title).put("desc", it.desc).put("start", it.start).put("end", it.end))
+        }
+        epg.getOrNull(1)?.let { o.put("next", JSONObject().put("title", it.title).put("start", it.start)) }
+        return o
+    }
+
+    /** Categorie-tegels voor de rij "Live tv": slimme categorieën uit categories.json. */
+    @JavascriptInterface fun liveCategories(id: Int) = async(id) {
         if (!prefs.configured) return@async JSONObject().put("configured", false).toString()
         val all = Xtream.load(prefs)
-        // Een of meer groepen, gescheiden door komma's, bijvoorbeeld "sport, film".
-        val groups = prefs.homeGroup.lowercase().split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        val pick = if (groups.isNotEmpty()) {
-            val ids = Xtream.categories.filterValues { name -> groups.any { name.lowercase().contains(it) } }.keys
-            all.filter { it.categoryId in ids }
-        } else all
-        val chosen = pick.take(24)
-        val tasks = chosen.map { ch ->
+        val cats = Categorizer.build(act, all)
+        Categorizer.export(act, all, cats)
+        val show = prefs.categories.lowercase().split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        val visible = cats.filter { c ->
+            c.channels.isNotEmpty() && (show.isEmpty() || c.id == "alle" || show.any { c.name.lowercase().contains(it) || c.id == it })
+        }
+        val arr = JSONArray()
+        for (c in visible) {
+            arr.put(JSONObject().put("id", c.id).put("name", c.name).put("img", c.img).put("count", c.channels.size)
+                .put("sample", JSONArray(c.channels.take(4).map { it.name })))
+        }
+        JSONObject().put("configured", true).put("total", all.size).put("categories", arr).toString()
+    }
+
+    /** Alle zenders van één categorie, in de vaste volgorde, met nu/straks uit de korte gids. */
+    @JavascriptInterface fun liveCategory(id: Int, catId: String) = async(id) {
+        val all = Xtream.load(prefs)
+        val cat = Categorizer.build(act, all).firstOrNull { it.id == catId }
+        val list = (cat?.channels ?: emptyList()).take(150)
+        val tasks = list.map { ch ->
             Callable { ch to (try { Xtream.shortEpg(prefs, ch.id, 2) } catch (_: Exception) { emptyList() }) }
         }
-        val results = epgPool.invokeAll(tasks).map { it.get() }
         val arr = JSONArray()
-        for ((ch, epg) in results) {
-            val o = JSONObject().put("id", ch.id).put("num", ch.num).put("name", ch.name).put("icon", ch.icon)
-            epg.getOrNull(0)?.let {
-                o.put("now", JSONObject().put("title", it.title).put("desc", it.desc).put("start", it.start).put("end", it.end))
-            }
-            epg.getOrNull(1)?.let { o.put("next", JSONObject().put("title", it.title).put("start", it.start)) }
-            arr.put(o)
+        for (f in epgPool.invokeAll(tasks)) { val (ch, epg) = f.get(); arr.put(channelJson(ch, epg)) }
+        JSONObject().put("name", cat?.name ?: "").put("channels", arr).toString()
+    }
+
+    @JavascriptInterface fun playInCategory(streamId: Int, catId: String) {
+        act.runOnUiThread {
+            act.startActivity(
+                Intent(act, PlayerActivity::class.java).putExtra("streamId", streamId).putExtra("categoryId", catId)
+            )
         }
-        JSONObject().put("configured", true).put("total", all.size).put("channels", arr).toString()
     }
 
     @JavascriptInterface fun playChannel(streamId: Int) {

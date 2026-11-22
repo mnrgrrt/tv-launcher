@@ -56,6 +56,7 @@ class PlayerActivity : Activity() {
 
     private lateinit var listPanel: LinearLayout
     private lateinit var listView: ListView
+    private lateinit var listTitle: TextView
     private lateinit var center: TextView
 
     private var channels: List<Channel> = emptyList()
@@ -132,7 +133,8 @@ class PlayerActivity : Activity() {
             setPadding(dp(24), dp(32), dp(12), dp(24))
             visibility = View.GONE
         }
-        listPanel.addView(text(22f, true).apply { setText("Zenders"); setPadding(0, 0, 0, dp(12)) })
+        listTitle = text(22f, true).apply { setText("Zenders"); setPadding(0, 0, 0, dp(12)) }
+        listPanel.addView(listTitle)
         listView = ListView(this).apply {
             selector = ColorDrawable(0x40FFFFFF)
             divider = null
@@ -198,11 +200,17 @@ class PlayerActivity : Activity() {
         showCenter("Zenders laden…")
         bg.execute {
             try {
-                val list = Xtream.load(prefs)
+                val cat = intent.getStringExtra("categoryId")
+                val all = Xtream.load(prefs)
+                // Gestart vanuit een categorie: dan zap je binnen die categorie.
+                val smart = if (!cat.isNullOrEmpty()) Categorizer.build(this, all).firstOrNull { it.id == cat } else null
+                val list = smart?.channels?.ifEmpty { all } ?: all
+                val title = smart?.name ?: "Alle zenders"
                 ui.post {
                     channels = list
                     if (list.isEmpty()) { showCenter("Geen zenders gevonden"); return@post }
                     listView.adapter = ChannelAdapter(list)
+                    listTitle.text = title
                     val wanted = intent.getIntExtra("streamId", prefs.lastChannel)
                     val i = list.indexOfFirst { it.id == wanted }
                     play(if (i >= 0) i else 0)

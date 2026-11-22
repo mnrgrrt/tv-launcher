@@ -127,7 +127,7 @@
       <label class="field">Gebruikersnaam<input id="sUser" autocomplete="off" spellcheck="false"></label>
       <label class="field">Wachtwoord<input id="sPass" type="password" autocomplete="off"></label>
       <div class="field">Streamformaat<button class="btn" id="sFormat" type="button">ts</button></div>
-      <label class="field">Groep op startscherm<input id="sGroup" placeholder="leeg = alles, of bijv. sport, film" autocomplete="off" spellcheck="false"></label>
+      <label class="field">Categorieën<input id="sGroup" placeholder="leeg = alle, of bijv. sport, docu" autocomplete="off" spellcheck="false"></label>
       <div class="btns">
         <button class="btn" id="sTest" type="button">Verbinding testen</button>
         <button class="btn pri" id="sSave" type="button">Opslaan</button>
@@ -150,16 +150,17 @@
   var PL = null;
   var cbs = {}, cbn = 0;
   window.__nativeCb = function(id, ok, payload){ var f = cbs[id]; delete cbs[id]; if (f) f(ok, payload); };
-  function call(method, done){ var id = ++cbn; cbs[id] = done; Native[method](id); }
+  function call(method, done){ var id = ++cbn; cbs[id] = done; Native[method].apply(Native, [id].concat([].slice.call(arguments, 2))); }
   try {
     if (window.Native && Native.isApp && Native.isApp()) PL = {
       name: 'android',
-      liveHome: function(cb){ call('liveHome', cb); },
+      liveCategories: function(cb){ call('liveCategories', cb); },
+      liveCategory: function(catId, cb){ call('liveCategory', cb, catId); },
       apps: function(cb){ call('getApps', cb); },
       test: function(cb){ call('testConnection', cb); },
       getSettings: function(){ return JSON.parse(Native.getSettings()); },
       saveSettings: function(o){ Native.saveSettings(JSON.stringify(o)); },
-      play: function(id){ Native.playChannel(id); },
+      play: function(id, cat){ if (cat) Native.playInCategory(id, String(cat)); else Native.playChannel(id); },
       playLast: function(){ Native.playLast(); },
       launch: function(id){ Native.launch(id); },
       systemSettings: function(){ Native.openAndroidSettings(); },
@@ -207,17 +208,31 @@
   var data = { cont: SAMPLE_CONT, live: APP ? [{ t:'Zenders laden…', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, d:'', loading:true }] : SAMPLE_LIVE,
                rec: SAMPLE_REC, apps: SAMPLE_APPS, liveSub: 'Dispatcharr', ziggo: null };
   data.channels = data.live;
+  if (!APP) { data.cats = SAMPLE_CATS; }
 
   // Vaste tegel voor Ziggo GO vooraan in "Nu live" (handig als de ene IPTV-stream al in gebruik is).
   function composeLive(){
-    var list = data.channels.slice();
+    var list = (data.cats || data.channels).slice();
     if (data.ziggo) list.unshift({ t:'Ziggo GO', ch:'Ziggo GO', s:'ziggo', kind:'App', img:'city', meta:['Live tv en terugkijken van Ziggo'], p:0,
       d:'Opent de app van Ziggo. Gebruik deze als de IPTV-stream al ergens anders speelt, of voor terugkijken van Ziggo.', app:true, pkg:data.ziggo });
     data.live = list;
   }
   var ROWS = [];
   var NAV = ['Thuis','Live tv','Apps','Instellingen'];
-  var state = { row:0, col:[0,0,0,0], nav:false, navIdx:0 };
+  var state = { row:0, col:[0,0,0,0], nav:false, navIdx:0, view:'home', cat:null, home:null };
+  function catImg(name, i){
+    var n = (name || '').toLowerCase();
+    if (/sport|voetbal|wieler|f1|basket/.test(n)) return 'forest';
+    if (/docu|discovery|natuur|national/.test(n)) return 'dunes';
+    if (/muziek|music|mtv|radio/.test(n)) return 'neon';
+    if (/film|movie|cinema|serie/.test(n)) return 'ocean';
+    if (/nieuws|news|standaard|algemeen|nl/.test(n)) return 'city';
+    return IMGS[i % IMGS.length];
+  }
+  var SAMPLE_CATS = [['Standaard',42],['Sport',37],['Docu',14],['Muziek',9]].map(function(c, i){
+    return { t:c[0], ch:c[0], s:'iptv', kind:'Categorie', img:catImg(c[0], i), meta:[c[1] + ' zenders'], p:0, count:c[1], cat:'s' + i,
+             d:'Voorbeeldcategorie. In de app komen hier je groepen uit Dispatcharr.' };
+  });
   var $ = function(id){ return document.getElementById(id); };
   var stage = $('stage');
 
@@ -247,9 +262,16 @@
   // ---------- rijen ----------
   var rowEls = [];
   function rowDefs(){
+    if (state.view === 'cat') {
+      var ch = data.catChannels || [], rows = [];
+      for (var i = 0; i < Math.max(1, ch.length); i += 4) {
+        rows.push({ title: i === 0 ? state.cat.t : '', sub: i === 0 ? (data.catSub || '') : '', type:'live', grid:true, items: ch.slice(i, i + 4) });
+      }
+      return rows;
+    }
     return [
       { title:'Verder kijken', sub: APP ? 'voorbeeld, Plex volgt' : 'uit al je diensten', type:'cont', items:data.cont },
-      { title:'Nu live', sub:data.liveSub, type:'live', items:data.live },
+      { title:'Live tv', sub:data.liveSub, type:'live', items:data.live },
       { title:'Aanbevolen voor jou', sub: APP ? 'voorbeeld' : 'Netflix · Prime · SkyShowtime · Videoland', type:'rec', items:data.rec },
       { title:'Apps', sub:'', type:'app', items:data.apps }
     ];
@@ -268,7 +290,8 @@
       r.items.forEach(function(it, ci){ tr.appendChild(card(r, it, ri, ci)); });
       vp.appendChild(tr); row.appendChild(h); row.appendChild(vp);
       host.appendChild(row);
-      rowEls.push({ row:row, track:tr, w: r.type==='app' ? 288 : 428 });
+      rowEls.push({ row:row, track:tr, w: r.grid ? 0 : (r.type==='app' ? 288 : 428), grid: !!r.grid });
+      if (state.col[ri] === undefined) state.col[ri] = 0;
       if (state.col[ri] > r.items.length - 1) state.col[ri] = Math.max(0, r.items.length - 1);
     });
     render();
@@ -297,9 +320,10 @@
         }
         ch.appendChild(document.createTextNode(it.ch || ''));
         b.appendChild(ch);
-        if (it.app) b.insertAdjacentHTML('beforeend','<span class="ldot" style="background:#F48C00">APP</span>');
+        if (it.cat) b.insertAdjacentHTML('beforeend','<span class="ldot" style="background:rgba(255,255,255,.22)">' + it.count + '</span>');
+        else if (it.app) b.insertAdjacentHTML('beforeend','<span class="ldot" style="background:#F48C00">APP</span>');
         else if (!it.setup && !it.loading) b.insertAdjacentHTML('beforeend','<span class="ldot">LIVE</span>');
-        var now = document.createElement('span'); now.className = 'now'; now.textContent = it.app ? 'Live tv en terugkijken' : it.t; b.appendChild(now);
+        var now = document.createElement('span'); now.className = 'now'; now.textContent = it.app ? 'Live tv en terugkijken' : (it.cat ? it.count + ' zenders' : it.t); b.appendChild(now);
         if (it.p > 0) { b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>'); b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%'; }
       } else {
         var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = SRC[it.s].n; b.appendChild(bd);
@@ -336,7 +360,10 @@
   function hero(it, type){
     var src = SRC[it.s] || SRC.app;
     var s = $('hSrc'); s.innerHTML = '';
-    if (it.app && type === 'live') {
+    if (it.cat) {
+      var cd = document.createElement('i'); cd.style.background = SRC.iptv.c; s.appendChild(cd);
+      s.appendChild(document.createTextNode('Live tv · Categorie'));
+    } else if (it.app && type === 'live') {
       var zd = document.createElement('i'); zd.style.background = SRC.ziggo.c; s.appendChild(zd);
       s.appendChild(document.createTextNode('Ziggo · App'));
     } else if (type === 'live' && !it.setup && !it.loading) {
@@ -361,6 +388,7 @@
     var k = document.createElement('b'); k.textContent = 'OK'; c.appendChild(k);
     if (it.setup) add('Instellingen openen');
     else if (it.app) add('Open Ziggo GO');
+    else if (it.cat) add('Bekijk ' + it.count + ' zenders');
     else if (type === 'live') { add('Kijk live'); if (it.p > 0) bar(it.p); if (it.next) add(it.next, true); }
     else if (type === 'app') add('Open ' + it.t);
     else if (it.p > 0) { add('Verder kijken'); bar(it.p); add(it.left, true); }
@@ -380,7 +408,7 @@
       var cards = re.track.children;
       for (var k = 0; k < cards.length; k++) {
         cards[k].classList.toggle('focus', !state.nav && ri === state.row && k === ci);
-        cards[k].style.opacity = k < ci ? '0' : '1';
+        cards[k].style.opacity = (!re.grid && k < ci) ? '0' : '1';
       }
     });
     var r = ROWS[state.row];
@@ -396,9 +424,9 @@
   function enter(){
     if (state.nav) {
       var n = NAV[state.navIdx];
-      if (n === 'Thuis') { state.nav = false; state.row = 0; render(); }
+      if (n === 'Thuis') { state.nav = false; if (state.view === 'cat') closeCategory(); else { state.row = 0; render(); } }
       else if (n === 'Live tv') { if (APP) PL.playLast(); else toast('Live tv opent in de app op de tv'); }
-      else if (n === 'Apps') { state.nav = false; state.row = 3; render(); }
+      else if (n === 'Apps') { state.nav = false; if (state.view === 'cat') closeCategory(); state.row = 3; render(); }
       else if (n === 'Instellingen') openSettings();
       return;
     }
@@ -407,39 +435,71 @@
     if (it.setup) { openSettings(); return; }
     if (it.loading) return;
     if (it.app && it.pkg) { if (APP) PL.launch(it.pkg); else toast('Ziggo GO wordt geopend'); return; }
-    if (r.type === 'live') { if (APP && it.streamId) PL.play(it.streamId); else toast('Live: ' + it.ch + ' · ' + it.t); }
+    if (it.cat) { openCategory(it); return; }
+    if (r.type === 'live') { if (APP && it.streamId) PL.play(it.streamId, it.catId); else toast('Live: ' + it.ch + ' · ' + it.t); }
     else if (r.type === 'app') { if (APP && it.pkg) PL.launch(it.pkg); else toast(it.t + ' wordt geopend'); }
     else toast('Dit is een voorbeeld. De koppeling met Plex volgt.');
   }
 
   // ---------- live en apps uit Android ----------
+  function mapChannel(c, i){
+    var now = c.now || {}, nx = c.next, p = 0, meta = [];
+    if (now.start && now.end && now.end > now.start) {
+      p = Math.max(0, Math.min(1, (Date.now() - now.start) / (now.end - now.start)));
+      meta = [hm(now.start) + ' tot ' + hm(now.end)];
+    }
+    return { t: now.title || c.name, ch: c.name, num: c.num, s:'iptv', kind:'Live', img: IMGS[i % IMGS.length], logo: c.icon,
+             meta: meta, p: p, next: nx ? 'Daarna ' + (nx.start ? hm(nx.start) + ' ' : '') + nx.title : '', d: now.desc || '',
+             streamId: c.id, catId: c.cat };
+  }
+
   function loadLive(){
     if (!APP) return;
-    PL.liveHome(function(ok, payload){
+    PL.liveCategories(function(ok, payload){
       if (!ok) {
-        data.channels = [{ t:'Dispatcharr niet bereikbaar', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true,
+        data.cats = [{ t:'Dispatcharr niet bereikbaar', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true,
           d:'Fout: ' + payload + '. Controleer de server en je login in Instellingen.' }];
-        data.liveSub = 'geen verbinding'; composeLive(); buildRows(); return;
+        data.liveSub = 'geen verbinding'; composeLive(); if (state.view === 'home') buildRows(); return;
       }
       var res = JSON.parse(payload);
       if (!res.configured) {
-        data.channels = [{ t:'Live tv instellen', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true,
-          d:'Vul één keer het adres van Dispatcharr en je Xtream-login in. Daarna staan hier je zenders.' }];
-        data.liveSub = 'nog niet ingesteld'; composeLive(); buildRows(); return;
+        data.cats = [{ t:'Live tv instellen', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true,
+          d:'Vul één keer het adres van Dispatcharr en je Xtream-login in. Daarna staan hier je categorieën.' }];
+        data.liveSub = 'nog niet ingesteld'; composeLive(); if (state.view === 'home') buildRows(); return;
       }
-      data.channels = res.channels.map(function(c, i){
-        var now = c.now || {}, nx = c.next, p = 0, meta = [];
-        if (now.start && now.end && now.end > now.start) {
-          p = Math.max(0, Math.min(1, (Date.now() - now.start) / (now.end - now.start)));
-          meta = [hm(now.start) + ' tot ' + hm(now.end)];
-        }
-        return { t: now.title || c.name, ch: c.name, num: c.num, s:'iptv', kind:'Live', img: IMGS[i % IMGS.length], logo: c.icon,
-                 meta: meta, p: p, next: nx ? 'Daarna ' + (nx.start ? hm(nx.start) + ' ' : '') + nx.title : '', d: now.desc || '', streamId: c.id };
+      data.cats = res.categories.map(function(c, i){
+        return { t:c.name, ch:c.name, s:'iptv', kind:'Categorie', img:c.img || catImg(c.name, i), meta:[c.count + ' zenders'], p:0,
+                 count:c.count, cat:c.id, d: c.sample && c.sample.length ? 'Onder andere ' + c.sample.join(', ') + '.' : '' };
       });
-      if (!data.channels.length) data.channels = [{ t:'Geen zenders in deze groep', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true, d:'Pas de groep aan in Instellingen.' }];
       data.liveSub = 'Dispatcharr · ' + res.total + ' zenders';
-      composeLive(); buildRows();
+      composeLive(); if (state.view === 'home') buildRows();
     });
+  }
+
+  function openCategory(it){
+    state.home = { row: state.row, col: state.col.slice() };
+    state.view = 'cat'; state.cat = it; state.row = 0; state.col = []; state.nav = false;
+    data.catSub = 'laden…';
+    data.catChannels = [{ t:'Zenders laden…', ch:it.t, s:'iptv', kind:'Live', img:it.img, meta:[], p:0, d:'', loading:true }];
+    buildRows();
+    if (!APP) {
+      data.catChannels = SAMPLE_LIVE.concat(SAMPLE_LIVE).map(function(x){ var y = {}; for (var k in x) y[k] = x[k]; return y; });
+      data.catSub = data.catChannels.length + ' zenders'; buildRows(); return;
+    }
+    PL.liveCategory(it.cat, function(ok, payload){
+      if (state.view !== 'cat' || state.cat !== it) return;
+      if (!ok) { data.catChannels = [{ t:'Laden mislukt', ch:it.t, s:'iptv', kind:'Live', img:it.img, meta:[], p:0, d:payload, loading:true }]; buildRows(); return; }
+      var res = JSON.parse(payload);
+      data.catChannels = res.channels.map(mapChannel);
+      data.catSub = data.catChannels.length + ' zenders';
+      buildRows();
+    });
+  }
+
+  function closeCategory(){
+    state.view = 'home'; state.cat = null;
+    if (state.home) { state.row = state.home.row; state.col = state.home.col; }
+    buildRows();
   }
 
   function loadApps(){
@@ -457,6 +517,7 @@
   window.__resume = function(){ loadLive(); loadApps(); };
   window.__back = function(){
     if (!$('settings').hidden) { settingsBack(); return; }
+    if (state.view === 'cat') { closeCategory(); return; }
     state.nav = false; state.row = 0; state.col[0] = 0; render();
   };
 
@@ -477,10 +538,10 @@
   var sIdx = 0;
   function sRender(){ sItems.forEach(function(id, i){ $(id).classList.toggle('sf', i === sIdx); }); }
   function openSettings(){
-    var cfg = { server:'', user:'', pass:'', format:'ts', homeGroup:'' };
+    var cfg = { server:'', user:'', pass:'', format:'ts', categories:'' };
     if (APP) { try { cfg = PL.getSettings(); } catch (e) {} }
     $('sServer').value = cfg.server || ''; $('sUser').value = cfg.user || ''; $('sPass').value = cfg.pass || '';
-    $('sFormat').textContent = cfg.format || 'ts'; $('sGroup').value = cfg.homeGroup || '';
+    $('sFormat').textContent = cfg.format || 'ts'; $('sGroup').value = cfg.categories || '';
     $('sStatus').textContent = '';
     $('settings').hidden = false; state.nav = false; sIdx = 0; sRender();
     checkUpdate(false);
@@ -488,7 +549,7 @@
   function closeSettings(){ $('settings').hidden = true; if (document.activeElement) document.activeElement.blur(); render(); }
   function editing(){ var a = document.activeElement; return a && a.tagName === 'INPUT'; }
   function settingsBack(){ if (editing()) document.activeElement.blur(); else closeSettings(); }
-  function collect(){ return { server:$('sServer').value, user:$('sUser').value, pass:$('sPass').value, format:$('sFormat').textContent, homeGroup:$('sGroup').value }; }
+  function collect(){ return { server:$('sServer').value, user:$('sUser').value, pass:$('sPass').value, format:$('sFormat').textContent, categories:$('sGroup').value }; }
   function sActivate(){
     var id = sItems[sIdx], el = $(id);
     if (el.tagName === 'INPUT') { el.focus(); return; }
@@ -540,10 +601,11 @@
     var k = e.key, code = e.keyCode, handled = true;
     var rowLen = ROWS[state.row] ? ROWS[state.row].items.length : 0;
     if (k === 'ArrowUp') {
-      if (!state.nav) { if (state.row === 0) state.nav = true; else state.row--; }
+      if (!state.nav) { if (state.row === 0) state.nav = true; else { var pc = state.col[state.row]; state.row--; if (ROWS[state.row].grid) state.col[state.row] = Math.min(pc, ROWS[state.row].items.length - 1); } }
     } else if (k === 'ArrowDown') {
       if (state.nav) state.nav = false;
-      else state.row = Math.min(ROWS.length - 1, state.row + 1);
+      else { var oc = state.col[state.row], or = state.row; state.row = Math.min(ROWS.length - 1, state.row + 1);
+        if (state.row !== or && ROWS[state.row].grid) state.col[state.row] = Math.min(oc, ROWS[state.row].items.length - 1); }
     } else if (k === 'ArrowLeft') {
       if (state.nav) state.navIdx = Math.max(0, state.navIdx - 1);
       else state.col[state.row] = Math.max(0, state.col[state.row] - 1);
@@ -553,6 +615,7 @@
     } else if (k === 'Enter' || code === 23) {
       enter();
     } else if (k === 'Escape' || k === 'Backspace' || k === 'GoBack' || k === 'BrowserBack' || code === 461) {
+      if (state.view === 'cat') { closeCategory(); e.preventDefault(); return; }
       state.nav = false; state.row = 0; state.col[0] = 0;
     } else handled = false;
     if (handled) { e.preventDefault(); render(); }

@@ -1,0 +1,155 @@
+{
+  "_uitleg": "Slimme categorieën voor Thuis. Namen worden vergeleken zonder hoofdletters, spaties, landcodes (NL, BE) en kwaliteit (HD, FHD, 4K). Een * aan het eind betekent 'begint met'. Volgorde in 'include' = volgorde in de app. 'groups' voegt zenders toe uit Dispatcharr-groepen waarvan de naam dit woord bevat. 'exclude' haalt zenders er weer uit.",
+  "categories": [
+    {
+      "id": "standaard",
+      "name": "Standaard",
+      "img": "city",
+      "include": [
+        "npo1",
+        "npo2",
+        "npo3",
+        "rtl4",
+        "rtl5",
+        "sbs6",
+        "rtl7",
+        "rtl8",
+        "net5",
+        "veronica",
+        "sbs9",
+        "rtlz",
+        "npo1extra",
+        "npo2extra",
+        "npopolitiekennieuws",
+        "comedycentral",
+        "tv538",
+        "een",
+        "canvas",
+        "vtm",
+        "vtm2",
+        "vtm3",
+        "play4",
+        "play5",
+        "ketnet",
+        "nickelodeon",
+        "nickjr",
+        "disneychannel",
+        "disneyjunior",
+        "cartoonnetwork",
+        "bbcone",
+        "bbctwo"
+      ],
+      "groups": [],
+      "exclude": []
+    },
+    {
+      "id": "sport",
+      "name": "Sport",
+      "img": "forest",
+      "include": [
+        "ziggosport*",
+        "espn*",
+        "eurosport*",
+        "viaplay*",
+        "sporza*",
+        "playsports*",
+        "dazn*",
+        "skysport*",
+        "bein*"
+      ],
+      "groups": [
+        "sport"
+      ],
+      "exclude": [
+        "daznf1*",
+        "f1*",
+        "formula1*",
+        "formule1*",
+        "skysportf1*",
+        "viaplayf1*",
+        "ziggosportf1*"
+      ]
+    },
+    {
+      "id": "f1",
+      "name": "F1",
+      "img": "peaks",
+      "include": [
+        "f1*",
+        "formula1*",
+        "formule1*",
+        "skysportf1*",
+        "viaplayf1*",
+        "ziggosportf1*",
+        "daznf1*"
+      ],
+      "groups": [
+        "f1",
+        "formule 1",
+        "formula 1"
+      ],
+      "exclude": []
+    },
+    {
+      "id": "docu",
+      "name": "Docu",
+      "img": "dunes",
+      "include": [
+        "discovery*",
+        "investigationdiscovery*",
+        "history*",
+        "h2",
+        "nationalgeographic*",
+        "natgeo*",
+        "animalplanet*",
+        "bbcearth*",
+        "lovenature*",
+        "viceland*",
+        "crimeinvestigation*",
+        "docu*"
+      ],
+      "groups": [
+        "docu",
+        "documentaire"
+      ],
+      "exclude": [
+        "tlc*"
+      ]
+    },
+    {
+      "id": "muziek",
+      "name": "Muziek",
+      "img": "neon",
+      "include": [
+        "xite*",
+        "mtv80s",
+        "mtv90s",
+        "mtv00s",
+        "mtvhits",
+        "mtvlive*",
+        "clubmtv",
+        "mtvmusic*",
+        "538*",
+        "qmusic*",
+        "slam*",
+        "radio10*",
+        "100nl*",
+        "skyradio*",
+        "stingray*",
+        "trace*",
+        "mezzo*",
+        "dance*"
+      ],
+      "groups": [
+        "muziek",
+        "music"
+      ],
+      "exclude": [
+        "mtv",
+        "mtvnl",
+        "mtvbe"
+      ]
+    }
+  ],
+  "alle": true
+}

@@ -20,10 +20,10 @@ class Prefs(ctx: Context) {
     var format: String
         get() = sp.getString("format", "ts") ?: "ts"
         set(v) = sp.edit().putString("format", if (v == "m3u8") "m3u8" else "ts").apply()
-    /** Deel van een groepsnaam die op het startscherm komt, leeg = eerste zenders. */
-    var homeGroup: String
-        get() = sp.getString("homeGroup", "") ?: ""
-        set(v) = sp.edit().putString("homeGroup", v.trim()).apply()
+    /** Welke categorieën op het startscherm komen, gescheiden door komma's. Leeg = allemaal. */
+    var categories: String
+        get() = sp.getString("categories", "") ?: ""
+        set(v) = sp.edit().putString("categories", v.trim()).apply()
     var lastChannel: Int
         get() = sp.getInt("lastChannel", -1)
         set(v) = sp.edit().putInt("lastChannel", v).apply()
@@ -32,7 +32,7 @@ class Prefs(ctx: Context) {
 
     fun toJson(): JSONObject = JSONObject()
         .put("server", server).put("user", user).put("pass", pass)
-        .put("format", format).put("homeGroup", homeGroup)
+        .put("format", format).put("categories", categories)
         .put("configured", configured)
 
     fun fromJson(o: JSONObject) {
@@ -40,6 +40,6 @@ class Prefs(ctx: Context) {
         user = o.optString("user")
         pass = o.optString("pass")
         format = o.optString("format", "ts")
-        homeGroup = o.optString("homeGroup")
+        categories = o.optString("categories")
     }
 }
