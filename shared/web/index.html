@@ -72,6 +72,8 @@
   .card .ch img{height:44px;max-width:88px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}
   .card .ldot{position:absolute;right:16px;top:16px;font:700 16px/1 Inter,system-ui,sans-serif;letter-spacing:.1em;background:var(--live);padding:6px 9px;border-radius:5px}
   .card .now{position:absolute;left:18px;right:18px;bottom:24px;font:600 24px/1.2 Inter,system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card.poster{width:150px;background-color:#151922}
+  .card.poster .pt{position:absolute;left:10px;right:10px;bottom:12px;font:700 18px/1.15 var(--display);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .card.app{width:260px;height:146px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background-color:#151922}
   .card.app::before{display:none}
   .card.app span{font:700 26px/1.1 var(--display);letter-spacing:-.01em;text-align:center;padding:0 12px}
@@ -180,7 +182,11 @@
       continueWatching: function(cb){ call('continueWatching', cb); },
       openMedia: function(src, key){ Native.openMedia(src, key); },
       jbl: function(pkg, cb){ call('jblLaunch', cb, pkg); },
-      installUpdate: function(cb){ call('installUpdate', cb); }
+      installUpdate: function(cb){ call('installUpdate', cb); },
+      vodCategories: function(kind, cb){ call('vodCategories', cb, kind); },
+      vodList: function(kind, cat, cb){ call('vodList', cb, kind, String(cat)); },
+      vodInfo: function(kind, id, cb){ call('vodInfo', cb, kind, String(id)); },
+      playVod: function(o){ Native.playVod(JSON.stringify(o)); }
     };
   } catch (e) {}
   if (!PL && window.ThuisPlatform) PL = window.ThuisPlatform;
@@ -239,7 +245,97 @@
     var list = (data.cats || data.channels).slice();
     if (data.ziggo) list.unshift({ t:'Ziggo GO', ch:'Ziggo GO', s:'ziggo', kind:'App', img:'ocean', meta:['Live tv en terugkijken van Ziggo'], p:0,
       d:'Opent de app van Ziggo. Gebruik deze als de IPTV-stream al ergens anders speelt, of voor terugkijken van Ziggo.', app:true, pkg:data.ziggo });
+    if (APP && data.cats && data.cats.length && !data.cats[0].setup) {
+      list.push({ t:'Films', ch:'Films', s:'iptv', kind:'Films', img:'neon', meta:['Per dienst: Netflix, Disney+, Prime en meer'], p:0, vod:'movie',
+        d:'Films van je IPTV-abonnement, ingedeeld per streamingdienst. Met Nederlandse ondertitels waar ze er zijn.' });
+      list.push({ t:'Series', ch:'Series', s:'iptv', kind:'Series', img:'coast', meta:['Per dienst, met seizoenen en afleveringen'], p:0, vod:'series',
+        d:'Series van je IPTV-abonnement, ingedeeld per streamingdienst. Thuis onthoudt waar je gebleven was.' });
+    }
     data.live = list;
+  }
+
+  // ---------- films en series (IPTV) ----------
+  function vodName(n){
+    n = (n || '').replace(/^\s*NL\s*\|\s*/i, '').replace(/\s*\|\s*/g, ' / ');
+    return n.split(' ').map(function(w){
+      if (/[+&\/]/.test(w) || /^(HBO|NPO|NL|IMDB|TV)\+?$/i.test(w)) return w.toUpperCase();
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    }).join(' ').replace('Pathe', 'Pathé');
+  }
+  function mapVod(kind, catName){ return function(o){
+    var meta = []; if (o.year) meta.push(o.year); if (o.rating && o.rating !== '0') meta.push('★ ' + (Math.round(parseFloat(o.rating) * 10) / 10));
+    return { t:o.name, s:'iptv', kind: kind === 'series' ? 'Serie' : 'Film', vodKind:kind, id:o.id, ext:o.ext, thumb:o.icon, icon:o.icon,
+             img: o.backdrop || o.icon || 'neon', backdrop:o.backdrop, meta:meta, d:o.plot || '', cat:null, catName:catName, vodItem:true };
+  }; }
+  function openVod(it){
+    state.home = { row: state.row, col: state.col.slice() };
+    state.view = 'vod'; state.vod = { kind: it.vod, title: it.t }; state.row = 0; state.col = []; state.nav = false;
+    data.vodRows = [{ title: it.t, sub:'laden…', items:[{ t:'Laden…', s:'iptv', kind:it.t, img:it.img, loading:true, meta:[] }] }];
+    buildRows();
+    PL.vodCategories(it.vod, function(ok, payload){
+      if (state.view !== 'vod') return;
+      if (!ok) { data.vodRows[0].sub = 'mislukt: ' + payload; buildRows(); return; }
+      var cats = JSON.parse(payload);
+      if (!cats.length) { data.vodRows[0].sub = 'geen ' + it.t.toLowerCase() + ' gevonden'; buildRows(); return; }
+      data.vodRows = cats.map(function(c){ return { title: vodName(c.name), sub:'laden…', cat:c.id, items:[{ t:'Laden…', s:'iptv', kind:it.t, img:it.img, loading:true, meta:[] }] }; });
+      buildRows();
+      (function next(i){
+        if (i >= cats.length || state.view === 'home') return;
+        var row = data.vodRows[i];
+        PL.vodList(it.vod, row.cat, function(ok2, pl){
+          if (state.view === 'home' || data.vodRows[i] !== row) return;
+          if (ok2) { var res = JSON.parse(pl); row.items = res.items.map(mapVod(it.vod, row.title)); row.sub = res.total + (it.vod === 'series' ? ' series' : ' films') + (res.total > row.items.length ? ' · nieuwste ' + row.items.length : ''); }
+          else row.sub = 'mislukt';
+          if (!row.items.length) row.items = [{ t:'Leeg', s:'iptv', kind:'', img:'neon', loading:true, meta:[] }];
+          if (state.view === 'vod') buildRows();
+          next(i + 1);
+        });
+      })(0);
+    });
+  }
+  function openSeries(it){
+    state.vodPos = { row: state.row, col: state.col.slice() };
+    state.view = 'series'; state.series = it; state.row = 0; state.col = [];
+    data.seasonRows = [{ title: it.t, sub:'afleveringen laden…', items:[{ t:'Laden…', s:'iptv', kind:'Serie', img:it.img, loading:true, meta:[] }] }];
+    buildRows();
+    PL.vodInfo('series', it.id, function(ok, payload){
+      if (state.view !== 'series' || state.series !== it) return;
+      if (!ok) { data.seasonRows[0].sub = 'mislukt: ' + payload; buildRows(); return; }
+      var info = JSON.parse(payload);
+      if (info.backdrop) it.backdrop = it.img = info.backdrop;
+      if (info.plot) it.d = info.plot;
+      data.seasonRows = info.seasons.map(function(se){
+        return { title: 'Seizoen ' + se.season, sub: se.episodes.length + ' afleveringen', items: se.episodes.map(function(e){
+          var sub = 'S' + se.season + ' · afl. ' + e.num + (e.title && e.title.indexOf(it.t) < 0 ? ' · ' + e.title : '');
+          return { t: it.t, sub: sub, s:'iptv', kind:'Aflevering', ep:true, id:e.id, ext:e.ext, thumb: e.img || it.icon, img: it.backdrop || e.img || it.icon || 'coast',
+                   icon: it.icon, meta:[ 'Seizoen ' + se.season, 'Aflevering ' + e.num ].concat(e.dur ? [Math.round(e.dur / 60) + ' min'] : []), d: e.plot || it.d || '', num:e.num };
+        }) };
+      });
+      if (!data.seasonRows.length) data.seasonRows = [{ title: it.t, sub:'geen afleveringen gevonden', items:[{ t:'Leeg', s:'iptv', kind:'', img:'coast', loading:true, meta:[] }] }];
+      buildRows();
+    });
+  }
+  function playVodItem(it){
+    if (!APP) { toast('Speelt af in de app op de tv'); return; }
+    if (it.ep) PL.playVod({ kind:'series', id:it.id, ext:it.ext, title:it.t, sub:it.sub, img:it.thumb, backdrop:state.series ? state.series.backdrop : '', plot:it.d });
+    else PL.playVod({ kind:'movie', id:it.id, ext:it.ext, title:it.t, sub:(it.meta || []).join(' · '), img:it.icon, backdrop:it.backdrop, plot:it.d });
+  }
+  var infoTimer = null;
+  function loadVodInfo(it){
+    if (it.infoDone || it.vodKind !== 'movie' || !APP) return;
+    clearTimeout(infoTimer);
+    infoTimer = setTimeout(function(){
+      it.infoDone = true;
+      PL.vodInfo('movie', it.id, function(ok, payload){
+        if (!ok) return;
+        var info = JSON.parse(payload);
+        if (info.plot) it.d = info.plot;
+        if (info.backdrop) { it.backdrop = info.backdrop; it.img = info.backdrop; }
+        if (info.genre) it.meta = (it.meta || []).concat([info.genre]);
+        if (info.duration) it.meta = it.meta.concat([info.duration.replace(/^00:/, '').replace(/^0/, '') ]);
+        var r = ROWS[state.row]; if (r && r.items[state.col[state.row]] === it) hero(it, r.type);
+      });
+    }, 450);
   }
   var ROWS = [];
   var NAV = ['Thuis','Live tv','Apps','Instellingen'];
@@ -286,6 +382,8 @@
   // ---------- rijen ----------
   var rowEls = [];
   function rowDefs(){
+    if (state.view === 'vod') return (data.vodRows || []).map(function(r){ return { title:r.title, sub:r.sub, type:'vod', items:r.items }; });
+    if (state.view === 'series') return (data.seasonRows || []).map(function(r){ return { title:r.title, sub:r.sub, type:'ep', items:r.items }; });
     if (state.view === 'cat' && data.catGroups) {
       return data.catGroups.map(function(g){ return { title:g.name, sub:g.items.length + ' zenders', type:'live', items:g.items }; });
     }
@@ -331,7 +429,7 @@
       r.items.forEach(function(it, ci){ tr.appendChild(card(r, it, ri, ci)); });
       vp.appendChild(tr); row.appendChild(h); row.appendChild(vp);
       host.appendChild(row);
-      rowEls.push({ row:row, track:tr, w: r.grid ? 0 : ((r.type==='app' || r.type==='svc') ? 288 : 428), grid: !!r.grid });
+      rowEls.push({ row:row, track:tr, w: r.grid ? 0 : ((r.type==='app' || r.type==='svc') ? 288 : r.type==='vod' ? 178 : 428), grid: !!r.grid });
       if (state.col[ri] === undefined) state.col[ri] = 0;
       if (state.col[ri] > r.items.length - 1) state.col[ri] = Math.max(0, r.items.length - 1);
     });
@@ -384,6 +482,10 @@
       if (it.logo) { var lgo = document.createElement('img'); lgo.src = it.logo; lgo.alt = ''; lgo.onerror = function(){ lgo.remove(); }; b.appendChild(lgo); }
       var nm = document.createElement('span'); nm.textContent = it.t; b.appendChild(nm);
       if (it.jbl) { var v = document.createElement('i'); v.className = 'via'; v.textContent = 'JBL'; b.appendChild(v); }
+    } else if (r.type === 'vod' && !it.loading) {
+      b.className = 'card poster';
+      if (it.thumb) b.style.backgroundImage = 'url(' + it.thumb + ')';
+      else { var pt = document.createElement('span'); pt.className = 'pt'; pt.textContent = it.t; b.appendChild(pt); }
     } else if (r.type === 'app') {
       if (it.banner) {
         b.style.backgroundImage = 'url(' + it.banner + ')';
@@ -403,13 +505,14 @@
         }
         ch.appendChild(document.createTextNode(it.ch || ''));
         b.appendChild(ch);
-        if (it.cat) b.insertAdjacentHTML('beforeend','<span class="ldot" style="background:rgba(255,255,255,.22)">' + it.count + '</span>');
+        if (it.vod) b.insertAdjacentHTML('beforeend','<span class="ldot" style="background:rgba(255,255,255,.22)">' + (it.vod === 'series' ? 'SERIES' : 'FILMS') + '</span>');
+        else if (it.cat) b.insertAdjacentHTML('beforeend','<span class="ldot" style="background:rgba(255,255,255,.22)">' + it.count + '</span>');
         else if (it.app) b.insertAdjacentHTML('beforeend','<span class="ldot" style="background:#F48C00">APP</span>');
         else if (!it.setup && !it.loading) b.insertAdjacentHTML('beforeend','<span class="ldot">LIVE</span>');
-        var now = document.createElement('span'); now.className = 'now'; now.textContent = it.app ? 'Live tv en terugkijken' : (it.cat ? it.count + ' zenders' : it.t); b.appendChild(now);
+        var now = document.createElement('span'); now.className = 'now'; now.textContent = it.vod ? 'Per streamingdienst' : it.app ? 'Live tv en terugkijken' : (it.cat ? it.count + ' zenders' : it.t); b.appendChild(now);
         if (it.p > 0) { b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>'); b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%'; }
       } else {
-        var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = it.media ? (it.media === 'plex' ? 'Plex' : it.media === 'jellyfin' ? 'Jellyfin' : (SVC[it.service] ? SVC[it.service].name : 'JBL')) : (it.service && SVC[it.service] ? SVC[it.service].name : (SRC[it.s] ? SRC[it.s].n : '')); b.appendChild(bd);
+        var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = it.ep ? 'Aflevering ' + it.num : it.media === 'iptv' ? 'IPTV' : it.media ? (it.media === 'plex' ? 'Plex' : it.media === 'jellyfin' ? 'Jellyfin' : (SVC[it.service] ? SVC[it.service].name : 'JBL')) : (it.service && SVC[it.service] ? SVC[it.service].name : (SRC[it.s] ? SRC[it.s].n : '')); b.appendChild(bd);
         if (it.p > 0) {
           b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>');
           b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%';
@@ -442,10 +545,10 @@
   // ---------- hero ----------
   function hero(it, type){
     var src = SRC[it.s] || SRC.app;
-    function mediaName(x){ return x.media === 'plex' ? 'Plex' : x.media === 'jellyfin' ? 'Jellyfin' : (SVC[x.service] ? SVC[x.service].name : 'JBL'); }
+    function mediaName(x){ return x.media === 'iptv' ? 'IPTV' : x.media === 'plex' ? 'Plex' : x.media === 'jellyfin' ? 'Jellyfin' : (SVC[x.service] ? SVC[x.service].name : 'JBL'); }
     if (type === 'cont' && it.media) {
       var sm = $('hSrc'); sm.innerHTML = '';
-      var dm = document.createElement('i'); dm.style.background = it.media === 'plex' ? '#E5A00D' : it.media === 'jellyfin' ? '#AA5CC3' : (SVC[it.service] ? SVC[it.service].color : '#888'); sm.appendChild(dm);
+      var dm = document.createElement('i'); dm.style.background = it.media === 'iptv' ? SRC.iptv.c : it.media === 'plex' ? '#E5A00D' : it.media === 'jellyfin' ? '#AA5CC3' : (SVC[it.service] ? SVC[it.service].color : '#888'); sm.appendChild(dm);
       sm.appendChild(document.createTextNode(mediaName(it) + ' · verder kijken' + (it.media === 'jbl' ? ' · op de JBL' : '')));
       $('hTitle').textContent = it.t;
       var mm = $('hMeta'); mm.innerHTML = ''; var me = document.createElement('span'); me.textContent = it.sub || ''; mm.appendChild(me);
@@ -471,6 +574,22 @@
       var k0 = document.createElement('b'); k0.textContent = 'OK'; c0.appendChild(k0);
       var l0 = document.createElement('span'); l0.textContent = 'Open ' + sv.name + (it.jbl || (type !== 'svc' && SVC[it.service] && viaJbl(SVC[it.service])) ? ' op de JBL' : ''); c0.appendChild(l0);
       setBackdrop(it.img);
+      return;
+    }
+    if ((type === 'vod' || type === 'ep') && !it.loading) {
+      var sv2 = $('hSrc'); sv2.innerHTML = '';
+      var dv = document.createElement('i'); dv.style.background = SRC.iptv.c; sv2.appendChild(dv);
+      sv2.appendChild(document.createTextNode('IPTV · ' + (type === 'ep' ? 'Serie · ' + (it.sub || '') : it.kind + (it.catName ? ' · ' + it.catName : ''))));
+      $('hTitle').textContent = it.t;
+      var mv = $('hMeta'); mv.innerHTML = '';
+      (it.meta || []).forEach(function(x){ if (!x) return; if (mv.children.length) { var sp = document.createElement('span'); sp.className = 'sep'; mv.appendChild(sp); } var e = document.createElement('span'); e.textContent = x; mv.appendChild(e); });
+      $('hDesc').textContent = it.d || '';
+      var cv = $('hCta'); cv.innerHTML = '';
+      var kv = document.createElement('b'); kv.textContent = 'OK'; cv.appendChild(kv);
+      var lv = document.createElement('span'); lv.textContent = it.vodKind === 'series' ? 'Bekijk afleveringen' : 'Afspelen'; cv.appendChild(lv);
+      var gv = document.createElement('span'); gv.style.color = 'var(--ink-3)'; gv.textContent = 'groen = geluid · geel = ondertitels'; if (it.vodKind !== 'series') cv.appendChild(gv);
+      setBackdrop(it.img);
+      loadVodInfo(it);
       return;
     }
     var s = $('hSrc'); s.innerHTML = '';
@@ -549,6 +668,9 @@
     if (it.setup) { openSettings(); return; }
     if (it.loading) return;
     if (it.app && it.pkg) { if (APP) PL.launch(it.pkg); else toast('Ziggo GO wordt geopend'); return; }
+    if (it.vod) { if (APP) openVod(it); else toast('Films en series werken in de app op de tv'); return; }
+    if (it.vodItem) { if (it.vodKind === 'series') openSeries(it); else playVodItem(it); return; }
+    if (it.ep) { playVodItem(it); return; }
     if (it.cat) { openCategory(it); return; }
     if (it.media) { if (APP && PL.openMedia) PL.openMedia(it.media, it.key); else toast('Opent in ' + it.media); return; }
     if (r.type === 'svc') { openService(it.key); return; }
@@ -672,6 +794,7 @@
   window.__resume = function(){ loadContinue(); loadLive(); loadApps(); data.recent = loadRecent(); };
   window.__back = function(){
     if (!$('settings').hidden) { settingsBack(); return; }
+    if (state.view === 'series') { state.view = 'vod'; state.series = null; if (state.vodPos) { state.row = state.vodPos.row; state.col = state.vodPos.col; } buildRows(); return; }
     if (state.view !== 'home') { closeCategory(); return; }
     state.nav = false; state.row = 0; state.col[0] = 0; render();
   };

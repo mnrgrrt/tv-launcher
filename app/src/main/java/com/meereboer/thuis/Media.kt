@@ -196,6 +196,7 @@ object Media {
         try { all.addAll(plex(p)) } catch (e: Exception) { errors.put("Plex: ${e.message}") }
         try { all.addAll(jellyfin(p)) } catch (e: Exception) { errors.put("Jellyfin: ${e.message}") }
         try { all.addAll(Tmdb.playNext(ctx, p)) } catch (e: Exception) { errors.put("JBL: ${e.message}") }
+        Vod.continueItem(ctx)?.let { all.add(it) }
         all.sortByDescending { it.optLong("when") }
         return JSONObject().put("items", JSONArray(all.take(20))).put("errors", errors).toString()
     }

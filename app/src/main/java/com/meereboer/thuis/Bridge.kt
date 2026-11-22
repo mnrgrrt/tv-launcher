@@ -146,7 +146,25 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
 
     @JavascriptInterface fun continueWatching(id: Int) = async(id) { Media.continueWatching(act, prefs) }
 
+    // ---------- films en series (IPTV) ----------
+    @JavascriptInterface fun vodCategories(id: Int, kind: String) = async(id) { Vod.categories(prefs, kind) }
+    @JavascriptInterface fun vodList(id: Int, kind: String, cat: String) = async(id) { Vod.list(prefs, kind, cat, 40) }
+    @JavascriptInterface fun vodInfo(id: Int, kind: String, itemId: String) = async(id) { Vod.info(prefs, kind, itemId) }
+
+    /** Speelt een film of aflevering af. json: kind, id, ext, title, sub, img, backdrop, plot. */
+    @JavascriptInterface fun playVod(json: String) {
+        val o = JSONObject(json)
+        val kind = o.optString("kind")
+        o.put("url", Vod.url(prefs, kind, o.optString("id"), o.optString("ext")))
+        o.put("key", kind + ":" + o.optString("id"))
+        act.runOnUiThread { act.startActivity(android.content.Intent(act, VodActivity::class.java).putExtra("item", o.toString())) }
+    }
+
     @JavascriptInterface fun openMedia(source: String, key: String) {
+        if (source == "iptv") {
+            Vod.last(act)?.let { l -> act.runOnUiThread { act.startActivity(android.content.Intent(act, VodActivity::class.java).putExtra("item", l.toString())) } }
+            return
+        }
         when (source) {
             "jbl" -> pool.execute { try { Media.openJbl(prefs, key) } catch (_: Exception) { } }
             "plex" -> act.runOnUiThread { Media.openPlex(act, key) }

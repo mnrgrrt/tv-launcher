@@ -129,7 +129,7 @@ object Categorizer {
             if (android.os.Build.VERSION.SDK_INT >= 29) {
                 val res = ctx.contentResolver
                 val col = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-                res.delete(col, "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME}=?", arrayOf(name))
+                res.delete(col, "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?", arrayOf("$name%"))
                 val values = android.content.ContentValues().apply {
                     put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
                     put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
