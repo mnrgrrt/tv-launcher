@@ -8,7 +8,7 @@ import java.io.File
 import java.text.Normalizer
 import java.util.concurrent.TimeUnit
 
-data class SmartCategory(val id: String, val name: String, val img: String, val channels: List<Channel>)
+data class SmartCategory(val id: String, val name: String, val img: String, val channels: List<Channel>, val parent: String? = null)
 
 /**
  * Slimme categorieën op basis van zendernamen. De regels staan in shared/categories.json.
@@ -73,7 +73,18 @@ object Categorizer {
                 val ids = Xtream.categories.filterValues { g -> groups.any { g.lowercase().contains(it) } }.keys
                 for ((ch, n) in normed) if (ch.categoryId in ids && ok(n)) picked.add(ch)
             }
-            out.add(SmartCategory(c.optString("id"), c.optString("name"), c.optString("img"), picked.toList()))
+            val parent = c.optString("parent").ifEmpty { null }
+            out.add(SmartCategory(c.optString("id"), c.optString("name"), c.optString("img"), picked.toList(), parent))
+        }
+        // Hoofdcategorie met subrijen: ook alles uit de subrijen hoort erbij, plus een rij "Overige".
+        for (parent in out.filter { it.parent == null }) {
+            val kids = out.filter { it.parent == parent.id }
+            if (kids.isEmpty()) continue
+            val inKids = kids.flatMap { it.channels }.toSet()
+            val merged = LinkedHashSet<Channel>(parent.channels).apply { addAll(inKids) }
+            val rest = merged.filter { it !in inKids }
+            out[out.indexOf(parent)] = parent.copy(channels = merged.toList())
+            out.add(SmartCategory(parent.id + "-overig", "Overige " + parent.name.lowercase(), parent.img, rest, parent.id))
         }
         if (r.optBoolean("alle", true)) out.add(SmartCategory("alle", "Alle zenders", "aurora", all))
         return out

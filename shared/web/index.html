@@ -262,6 +262,9 @@
   // ---------- rijen ----------
   var rowEls = [];
   function rowDefs(){
+    if (state.view === 'cat' && data.catGroups) {
+      return data.catGroups.map(function(g){ return { title:g.name, sub:g.items.length + ' zenders', type:'live', items:g.items }; });
+    }
     if (state.view === 'cat') {
       var ch = data.catChannels || [], rows = [];
       for (var i = 0; i < Math.max(1, ch.length); i += 4) {
@@ -450,7 +453,7 @@
     }
     return { t: now.title || c.name, ch: c.name, num: c.num, s:'iptv', kind:'Live', img: IMGS[i % IMGS.length], logo: c.icon,
              meta: meta, p: p, next: nx ? 'Daarna ' + (nx.start ? hm(nx.start) + ' ' : '') + nx.title : '', d: now.desc || '',
-             streamId: c.id, catId: c.cat };
+             streamId: c.id, catId: state.cat ? state.cat.cat : '' };
   }
 
   function loadLive(){
@@ -479,9 +482,13 @@
   function openCategory(it){
     state.home = { row: state.row, col: state.col.slice() };
     state.view = 'cat'; state.cat = it; state.row = 0; state.col = []; state.nav = false;
-    data.catSub = 'laden…';
+    data.catSub = 'laden…'; data.catGroups = null;
     data.catChannels = [{ t:'Zenders laden…', ch:it.t, s:'iptv', kind:'Live', img:it.img, meta:[], p:0, d:'', loading:true }];
     buildRows();
+    if (!APP && /sport/i.test(it.t)) {
+      data.catGroups = ['Ziggo Sport','ESPN','F1','Overige sport'].map(function(n){ return { name:n, items:SAMPLE_LIVE.map(function(x){ var y = {}; for (var k in x) y[k] = x[k]; return y; }) }; });
+      buildRows(); return;
+    }
     if (!APP) {
       data.catChannels = SAMPLE_LIVE.concat(SAMPLE_LIVE).map(function(x){ var y = {}; for (var k in x) y[k] = x[k]; return y; });
       data.catSub = data.catChannels.length + ' zenders'; buildRows(); return;
@@ -490,6 +497,12 @@
       if (state.view !== 'cat' || state.cat !== it) return;
       if (!ok) { data.catChannels = [{ t:'Laden mislukt', ch:it.t, s:'iptv', kind:'Live', img:it.img, meta:[], p:0, d:payload, loading:true }]; buildRows(); return; }
       var res = JSON.parse(payload);
+      if (res.groups) {
+        data.catGroups = res.groups.map(function(g){
+          return { name:g.name, items:g.channels.map(function(c, i){ var m = mapChannel(c, i); m.catId = g.id; return m; }) };
+        });
+        buildRows(); return;
+      }
       data.catChannels = res.channels.map(mapChannel);
       data.catSub = data.catChannels.length + ' zenders';
       buildRows();
@@ -497,7 +510,7 @@
   }
 
   function closeCategory(){
-    state.view = 'home'; state.cat = null;
+    state.view = 'home'; state.cat = null; data.catGroups = null;
     if (state.home) { state.row = state.home.row; state.col = state.home.col; }
     buildRows();
   }

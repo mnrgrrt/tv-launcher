@@ -71,7 +71,7 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         Categorizer.export(act, all, cats)
         val show = prefs.categories.lowercase().split(',').map { it.trim() }.filter { it.isNotEmpty() }
         val visible = cats.filter { c ->
-            c.channels.isNotEmpty() && (show.isEmpty() || c.id == "alle" || show.any { c.name.lowercase().contains(it) || c.id == it })
+            c.parent == null && c.channels.isNotEmpty() && (show.isEmpty() || c.id == "alle" || show.any { c.name.lowercase().contains(it) || c.id == it })
         }
         val arr = JSONArray()
         for (c in visible) {
@@ -81,17 +81,40 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         JSONObject().put("configured", true).put("total", all.size).put("categories", arr).toString()
     }
 
-    /** Alle zenders van één categorie, in de vaste volgorde, met nu/straks uit de korte gids. */
+    private fun withEpg(list: List<Channel>): Map<Int, List<Programme>> {
+        val tasks = list.distinctBy { it.id }.map { ch ->
+            Callable { ch.id to (try { Xtream.shortEpg(prefs, ch.id, 2) } catch (_: Exception) { emptyList() }) }
+        }
+        return epgPool.invokeAll(tasks).associate { it.get() }
+    }
+
+    /**
+     * Zenders van één categorie met nu/straks. Heeft de categorie subrijen (zoals Sport),
+     * dan komt er per subrij een groep terug.
+     */
     @JavascriptInterface fun liveCategory(id: Int, catId: String) = async(id) {
         val all = Xtream.load(prefs)
-        val cat = Categorizer.build(act, all).firstOrNull { it.id == catId }
-        val list = (cat?.channels ?: emptyList()).take(150)
-        val tasks = list.map { ch ->
-            Callable { ch to (try { Xtream.shortEpg(prefs, ch.id, 2) } catch (_: Exception) { emptyList() }) }
+        val cats = Categorizer.build(act, all)
+        val cat = cats.firstOrNull { it.id == catId }
+        val kids = cats.filter { it.parent == catId && it.channels.isNotEmpty() }
+        val out = JSONObject().put("name", cat?.name ?: "")
+        if (kids.isNotEmpty()) {
+            val epg = withEpg(kids.flatMap { it.channels.take(60) })
+            val groups = JSONArray()
+            for (k in kids) {
+                val arr = JSONArray()
+                for (ch in k.channels.take(60)) arr.put(channelJson(ch, epg[ch.id] ?: emptyList()))
+                groups.put(JSONObject().put("id", k.id).put("name", k.name).put("channels", arr))
+            }
+            out.put("groups", groups)
+        } else {
+            val list = (cat?.channels ?: emptyList()).take(150)
+            val epg = withEpg(list)
+            val arr = JSONArray()
+            for (ch in list) arr.put(channelJson(ch, epg[ch.id] ?: emptyList()))
+            out.put("channels", arr)
         }
-        val arr = JSONArray()
-        for (f in epgPool.invokeAll(tasks)) { val (ch, epg) = f.get(); arr.put(channelJson(ch, epg)) }
-        JSONObject().put("name", cat?.name ?: "").put("channels", arr).toString()
+        out.toString()
     }
 
     @JavascriptInterface fun playInCategory(streamId: Int, catId: String) {
