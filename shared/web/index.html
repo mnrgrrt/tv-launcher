@@ -303,7 +303,7 @@
     }
     var home = [];
     var cont = (data.media || []).concat(data.recent);
-    if (cont.length) home.push({ title:'Verder kijken', sub: (data.media && data.media.length) ? 'Plex · Jellyfin · laatst geopend' : 'laatst geopend', type:'cont', items:cont });
+    if (cont.length) home.push({ title:'Verder kijken', sub: (data.media && data.media.length) ? 'Netflix · Plex · Jellyfin en meer' : 'laatst geopend', type:'cont', items:cont });
     home.push({ title:'Live tv', sub:data.liveSub, type:'live', items:data.live });
     home.push({ title:'Streamingdiensten', sub:'', type:'svc', items:svcItems() });
     if (data.picks.length) home.push({ title:'Voor jou', sub:'populair op jouw diensten', type:'pick', items:data.picks });
@@ -401,7 +401,7 @@
         var now = document.createElement('span'); now.className = 'now'; now.textContent = it.app ? 'Live tv en terugkijken' : (it.cat ? it.count + ' zenders' : it.t); b.appendChild(now);
         if (it.p > 0) { b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>'); b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%'; }
       } else {
-        var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = it.media ? (it.media === 'plex' ? 'Plex' : 'Jellyfin') : (it.service && SVC[it.service] ? SVC[it.service].name : (SRC[it.s] ? SRC[it.s].n : '')); b.appendChild(bd);
+        var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = it.media ? (it.media === 'plex' ? 'Plex' : it.media === 'jellyfin' ? 'Jellyfin' : (SVC[it.service] ? SVC[it.service].name : 'JBL')) : (it.service && SVC[it.service] ? SVC[it.service].name : (SRC[it.s] ? SRC[it.s].n : '')); b.appendChild(bd);
         if (it.p > 0) {
           b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>');
           b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%';
@@ -434,16 +434,17 @@
   // ---------- hero ----------
   function hero(it, type){
     var src = SRC[it.s] || SRC.app;
+    function mediaName(x){ return x.media === 'plex' ? 'Plex' : x.media === 'jellyfin' ? 'Jellyfin' : (SVC[x.service] ? SVC[x.service].name : 'JBL'); }
     if (type === 'cont' && it.media) {
       var sm = $('hSrc'); sm.innerHTML = '';
-      var dm = document.createElement('i'); dm.style.background = it.media === 'plex' ? '#E5A00D' : '#AA5CC3'; sm.appendChild(dm);
-      sm.appendChild(document.createTextNode((it.media === 'plex' ? 'Plex' : 'Jellyfin') + ' · verder kijken'));
+      var dm = document.createElement('i'); dm.style.background = it.media === 'plex' ? '#E5A00D' : it.media === 'jellyfin' ? '#AA5CC3' : (SVC[it.service] ? SVC[it.service].color : '#888'); sm.appendChild(dm);
+      sm.appendChild(document.createTextNode(mediaName(it) + ' · verder kijken' + (it.media === 'jbl' ? ' · op de JBL' : '')));
       $('hTitle').textContent = it.t;
       var mm = $('hMeta'); mm.innerHTML = ''; var me = document.createElement('span'); me.textContent = it.sub || ''; mm.appendChild(me);
       $('hDesc').textContent = it.d || '';
       var cm = $('hCta'); cm.innerHTML = '';
       var km = document.createElement('b'); km.textContent = 'OK'; cm.appendChild(km);
-      var lm = document.createElement('span'); lm.textContent = 'Verder kijken in ' + (it.media === 'plex' ? 'Plex' : 'Jellyfin'); cm.appendChild(lm);
+      var lm = document.createElement('span'); lm.textContent = 'Verder kijken in ' + mediaName(it); cm.appendChild(lm);
       if (it.p > 0) { var bm = document.createElement('span'); bm.className = 'bar'; bm.innerHTML = '<span></span>'; bm.firstChild.style.width = Math.round(it.p * 100) + '%'; cm.appendChild(bm); }
       if (it.left > 0) { var tm = document.createElement('span'); tm.style.color = 'var(--ink-3)'; tm.textContent = 'nog ' + it.left + ' min'; cm.appendChild(tm); }
       setBackdrop(it.img);
@@ -653,7 +654,7 @@
       if (!ok) return;
       var res = JSON.parse(payload);
       data.media = (res.items || []).map(function(m){
-        return { t:m.title, s:'cont', media:m.source, key:m.key, sub:m.sub, d:m.overview, img:m.backdrop, thumb:m.thumb,
+        return { t:m.title, s:'cont', media:m.source, service:m.service || '', key:m.key, sub:m.sub, d:m.overview, img:m.backdrop, thumb:m.thumb,
                  p:m.progress || 0, left:m.left, kind:'Verder kijken' };
       });
       if (state.view === 'home') buildRows();

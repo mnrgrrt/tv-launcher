@@ -146,7 +146,11 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
     @JavascriptInterface fun continueWatching(id: Int) = async(id) { Media.continueWatching(prefs) }
 
     @JavascriptInterface fun openMedia(source: String, key: String) {
-        act.runOnUiThread { if (source == "plex") Media.openPlex(act, key) else Media.openJellyfin(act) }
+        when (source) {
+            "jbl" -> pool.execute { try { Media.openJbl(prefs, key) } catch (_: Exception) { } }
+            "plex" -> act.runOnUiThread { Media.openPlex(act, key) }
+            else -> act.runOnUiThread { Media.openJellyfin(act) }
+        }
     }
 
     /** Start een app op de JBL via de Home Assistant-webhook. */

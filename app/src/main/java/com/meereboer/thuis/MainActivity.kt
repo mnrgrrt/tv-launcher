@@ -59,6 +59,7 @@ class MainActivity : Activity() {
         e.getString("plexToken")?.let { p.plexToken = it }
         e.getString("jellyfinUrl")?.let { p.jellyfinUrl = it }
         e.getString("jellyfinKey")?.let { p.jellyfinKey = it }
+        e.getString("brugUrl")?.let { p.brugUrl = it }
     }
 
     override fun onNewIntent(intent: Intent?) {

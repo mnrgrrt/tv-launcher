@@ -43,6 +43,10 @@ class Prefs(ctx: Context) {
     var jellyfinKey: String
         get() = sp.getString("jellyfinKey", "") ?: ""
         set(v) = sp.edit().putString("jellyfinKey", v.trim()).apply()
+    /** Adres van de Thuis-brug op de JBL, bijv. http://192.168.10.85:8765 */
+    var brugUrl: String
+        get() = sp.getString("brugUrl", "") ?: ""
+        set(v) = sp.edit().putString("brugUrl", v.trim().trimEnd('/')).apply()
     var lastChannel: Int
         get() = sp.getInt("lastChannel", -1)
         set(v) = sp.edit().putInt("lastChannel", v).apply()
@@ -53,7 +57,7 @@ class Prefs(ctx: Context) {
         .put("server", server).put("user", user).put("pass", pass)
         .put("format", format).put("categories", categories)
         .put("tmdbToken", tmdbToken).put("jblWebhook", jblWebhook)
-        .put("plexUrl", plexUrl).put("plexToken", plexToken).put("jellyfinUrl", jellyfinUrl).put("jellyfinKey", jellyfinKey)
+        .put("plexUrl", plexUrl).put("plexToken", plexToken).put("jellyfinUrl", jellyfinUrl).put("jellyfinKey", jellyfinKey).put("brugUrl", brugUrl)
         .put("configured", configured)
 
     fun fromJson(o: JSONObject) {
@@ -68,5 +72,6 @@ class Prefs(ctx: Context) {
         if (o.has("plexToken")) plexToken = o.optString("plexToken")
         if (o.has("jellyfinUrl")) jellyfinUrl = o.optString("jellyfinUrl")
         if (o.has("jellyfinKey")) jellyfinKey = o.optString("jellyfinKey")
+        if (o.has("brugUrl")) brugUrl = o.optString("brugUrl")
     }
 }

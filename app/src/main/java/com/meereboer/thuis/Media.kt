@@ -117,13 +117,68 @@ object Media {
         if (pkg != null) AppList.launch(ctx, pkg)
     }
 
+    // ---------- JBL (Watch Next via de Thuis-brug) ----------
+    private val pkgService = mapOf(
+        "com.netflix.ninja" to "netflix", "com.amazon.amazonvideo.livingroom" to "prime",
+        "nl.rtl.videoland.v2" to "videoland", "com.skyshowtime.skyshowtime.google" to "skyshowtime",
+        "nl.withlove.app" to "withlove", "com.google.android.youtube.tv" to "youtube"
+    )
+
+    fun jbl(p: Prefs): List<JSONObject> {
+        if (p.brugUrl.isEmpty()) return emptyList()
+        val body = Xtream.http.newCall(Request.Builder().url("${p.brugUrl}/watchnext").build()).execute().use {
+            if (!it.isSuccessful) throw RuntimeException("fout ${it.code}")
+            it.body?.string() ?: "[]"
+        }
+        val a = JSONArray(body)
+        val out = ArrayList<JSONObject>()
+        fun img(u: String) = when {
+            u.isEmpty() -> ""
+            u.startsWith("http") -> u
+            else -> "${p.brugUrl}/img?u=${enc(u)}"
+        }
+        for (i in 0 until a.length()) {
+            val m = a.getJSONObject(i)
+            val pkg = m.optString("package")
+            val dur = m.optLong("duration")
+            val pos = m.optLong("position")
+            val season = m.optString("season")
+            val num = m.optString("number")
+            val ep = m.optString("episode")
+            val sub = listOfNotNull(
+                if (season.isNotEmpty()) "S$season" else null,
+                if (num.isNotEmpty()) "afl. $num" else null,
+                ep.ifEmpty { null }
+            ).joinToString(" · ")
+            val pic = img(m.optString("poster").ifEmpty { m.optString("thumb") })
+            out.add(JSONObject()
+                .put("source", "jbl")
+                .put("service", pkgService[pkg] ?: "")
+                .put("key", m.optLong("id").toString())
+                .put("title", m.optString("title"))
+                .put("sub", sub)
+                .put("overview", m.optString("description"))
+                .put("progress", if (dur > 0) pos.toDouble() / dur else 0.0)
+                .put("left", if (dur > 0 && pos > 0) ((dur - pos) / 60000).toInt() else -1)
+                .put("backdrop", pic)
+                .put("thumb", pic)
+                .put("when", m.optLong("when")))
+        }
+        return out
+    }
+
+    fun openJbl(p: Prefs, key: String) {
+        Xtream.http.newCall(Request.Builder().url("${p.brugUrl}/open?id=${enc(key)}").build()).execute().close()
+    }
+
     /** Plex en Jellyfin samen, meest recent bovenaan. Een bron die faalt slaat hij over. */
     fun continueWatching(p: Prefs): String {
         val all = ArrayList<JSONObject>()
         val errors = JSONArray()
         try { all.addAll(plex(p)) } catch (e: Exception) { errors.put("Plex: ${e.message}") }
         try { all.addAll(jellyfin(p)) } catch (e: Exception) { errors.put("Jellyfin: ${e.message}") }
+        try { all.addAll(jbl(p)) } catch (e: Exception) { errors.put("JBL: ${e.message}") }
         all.sortByDescending { it.optLong("when") }
-        return JSONObject().put("items", JSONArray(all.take(15))).put("errors", errors).toString()
+        return JSONObject().put("items", JSONArray(all.take(20))).put("errors", errors).toString()
     }
 }
