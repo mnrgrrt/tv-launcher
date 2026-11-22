@@ -22,11 +22,13 @@ object Media {
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
+    /** Laat de app het plaatje ophalen (zie MainActivity), zodat de https-pagina het toont. */
+    private fun proxy(u: String) = if (u.isEmpty()) "" else "https://appassets.androidplatform.net/proxy?u=${enc(u)}"
 
     // ---------- Plex ----------
     private fun plexImg(p: Prefs, path: String, w: Int, h: Int): String {
         if (path.isEmpty()) return ""
-        return "${p.plexUrl}/photo/:/transcode?width=$w&height=$h&minSize=1&upscale=1&url=${enc(path)}&X-Plex-Token=${enc(p.plexToken)}"
+        return proxy("${p.plexUrl}/photo/:/transcode?width=$w&height=$h&minSize=1&upscale=1&url=${enc(path)}&X-Plex-Token=${enc(p.plexToken)}")
     }
 
     fun plex(p: Prefs): List<JSONObject> {
@@ -97,7 +99,7 @@ object Media {
             val ud = m.optJSONObject("UserData")
             val ticks = m.optLong("RunTimeTicks", 0)
             val pos = ud?.optLong("PlaybackPositionTicks", 0) ?: 0
-            fun img(w: Int) = "${p.jellyfinUrl}/Items/$artId/Images/Backdrop?maxWidth=$w&quality=85"
+            fun img(w: Int) = proxy("${p.jellyfinUrl}/Items/$artId/Images/Backdrop?maxWidth=$w&quality=85")
             out.add(JSONObject()
                 .put("source", "jellyfin")
                 .put("key", m.optString("Id"))

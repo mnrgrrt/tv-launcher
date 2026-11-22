@@ -303,9 +303,9 @@
     }
     var home = [];
     var cont = (data.media || []).concat(data.recent);
-    if (cont.length) home.push({ title:'Verder kijken', sub: (data.media && data.media.length) ? 'Netflix · Plex · Jellyfin en meer' : 'laatst geopend', type:'cont', items:cont });
     home.push({ title:'Live tv', sub:data.liveSub, type:'live', items:data.live });
     home.push({ title:'Streamingdiensten', sub:'', type:'svc', items:svcItems() });
+    if (cont.length) home.push({ title:'Verder kijken', sub: (data.media && data.media.length) ? 'Plex · Jellyfin · laatst geopend' : 'laatst geopend', type:'cont', items:cont });
     if (data.picks.length) home.push({ title:'Voor jou', sub:'populair op jouw diensten', type:'pick', items:data.picks });
     return home;
     return [

@@ -39,8 +39,21 @@ class MainActivity : Activity() {
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         }
         web.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                loader.shouldInterceptRequest(request.url)
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                val u = request.url
+                // Plaatjes van Plex/Jellyfin (http op het thuisnetwerk) haalt de app zelf op,
+                // anders blokkeert de https-pagina ze.
+                if (u.host == "appassets.androidplatform.net" && u.path == "/proxy") {
+                    val target = u.getQueryParameter("u") ?: return null
+                    return try {
+                        val r = Xtream.http.newCall(okhttp3.Request.Builder().url(target).build()).execute()
+                        if (!r.isSuccessful) { r.close(); return WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, null) }
+                        val type = r.header("Content-Type", "image/jpeg")!!.substringBefore(";")
+                        WebResourceResponse(type, null, 200, "OK", mapOf("Cache-Control" to "max-age=3600"), r.body!!.byteStream())
+                    } catch (_: Exception) { null }
+                }
+                return loader.shouldInterceptRequest(u)
+            }
         }
         web.addJavascriptInterface(Bridge(this, web), "Native")
         setContentView(web)
