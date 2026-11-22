@@ -47,6 +47,19 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk thuis.apk
           cp brug/build/outputs/apk/release/brug-release.apk thuis-brug.apk
 
+      - name: Samsung-pakket (Tizen) maken
+        run: |
+          set -e
+          mkdir -p build-tizen
+          cp -r shared/web/. build-tizen/
+          cp shared/categories.json build-tizen/
+          cp tizen/config.xml tizen/icon.png tizen/thuis-tizen.js build-tizen/
+          # Platformlaag laden vóór het script van het startscherm
+          sed -i 's#<head>#<head>\n<script src="thuis-tizen.js"></script>#' build-tizen/index.html
+          grep -q 'thuis-tizen.js' build-tizen/index.html
+          sed -i "s#version=\"1.0.0\"#version=\"1.0.${GITHUB_RUN_NUMBER}\"#" build-tizen/config.xml
+          (cd build-tizen && zip -qr ../thuis-samsung-ongesigneerd.wgt .)
+
       - uses: actions/upload-artifact@v4
         with:
           name: thuis-apk
@@ -57,7 +70,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete laatste --yes --cleanup-tag || true
-          gh release create laatste "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk thuis-brug.apk \
+          gh release create laatste "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk thuis-brug.apk thuis-samsung-ongesigneerd.wgt \
             --title "Thuis ${GITHUB_RUN_NUMBER}" \
             --notes "Automatisch gebouwd uit ${GITHUB_SHA::7}." \
             --latest

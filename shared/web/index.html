@@ -451,7 +451,7 @@
     var m = (sv.match || '').toLowerCase();
     return data.apps.filter(function(a){ return a.pkg && m && a.t.toLowerCase().indexOf(m) >= 0; })[0];
   }
-  function viaJbl(sv){ return !!sv.jbl && (sv.forceJbl || !localApp(sv)); }
+  function viaJbl(sv){ if (PL && PL.noJbl) return false; return !!sv.jbl && (sv.forceJbl || !localApp(sv)); }
   function svcItems(){
     var libs = (data.plexSecs || []).map(function(sc){
       return { t: sc.type === 'show' ? 'Mijn series' : (/^films?$/i.test(sc.title) ? 'Mijn films' : sc.title), s:'svc', key:'lib', lib:sc.key, libType:sc.type,
@@ -982,8 +982,7 @@
     } else if (k === 'Enter' || code === 23) {
       enter();
     } else if (k === 'Escape' || k === 'Backspace' || k === 'GoBack' || k === 'BrowserBack' || code === 461) {
-      if (state.view !== 'home') { closeCategory(); e.preventDefault(); return; }
-      state.nav = false; state.row = 0; state.col[0] = 0;
+      e.preventDefault(); window.__back(); return;
     } else handled = false;
     if (handled) { e.preventDefault(); render(); }
   });
