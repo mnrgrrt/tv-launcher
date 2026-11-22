@@ -55,10 +55,12 @@
         "playsports*",
         "dazn*",
         "skysport*",
-        "bein*"
+        "bein*",
+        "nba*"
       ],
       "groups": [
-        "sport"
+        "sport",
+        "nba"
       ],
       "exclude": [
         "daznf1*",
@@ -92,6 +94,43 @@
         "espn*"
       ],
       "groups": [],
+      "exclude": []
+    },
+    {
+      "id": "eurosport",
+      "name": "Eurosport",
+      "img": "forest",
+      "parent": "sport",
+      "include": [
+        "eurosport*"
+      ],
+      "groups": [],
+      "exclude": []
+    },
+    {
+      "id": "viaplay",
+      "name": "Viaplay",
+      "img": "forest",
+      "parent": "sport",
+      "include": [
+        "viaplay*"
+      ],
+      "groups": [],
+      "exclude": [
+        "viaplayf1*"
+      ]
+    },
+    {
+      "id": "nba",
+      "name": "NBA",
+      "img": "forest",
+      "parent": "sport",
+      "include": [
+        "nba*"
+      ],
+      "groups": [
+        "nba"
+      ],
       "exclude": []
     },
     {
