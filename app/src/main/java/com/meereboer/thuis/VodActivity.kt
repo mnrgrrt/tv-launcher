@@ -11,7 +11,10 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.FrameLayout
+import android.widget.ListView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -51,6 +54,99 @@ class VodActivity : Activity() {
     private val ui = Handler(Looper.getMainLooper())
     private var resumed = false
     private var subsTried = false
+    private lateinit var pv: PlayerView
+    private lateinit var menu: LinearLayout
+    private lateinit var menuTitle: TextView
+    private lateinit var menuList: ListView
+    private var menuActions: List<() -> Unit> = emptyList()
+    private val extraSubs = ArrayList<MediaItem.SubtitleConfiguration>()
+    private var pendingLabel: String? = null
+
+    /** Losse ondertitel toevoegen (OpenSubtitles) en meteen kiezen. */
+    private fun addExternal(f: java.io.File, lang: String, label: String) {
+        val p = player ?: return
+        if (extraSubs.none { it.label == label }) extraSubs.add(MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(f))
+            .setMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage(lang).setLabel(label).build())
+        pendingLabel = label
+        val pos = p.currentPosition
+        p.setMediaItem(mediaItem(extraSubs), pos)
+        p.prepare()
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
+    }
+
+    private fun trackName(g: Tracks.Group, i: Int): String {
+        val f = g.getTrackFormat(0)
+        val lang = f.language?.let { java.util.Locale(it).getDisplayLanguage(java.util.Locale("nl")).replaceFirstChar { c -> c.uppercase() } }
+        return listOfNotNull(f.label, lang).distinct().joinToString(" · ").ifEmpty { "Spoor ${i + 1}" }
+    }
+
+    private fun openMenu(titleText: String, labels: List<String>, actions: List<() -> Unit>, selected: Int) {
+        menuTitle.text = titleText
+        menuActions = actions
+        menuList.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                (super.getView(position, convertView, parent) as TextView).apply { setTextColor(Color.WHITE); textSize = 22f; setPadding(dp(16), dp(12), dp(16), dp(12)) }
+        }
+        menu.visibility = View.VISIBLE
+        menuList.requestFocus()
+        menuList.setSelection(selected.coerceAtLeast(0))
+    }
+    private fun closeMenu() { menu.visibility = View.GONE; pv.requestFocus() }
+
+    /** Gele knop: alle ondertitels uit het bestand, uit, en versies van OpenSubtitles. */
+    private fun subtitleMenu() {
+        val p = player ?: return
+        val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT && it.isSupported }
+        val off = p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) || groups.none { it.isSelected }
+        val labels = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
+        labels.add((if (off) "✓ " else "    ") + "Uit")
+        acts.add { p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build(); flash("Ondertitels uit") }
+        groups.forEachIndexed { i, g ->
+            labels.add((if (g.isSelected && !off) "✓ " else "    ") + trackName(g, i))
+            acts.add {
+                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0)).build()
+                flash("Ondertitels: " + trackName(g, i))
+            }
+        }
+        val prefs = Prefs(this)
+        val sel = if (off) 0 else groups.indexOfFirst { it.isSelected } + 1
+        if (prefs.osKey.isEmpty()) { openMenu("Ondertitels", labels, acts, sel); return }
+        labels.add("    OpenSubtitles: zoeken…"); acts.add { }
+        openMenu("Ondertitels", labels, acts, sel)
+        bg.execute {
+            val res = try { Subs.search(prefs, item, "nl,en").take(10) } catch (e: Exception) { emptyList() }
+            ui.post {
+                if (menu.visibility != View.VISIBLE) return@post
+                labels.removeAt(labels.size - 1); acts.removeAt(acts.size - 1)
+                if (res.isEmpty()) { labels.add("    OpenSubtitles: niets gevonden"); acts.add { } }
+                res.forEach { r ->
+                    val lang = if (r.optString("lang") == "nl") "NL" else r.optString("lang").uppercase()
+                    val label = "OpenSubtitles · $lang · " + r.optString("release").take(40) + (if (r.optBoolean("hearing")) " · SDH" else "")
+                    labels.add("    $label  (${r.optInt("downloads")}×)")
+                    acts.add {
+                        flash("Ondertitel ophalen…")
+                        bg.execute {
+                            val f = try { Subs.download(this, prefs, r.optInt("fileId")) } catch (e: Exception) { null }
+                            ui.post { if (f == null) flash("Ophalen lukt niet") else addExternal(f, r.optString("lang"), label) }
+                        }
+                    }
+                }
+                openMenu("Ondertitels", labels, acts, sel)
+            }
+        }
+    }
+
+    /** Groene knop: geluidssporen. */
+    private fun audioMenu() {
+        val p = player ?: return
+        val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO && it.isSupported }
+        if (groups.size < 2) { flash("Maar één geluidsspoor"); return }
+        openMenu("Geluid", groups.mapIndexed { i, g -> (if (g.isSelected) "✓ " else "    ") + trackName(g, i) },
+            groups.mapIndexed { i, g -> { p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0)).build(); flash("Geluid: " + trackName(g, i)) } },
+            groups.indexOfFirst { it.isSelected })
+    }
     private val bg = Executors.newSingleThreadExecutor()
 
     /** Geen Nederlandse ondertitels in het bestand en geen Nederlands geluid? Dan via OpenSubtitles. */
@@ -69,19 +165,13 @@ class VodActivity : Activity() {
             ui.post {
                 val p = player ?: return@post
                 if (f == null) { if (manual) flash("Geen Nederlandse ondertitels gevonden"); return@post }
-                val pos = p.currentPosition
-                val sub = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(f))
-                    .setMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage("nl").setLabel("Nederlands (OpenSubtitles)")
-                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()
-                p.setMediaItem(mediaItem(listOf(sub)), pos)
-                p.prepare()
-                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
-                flash("Nederlandse ondertitels geladen")
+                addExternal(f, "nl", "Nederlands · OpenSubtitles")
+                flash("Nederlandse ondertitels geladen (geel = andere kiezen)")
             }
         }
     }
 
-    private val hideOsd = Runnable { osd.visibility = View.GONE }
+    private val hideOsd = Runnable { osd.visibility = View.GONE; pv.subtitleView?.setBottomPaddingFraction(0.08f) }
     private val tick = object : Runnable {
         override fun run() {
             updateOsd()
@@ -100,7 +190,7 @@ class VodActivity : Activity() {
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
             or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        val pv = PlayerView(this).apply {
+        pv = PlayerView(this).apply {
             useController = false; keepScreenOn = true
             resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             setShutterBackgroundColor(Color.BLACK)
@@ -127,9 +217,25 @@ class VodActivity : Activity() {
             visibility = View.GONE
         }
         root.addView(center, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        // Keuzemenu (ondertitels / geluid) rechts
+        menu = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xEB0A0D12.toInt())
+            setPadding(dp(28), dp(36), dp(20), dp(28))
+            visibility = View.GONE
+        }
+        menuTitle = TextView(this).apply { setTextColor(Color.WHITE); textSize = 26f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, 0, dp(12)) }
+        menu.addView(menuTitle)
+        menuList = ListView(this).apply {
+            divider = null; isVerticalScrollBarEnabled = false
+            selector = android.graphics.drawable.ColorDrawable(0x40FFFFFF)
+            onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ -> val a = menuActions.getOrNull(pos); closeMenu(); a?.invoke() }
+        }
+        menu.addView(menuList, LinearLayout.LayoutParams(-1, -1))
+        root.addView(menu, FrameLayout.LayoutParams(dp(620), -1, Gravity.END))
         setContentView(root)
 
-        tvTitle.text = listOf(item.optString("title"), item.optString("sub")).filter { it.isNotEmpty() }.joinToString("  ·  ")
+        tvTitle.text = listOf(item.optString("title").replace(Regex("^\\[[A-Z]{2}\\]\\s*|^[A-Z]{2}\\s*[|:-]\\s*"), ""), item.optString("sub")).filter { it.isNotEmpty() }.joinToString("  ·  ")
 
         val http = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true).setUserAgent("Thuis/1.0")
             .setConnectTimeoutMs(10000).setReadTimeoutMs(20000)
@@ -166,6 +272,14 @@ class VodActivity : Activity() {
                 }
             }
             override fun onTracksChanged(tracks: Tracks) {
+                pendingLabel?.let { want ->
+                    tracks.groups.firstOrNull { g -> g.type == C.TRACK_TYPE_TEXT && g.getTrackFormat(0).label == want }?.let { g ->
+                        pendingLabel = null
+                        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0)).build()
+                        flash("Ondertitels: " + want)
+                    }
+                }
                 if (tracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }) maybeFetchSubs(tracks)
             }
             override fun onPlayerError(error: PlaybackException) { show("Dit speelt niet af\n${error.errorCodeName}", 0) }
@@ -225,8 +339,9 @@ class VodActivity : Activity() {
 
     private fun showOsd() {
         osd.visibility = View.VISIBLE; updateOsd()
+        pv.subtitleView?.setBottomPaddingFraction(0.24f)   // ondertitels boven de balk
         ui.removeCallbacks(hideOsd)
-        if (player?.isPlaying != false) ui.postDelayed(hideOsd, 4000)
+        if (player?.playWhenReady != false) ui.postDelayed(hideOsd, 4000)
     }
 
     private fun show(msg: String, ms: Long) {
@@ -266,6 +381,10 @@ class VodActivity : Activity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val p = player ?: return super.onKeyDown(keyCode, event)
+        if (menu.visibility == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { closeMenu(); return true }
+            return super.onKeyDown(keyCode, event)
+        }
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
             KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> {
@@ -276,9 +395,9 @@ class VodActivity : Activity() {
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { p.seekForward(); showOsd() }
             KeyEvent.KEYCODE_DPAD_UP -> { p.seekTo(p.currentPosition + 300_000); showOsd() }
             KeyEvent.KEYCODE_DPAD_DOWN -> { p.seekTo((p.currentPosition - 300_000).coerceAtLeast(0)); showOsd() }
-            KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK, KeyEvent.KEYCODE_PROG_GREEN, KeyEvent.KEYCODE_A -> cycle(C.TRACK_TYPE_AUDIO, "geluidssporen")
-            KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_PROG_YELLOW, KeyEvent.KEYCODE_S -> cycle(C.TRACK_TYPE_TEXT, "ondertitels")
-            KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_MENU -> showOsd()
+            KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK, KeyEvent.KEYCODE_PROG_GREEN, KeyEvent.KEYCODE_A -> audioMenu()
+            KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_PROG_YELLOW, KeyEvent.KEYCODE_S, KeyEvent.KEYCODE_MENU -> subtitleMenu()
+            KeyEvent.KEYCODE_INFO -> showOsd()
             KeyEvent.KEYCODE_BACK -> { save(); finish() }
             else -> return super.onKeyDown(keyCode, event)
         }

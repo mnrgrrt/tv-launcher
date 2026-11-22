@@ -272,7 +272,7 @@
   }
   function mapVod(kind, catName){ return function(o){
     var meta = []; if (o.year) meta.push(o.year); if (o.rating && o.rating !== '0') meta.push('★ ' + (Math.round(parseFloat(o.rating) * 10) / 10));
-    return { t:o.name, s:'iptv', kind: kind === 'series' ? 'Serie' : 'Film', vodKind:kind, id:o.id, ext:o.ext, thumb:o.icon, icon:o.icon,
+    return { t:(o.name || '').replace(/^\s*\[[A-Z]{2}\]\s*|^\s*[A-Z]{2}\s*[|:-]\s*/, ''), s:'iptv', kind: kind === 'series' ? 'Serie' : 'Film', vodKind:kind, id:o.id, ext:o.ext, thumb:o.icon, icon:o.icon,
              img: o.backdrop || o.icon || 'neon', backdrop:o.backdrop, meta:meta, d:o.plot || '', cat:null, catName:catName, vodItem:true };
   }; }
   function openVod(it){

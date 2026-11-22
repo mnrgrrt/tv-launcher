@@ -66,14 +66,11 @@ object Subs {
         } catch (_: Exception) { 0 }
     }
 
-    /** Geeft een .srt-bestand terug, of null als er niets te vinden is. */
-    fun find(ctx: Context, p: Prefs, item: JSONObject): File? {
-        if (p.osKey.isEmpty()) return null
-        val dir = File(ctx.filesDir, "subs").apply { mkdirs() }
-        val file = File(dir, item.optString("key").replace(Regex("[^A-Za-z0-9_-]"), "_") + ".nl.srt")
-        if (file.exists() && file.length() > 0) return file
+    /** Zoekresultaten: file_id, taal, releasenaam en aantal downloads (beste eerst). */
+    fun search(p: Prefs, item: JSONObject, languages: String): List<JSONObject> {
+        if (p.osKey.isEmpty()) return emptyList()
         val tmdb = tmdbId(p, item)
-        val q = StringBuilder("/subtitles?languages=nl&order_by=download_count")
+        val q = StringBuilder("/subtitles?languages=$languages&order_by=download_count")
         if (item.optString("kind") == "series") {
             if (tmdb > 0) q.append("&parent_tmdb_id=$tmdb") else q.append("&query=${enc(item.optString("title"))}")
             if (item.optInt("season") > 0) q.append("&season_number=${item.optInt("season")}")
@@ -81,9 +78,23 @@ object Subs {
         } else {
             if (tmdb > 0) q.append("&tmdb_id=$tmdb") else q.append("&query=${enc(item.optString("title"))}")
         }
-        val data = call(req(p, q.toString()).get().build()).optJSONArray("data") ?: return null
-        if (data.length() == 0) return null
-        val fileId = data.getJSONObject(0).optJSONObject("attributes")?.optJSONArray("files")?.optJSONObject(0)?.optInt("file_id") ?: return null
+        val data = call(req(p, q.toString()).get().build()).optJSONArray("data") ?: return emptyList()
+        val out = ArrayList<JSONObject>()
+        for (i in 0 until data.length()) {
+            val a = data.getJSONObject(i).optJSONObject("attributes") ?: continue
+            val fid = a.optJSONArray("files")?.optJSONObject(0)?.optInt("file_id") ?: continue
+            out.add(JSONObject().put("fileId", fid).put("lang", a.optString("language"))
+                .put("release", a.optString("release").ifEmpty { a.optJSONArray("files")?.optJSONObject(0)?.optString("file_name").orEmpty() })
+                .put("downloads", a.optInt("download_count")).put("hearing", a.optBoolean("hearing_impaired")))
+        }
+        return out
+    }
+
+    /** Eén ondertitel downloaden (kost één download van het dagtegoed); blijft bewaard. */
+    fun download(ctx: Context, p: Prefs, fileId: Int): File? {
+        val dir = File(ctx.filesDir, "subs").apply { mkdirs() }
+        val file = File(dir, "os-$fileId.srt")
+        if (file.exists() && file.length() > 0) return file
         val body = JSONObject().put("file_id", fileId).put("sub_format", "srt").toString().toRequestBody(json)
         val link = call(req(p, "/download", token(ctx, p)).post(body).build()).optString("link")
         if (link.isEmpty()) return null
@@ -93,5 +104,12 @@ object Subs {
         }
         file.writeBytes(bytes)
         return file
+    }
+
+    /** Automatisch: de best gedownloade Nederlandse ondertitel. */
+    fun find(ctx: Context, p: Prefs, item: JSONObject): File? {
+        if (p.osKey.isEmpty()) return null
+        val best = search(p, item, "nl").firstOrNull() ?: return null
+        return download(ctx, p, best.optInt("fileId"))
     }
 }
