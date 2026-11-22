@@ -457,7 +457,9 @@
       return { t: sc.type === 'show' ? 'Mijn series' : (/^films?$/i.test(sc.title) ? 'Mijn films' : sc.title), s:'svc', key:'lib', lib:sc.key, libType:sc.type,
                color:'#E5A00D', logo:'', img: sc.type === 'show' ? 'coast' : 'neon', kind:'Bibliotheek', meta:['Plex · ' + sc.title], d:'', jbl:false };
     });
-    return libs.concat(SERVICES.map(function(sv, i){
+    // Plex-app direct na de eigen bibliotheken, daarna de rest.
+    var ordered = SERVICES.filter(function(x){ return x.key === 'plex'; }).concat(SERVICES.filter(function(x){ return x.key !== 'plex'; }));
+    return libs.concat(ordered.map(function(sv, i){
       var top = data.svcBd[sv.key];
       return { t:sv.name, s:'svc', key:sv.key, color:sv.color, logo: sv.logo ? TMDB_IMG + 'w154' + sv.logo : '',
                img: top ? top.backdrop : IMGS[i % IMGS.length], kind:'Streamingdienst',
