@@ -57,12 +57,13 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
     @JavascriptInterface fun liveHome(id: Int) = async(id) {
         if (!prefs.configured) return@async JSONObject().put("configured", false).toString()
         val all = Xtream.load(prefs)
-        val group = prefs.homeGroup.lowercase()
-        val pick = if (group.isNotEmpty()) {
-            val ids = Xtream.categories.filterValues { it.lowercase().contains(group) }.keys
+        // Een of meer groepen, gescheiden door komma's, bijvoorbeeld "sport, film".
+        val groups = prefs.homeGroup.lowercase().split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        val pick = if (groups.isNotEmpty()) {
+            val ids = Xtream.categories.filterValues { name -> groups.any { name.lowercase().contains(it) } }.keys
             all.filter { it.categoryId in ids }
         } else all
-        val chosen = pick.take(16)
+        val chosen = pick.take(24)
         val tasks = chosen.map { ch ->
             Callable { ch to (try { Xtream.shortEpg(prefs, ch.id, 2) } catch (_: Exception) { emptyList() }) }
         }

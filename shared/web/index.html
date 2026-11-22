@@ -127,7 +127,7 @@
       <label class="field">Gebruikersnaam<input id="sUser" autocomplete="off" spellcheck="false"></label>
       <label class="field">Wachtwoord<input id="sPass" type="password" autocomplete="off"></label>
       <div class="field">Streamformaat<button class="btn" id="sFormat" type="button">ts</button></div>
-      <label class="field">Groep op startscherm<input id="sGroup" placeholder="leeg = eerste zenders, of bijv. Nederland" autocomplete="off" spellcheck="false"></label>
+      <label class="field">Groep op startscherm<input id="sGroup" placeholder="leeg = alles, of bijv. sport, film" autocomplete="off" spellcheck="false"></label>
       <div class="btns">
         <button class="btn" id="sTest" type="button">Verbinding testen</button>
         <button class="btn pri" id="sSave" type="button">Opslaan</button>
@@ -199,7 +199,16 @@
   });
 
   var data = { cont: SAMPLE_CONT, live: APP ? [{ t:'Zenders laden…', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, d:'', loading:true }] : SAMPLE_LIVE,
-               rec: SAMPLE_REC, apps: SAMPLE_APPS, liveSub: 'Dispatcharr' };
+               rec: SAMPLE_REC, apps: SAMPLE_APPS, liveSub: 'Dispatcharr', ziggo: null };
+  data.channels = data.live;
+
+  // Vaste tegel voor Ziggo GO vooraan in "Nu live" (handig als de ene IPTV-stream al in gebruik is).
+  function composeLive(){
+    var list = data.channels.slice();
+    if (data.ziggo) list.unshift({ t:'Ziggo GO', ch:'Ziggo GO', s:'ziggo', kind:'App', img:'city', meta:['Live tv en terugkijken van Ziggo'], p:0,
+      d:'Opent de app van Ziggo. Gebruik deze als de IPTV-stream al ergens anders speelt, of voor terugkijken van Ziggo.', app:true, pkg:data.ziggo });
+    data.live = list;
+  }
   var ROWS = [];
   var NAV = ['Thuis','Live tv','Apps','Instellingen'];
   var state = { row:0, col:[0,0,0,0], nav:false, navIdx:0 };
@@ -282,8 +291,9 @@
         }
         ch.appendChild(document.createTextNode(it.ch || ''));
         b.appendChild(ch);
-        if (!it.setup && !it.loading) b.insertAdjacentHTML('beforeend','<span class="ldot">LIVE</span>');
-        var now = document.createElement('span'); now.className = 'now'; now.textContent = it.t; b.appendChild(now);
+        if (it.app) b.insertAdjacentHTML('beforeend','<span class="ldot" style="background:#F48C00">APP</span>');
+        else if (!it.setup && !it.loading) b.insertAdjacentHTML('beforeend','<span class="ldot">LIVE</span>');
+        var now = document.createElement('span'); now.className = 'now'; now.textContent = it.app ? 'Live tv en terugkijken' : it.t; b.appendChild(now);
         if (it.p > 0) { b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>'); b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%'; }
       } else {
         var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = SRC[it.s].n; b.appendChild(bd);
@@ -320,7 +330,10 @@
   function hero(it, type){
     var src = SRC[it.s] || SRC.app;
     var s = $('hSrc'); s.innerHTML = '';
-    if (type === 'live' && !it.setup && !it.loading) {
+    if (it.app && type === 'live') {
+      var zd = document.createElement('i'); zd.style.background = SRC.ziggo.c; s.appendChild(zd);
+      s.appendChild(document.createTextNode('Ziggo · App'));
+    } else if (type === 'live' && !it.setup && !it.loading) {
       var l = document.createElement('span'); l.className = 'live'; l.textContent = '● LIVE'; s.appendChild(l);
       s.appendChild(document.createTextNode((it.ch || '') + (it.num ? ' · ' + it.num : '')));
     } else {
@@ -341,6 +354,7 @@
     if (it.loading) { add('Even geduld', true); setBackdrop(it.img); return; }
     var k = document.createElement('b'); k.textContent = 'OK'; c.appendChild(k);
     if (it.setup) add('Instellingen openen');
+    else if (it.app) add('Open Ziggo GO');
     else if (type === 'live') { add('Kijk live'); if (it.p > 0) bar(it.p); if (it.next) add(it.next, true); }
     else if (type === 'app') add('Open ' + it.t);
     else if (it.p > 0) { add('Verder kijken'); bar(it.p); add(it.left, true); }
@@ -386,6 +400,7 @@
     if (!it) return;
     if (it.setup) { openSettings(); return; }
     if (it.loading) return;
+    if (it.app && it.pkg) { if (APP) PL.launch(it.pkg); else toast('Ziggo GO wordt geopend'); return; }
     if (r.type === 'live') { if (APP && it.streamId) PL.play(it.streamId); else toast('Live: ' + it.ch + ' · ' + it.t); }
     else if (r.type === 'app') { if (APP && it.pkg) PL.launch(it.pkg); else toast(it.t + ' wordt geopend'); }
     else toast('Dit is een voorbeeld. De koppeling met Plex volgt.');
@@ -396,17 +411,17 @@
     if (!APP) return;
     PL.liveHome(function(ok, payload){
       if (!ok) {
-        data.live = [{ t:'Dispatcharr niet bereikbaar', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true,
+        data.channels = [{ t:'Dispatcharr niet bereikbaar', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true,
           d:'Fout: ' + payload + '. Controleer de server en je login in Instellingen.' }];
-        data.liveSub = 'geen verbinding'; buildRows(); return;
+        data.liveSub = 'geen verbinding'; composeLive(); buildRows(); return;
       }
       var res = JSON.parse(payload);
       if (!res.configured) {
-        data.live = [{ t:'Live tv instellen', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true,
+        data.channels = [{ t:'Live tv instellen', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true,
           d:'Vul één keer het adres van Dispatcharr en je Xtream-login in. Daarna staan hier je zenders.' }];
-        data.liveSub = 'nog niet ingesteld'; buildRows(); return;
+        data.liveSub = 'nog niet ingesteld'; composeLive(); buildRows(); return;
       }
-      data.live = res.channels.map(function(c, i){
+      data.channels = res.channels.map(function(c, i){
         var now = c.now || {}, nx = c.next, p = 0, meta = [];
         if (now.start && now.end && now.end > now.start) {
           p = Math.max(0, Math.min(1, (Date.now() - now.start) / (now.end - now.start)));
@@ -415,9 +430,9 @@
         return { t: now.title || c.name, ch: c.name, num: c.num, s:'iptv', kind:'Live', img: IMGS[i % IMGS.length], logo: c.icon,
                  meta: meta, p: p, next: nx ? 'Daarna ' + (nx.start ? hm(nx.start) + ' ' : '') + nx.title : '', d: now.desc || '', streamId: c.id };
       });
-      if (!data.live.length) data.live = [{ t:'Geen zenders in deze groep', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true, d:'Pas de groep aan in Instellingen.' }];
+      if (!data.channels.length) data.channels = [{ t:'Geen zenders in deze groep', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, setup:true, d:'Pas de groep aan in Instellingen.' }];
       data.liveSub = 'Dispatcharr · ' + res.total + ' zenders';
-      buildRows();
+      composeLive(); buildRows();
     });
   }
 
@@ -427,7 +442,9 @@
       if (!ok) return;
       var list = JSON.parse(payload);
       data.apps = list.map(function(a, i){ return { t:a.label, s:'app', pkg:a.pkg, banner:a.banner, icon:a.icon, img: IMGS[i % IMGS.length], d:'' }; });
-      buildRows();
+      var z = list.filter(function(a){ return a.pkg === 'com.ziggo.tv' || /ziggo/i.test(a.label); })[0];
+      data.ziggo = z ? z.pkg : null;
+      composeLive(); buildRows();
     });
   }
 
