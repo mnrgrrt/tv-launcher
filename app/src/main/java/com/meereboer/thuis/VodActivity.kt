@@ -30,6 +30,9 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import org.json.JSONObject
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.Tracks
+import java.util.concurrent.Executors
 
 /**
  * Speler voor films en afleveringen van de IPTV-server.
@@ -47,6 +50,36 @@ class VodActivity : Activity() {
     private lateinit var center: TextView
     private val ui = Handler(Looper.getMainLooper())
     private var resumed = false
+    private var subsTried = false
+    private val bg = Executors.newSingleThreadExecutor()
+
+    /** Geen Nederlandse ondertitels in het bestand en geen Nederlands geluid? Dan via OpenSubtitles. */
+    private fun maybeFetchSubs(tracks: Tracks, manual: Boolean = false) {
+        if (subsTried && !manual) return
+        val prefs = Prefs(this)
+        if (prefs.osKey.isEmpty()) { if (manual) flash("Geen OpenSubtitles-sleutel ingesteld"); return }
+        val nl = setOf("nl", "nld", "dut")
+        val hasNlText = tracks.groups.any { g -> g.type == C.TRACK_TYPE_TEXT && (0 until g.length).any { g.getTrackFormat(it).language?.lowercase() in nl } }
+        val nlAudio = tracks.groups.any { g -> g.type == C.TRACK_TYPE_AUDIO && g.isSelected && (0 until g.length).any { g.getTrackFormat(it).language?.lowercase() in nl } }
+        if (!manual && (hasNlText || nlAudio)) return
+        subsTried = true
+        if (manual) flash("Ondertitels zoeken…")
+        bg.execute {
+            val f = try { Subs.find(this, prefs, item) } catch (e: Exception) { ui.post { if (manual) flash("Ondertitels zoeken lukt niet: ${e.message?.take(60)}") }; null }
+            ui.post {
+                val p = player ?: return@post
+                if (f == null) { if (manual) flash("Geen Nederlandse ondertitels gevonden"); return@post }
+                val pos = p.currentPosition
+                val sub = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(f))
+                    .setMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage("nl").setLabel("Nederlands (OpenSubtitles)")
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()
+                p.setMediaItem(MediaItem.Builder().setUri(item.optString("url")).setSubtitleConfigurations(listOf(sub)).build(), pos)
+                p.prepare()
+                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
+                flash("Nederlandse ondertitels geladen")
+            }
+        }
+    }
 
     private val hideOsd = Runnable { osd.visibility = View.GONE }
     private val tick = object : Runnable {
@@ -127,6 +160,9 @@ class VodActivity : Activity() {
                     else -> {}
                 }
             }
+            override fun onTracksChanged(tracks: Tracks) {
+                if (tracks.groups.any { it.type == C.TRACK_TYPE_AUDIO }) maybeFetchSubs(tracks)
+            }
             override fun onPlayerError(error: PlaybackException) { show("Dit speelt niet af\n${error.errorCodeName}", 0) }
         })
         pv.player = p
@@ -165,7 +201,10 @@ class VodActivity : Activity() {
     private fun cycle(type: Int, name: String) {
         val p = player ?: return
         val groups = p.currentTracks.groups.filter { it.type == type && it.isSupported }
-        if (groups.isEmpty()) { flash("Geen $name beschikbaar"); return }
+        if (groups.isEmpty()) {
+            if (type == C.TRACK_TYPE_TEXT && !subsTried) { maybeFetchSubs(p.currentTracks, manual = true); return }
+            flash("Geen $name beschikbaar"); return
+        }
         val cur = groups.indexOfFirst { it.isSelected }
         val b = p.trackSelectionParameters.buildUpon()
         if (type == C.TRACK_TYPE_TEXT) {
@@ -219,5 +258,6 @@ class VodActivity : Activity() {
         save()
         ui.removeCallbacksAndMessages(null)
         player?.release(); player = null
+        bg.shutdownNow()
     }
 }

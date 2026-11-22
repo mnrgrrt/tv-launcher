@@ -55,6 +55,13 @@ object Tmdb {
             .put("service", service)
     }
 
+    /** TMDB-nummer op titel (voor ondertitels). */
+    fun search(p: Prefs, type: String, title: String): Int {
+        val r = get(p.tmdbToken, "/search/$type?query=" + java.net.URLEncoder.encode(title, "UTF-8") + "&language=nl-NL")
+            .optJSONArray("results") ?: return 0
+        return if (r.length() > 0) r.getJSONObject(0).optInt("id") else 0
+    }
+
     // ---------- Verder kijken van de JBL ----------
     @Volatile private var pnCache: Pair<String, List<JSONObject>>? = null
 

@@ -40,6 +40,15 @@ class Prefs(ctx: Context) {
     var jellyfinUrl: String
         get() = sp.getString("jellyfinUrl", "") ?: ""
         set(v) = sp.edit().putString("jellyfinUrl", v.trim().trimEnd('/')).apply()
+    var osKey: String
+        get() = sp.getString("osKey", "") ?: ""
+        set(v) = sp.edit().putString("osKey", v.trim()).apply()
+    var osUser: String
+        get() = sp.getString("osUser", "") ?: ""
+        set(v) = sp.edit().putString("osUser", v.trim()).apply()
+    var osPass: String
+        get() = sp.getString("osPass", "") ?: ""
+        set(v) = sp.edit().putString("osPass", v).apply()
     var jellyfinKey: String
         get() = sp.getString("jellyfinKey", "") ?: ""
         set(v) = sp.edit().putString("jellyfinKey", v.trim()).apply()
@@ -61,7 +70,7 @@ class Prefs(ctx: Context) {
         .put("server", server).put("user", user).put("pass", pass)
         .put("format", format).put("categories", categories)
         .put("tmdbToken", tmdbToken).put("jblWebhook", jblWebhook)
-        .put("plexUrl", plexUrl).put("plexToken", plexToken).put("jellyfinUrl", jellyfinUrl).put("jellyfinKey", jellyfinKey).put("brugUrl", brugUrl).put("jblListUrl", jblListUrl)
+        .put("plexUrl", plexUrl).put("plexToken", plexToken).put("jellyfinUrl", jellyfinUrl).put("jellyfinKey", jellyfinKey).put("osKey", osKey).put("osUser", osUser).put("osPass", osPass).put("brugUrl", brugUrl).put("jblListUrl", jblListUrl)
         .put("configured", configured)
 
     fun fromJson(o: JSONObject) {
@@ -76,6 +85,9 @@ class Prefs(ctx: Context) {
         if (o.has("plexToken")) plexToken = o.optString("plexToken")
         if (o.has("jellyfinUrl")) jellyfinUrl = o.optString("jellyfinUrl")
         if (o.has("jellyfinKey")) jellyfinKey = o.optString("jellyfinKey")
+        if (o.has("osKey")) osKey = o.optString("osKey")
+        if (o.has("osUser")) osUser = o.optString("osUser")
+        if (o.has("osPass")) osPass = o.optString("osPass")
         if (o.has("brugUrl")) brugUrl = o.optString("brugUrl")
         if (o.has("jblListUrl")) jblListUrl = o.optString("jblListUrl")
     }

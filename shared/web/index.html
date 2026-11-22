@@ -140,6 +140,9 @@
       <label class="field">Plex-token<input id="sPlexTok" type="password" autocomplete="off"></label>
       <label class="field">Jellyfin-adres<input id="sJfUrl" placeholder="http://192.168.x.x:8096" autocomplete="off" spellcheck="false"></label>
       <label class="field">Jellyfin-sleutel<input id="sJfKey" type="password" autocomplete="off"></label>
+      <label class="field">OpenSubtitles-sleutel<input id="sOsKey" placeholder="voor Nederlandse ondertitels" autocomplete="off" spellcheck="false"></label>
+      <label class="field">OpenSubtitles-gebruiker<input id="sOsUser" autocomplete="off" spellcheck="false"></label>
+      <label class="field">OpenSubtitles-wachtwoord<input id="sOsPass" type="password" autocomplete="off"></label>
       <label class="field">JBL-webhook<input id="sJbl" placeholder="Home Assistant-webhook (optioneel)" autocomplete="off" spellcheck="false"></label>
       <div class="btns">
         <button class="btn" id="sTest" type="button">Verbinding testen</button>
@@ -307,7 +310,7 @@
       data.seasonRows = info.seasons.map(function(se){
         return { title: 'Seizoen ' + se.season, sub: se.episodes.length + ' afleveringen', items: se.episodes.map(function(e){
           var sub = 'S' + se.season + ' · afl. ' + e.num + (e.title && e.title.indexOf(it.t) < 0 ? ' · ' + e.title : '');
-          return { t: it.t, sub: sub, s:'iptv', kind:'Aflevering', ep:true, id:e.id, ext:e.ext, thumb: e.img || it.icon, img: it.backdrop || e.img || it.icon || 'coast',
+          return { t: it.t, sub: sub, s:'iptv', kind:'Aflevering', ep:true, season: parseInt(se.season, 10) || 0, id:e.id, ext:e.ext, thumb: e.img || it.icon, img: it.backdrop || e.img || it.icon || 'coast',
                    icon: it.icon, meta:[ 'Seizoen ' + se.season, 'Aflevering ' + e.num ].concat(e.dur ? [Math.round(e.dur / 60) + ' min'] : []), d: e.plot || it.d || '', num:e.num };
         }) };
       });
@@ -317,7 +320,8 @@
   }
   function playVodItem(it){
     if (!APP) { toast('Speelt af in de app op de tv'); return; }
-    if (it.ep) PL.playVod({ kind:'series', id:it.id, ext:it.ext, title:it.t, sub:it.sub, img:it.thumb, backdrop:state.series ? state.series.backdrop : '', plot:it.d });
+    if (it.ep) PL.playVod({ kind:'series', id:it.id, ext:it.ext, title:it.t, sub:it.sub, img:it.thumb, backdrop:state.series ? state.series.backdrop : '', plot:it.d,
+                            seriesId: state.series ? state.series.id : '', season: it.season, episode: it.num });
     else PL.playVod({ kind:'movie', id:it.id, ext:it.ext, title:it.t, sub:(it.meta || []).join(' · '), img:it.icon, backdrop:it.backdrop, plot:it.d });
   }
   var infoTimer = null;
@@ -800,7 +804,7 @@
   };
 
   // ---------- instellingen ----------
-  var sItems = ['sServer','sUser','sPass','sFormat','sGroup','sTmdb','sPlexUrl','sPlexTok','sJfUrl','sJfKey','sJbl','sTest','sSave','sClose','sAndroid','sUpdate'];
+  var sItems = ['sServer','sUser','sPass','sFormat','sGroup','sTmdb','sPlexUrl','sPlexTok','sJfUrl','sJfKey','sOsKey','sOsUser','sOsPass','sJbl','sTest','sSave','sClose','sAndroid','sUpdate'];
   var update = null;
   function checkUpdate(silent){
     if (!APP || !PL.checkUpdate) return;
@@ -819,7 +823,7 @@
     var cfg = { server:'', user:'', pass:'', format:'ts', categories:'' };
     if (APP) { try { cfg = PL.getSettings(); } catch (e) {} }
     $('sServer').value = cfg.server || ''; $('sUser').value = cfg.user || ''; $('sPass').value = cfg.pass || '';
-    $('sFormat').textContent = cfg.format || 'ts'; $('sGroup').value = cfg.categories || ''; $('sTmdb').value = cfg.tmdbToken || ''; $('sJbl').value = cfg.jblWebhook || ''; $('sPlexUrl').value = cfg.plexUrl || ''; $('sPlexTok').value = cfg.plexToken || ''; $('sJfUrl').value = cfg.jellyfinUrl || ''; $('sJfKey').value = cfg.jellyfinKey || '';
+    $('sFormat').textContent = cfg.format || 'ts'; $('sGroup').value = cfg.categories || ''; $('sTmdb').value = cfg.tmdbToken || ''; $('sJbl').value = cfg.jblWebhook || ''; $('sPlexUrl').value = cfg.plexUrl || ''; $('sPlexTok').value = cfg.plexToken || ''; $('sJfUrl').value = cfg.jellyfinUrl || ''; $('sJfKey').value = cfg.jellyfinKey || ''; $('sOsKey').value = cfg.osKey || ''; $('sOsUser').value = cfg.osUser || ''; $('sOsPass').value = cfg.osPass || '';
     $('sStatus').textContent = '';
     $('settings').hidden = false; state.nav = false; sIdx = 0; sRender();
     checkUpdate(false);
@@ -827,7 +831,7 @@
   function closeSettings(){ $('settings').hidden = true; if (document.activeElement) document.activeElement.blur(); render(); }
   function editing(){ var a = document.activeElement; return a && a.tagName === 'INPUT'; }
   function settingsBack(){ if (editing()) document.activeElement.blur(); else closeSettings(); }
-  function collect(){ return { server:$('sServer').value, user:$('sUser').value, pass:$('sPass').value, format:$('sFormat').textContent, categories:$('sGroup').value, tmdbToken:$('sTmdb').value, jblWebhook:$('sJbl').value, plexUrl:$('sPlexUrl').value, plexToken:$('sPlexTok').value, jellyfinUrl:$('sJfUrl').value, jellyfinKey:$('sJfKey').value }; }
+  function collect(){ return { server:$('sServer').value, user:$('sUser').value, pass:$('sPass').value, format:$('sFormat').textContent, categories:$('sGroup').value, tmdbToken:$('sTmdb').value, jblWebhook:$('sJbl').value, plexUrl:$('sPlexUrl').value, plexToken:$('sPlexTok').value, jellyfinUrl:$('sJfUrl').value, jellyfinKey:$('sJfKey').value, osKey:$('sOsKey').value, osUser:$('sOsUser').value, osPass:$('sOsPass').value }; }
   function sActivate(){
     var id = sItems[sIdx], el = $(id);
     if (el.tagName === 'INPUT') { el.focus(); return; }

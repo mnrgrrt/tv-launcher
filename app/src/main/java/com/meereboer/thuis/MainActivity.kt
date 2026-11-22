@@ -73,6 +73,8 @@ class MainActivity : Activity() {
         e.getString("jellyfinUrl")?.let { p.jellyfinUrl = it }
         e.getString("jellyfinKey")?.let { p.jellyfinKey = it }
         e.getString("brugUrl")?.let { p.brugUrl = it }
+        e.getString("osKey")?.let { p.osKey = it }
+        e.getString("osUser")?.let { p.osUser = it }
         e.getString("jblListUrl")?.let { p.jblListUrl = it }
     }
 
