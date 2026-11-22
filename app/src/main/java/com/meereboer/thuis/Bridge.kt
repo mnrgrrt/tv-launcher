@@ -161,6 +161,9 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
     }
 
     // ---------- films en series (IPTV) ----------
+    @JavascriptInterface fun vodOverview(id: Int, kind: String) = async(id) { Vod.overview(prefs, kind) }
+    @JavascriptInterface fun vodBrowse(id: Int, kind: String, by: String, value: String) = async(id) { Vod.browse(prefs, kind, by, value) }
+    @JavascriptInterface fun searchAll(id: Int, q: String) = async(id) { Search.all(act, prefs, q) }
     @JavascriptInterface fun vodCategories(id: Int, kind: String) = async(id) { Vod.categories(prefs, kind) }
     @JavascriptInterface fun vodList(id: Int, kind: String, cat: String) = async(id) { Vod.list(prefs, kind, cat, 40) }
     @JavascriptInterface fun vodInfo(id: Int, kind: String, itemId: String) = async(id) { Vod.info(prefs, kind, itemId) }

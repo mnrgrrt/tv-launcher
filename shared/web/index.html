@@ -74,6 +74,10 @@
   .card .now{position:absolute;left:18px;right:18px;bottom:24px;font:600 24px/1.2 Inter,system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .card.poster{width:150px;background-color:#151922}
   .card.poster .pt{position:absolute;left:10px;right:10px;bottom:12px;font:700 18px/1.15 var(--display);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .searchbox{position:absolute;left:96px;top:170px;width:1300px;z-index:6}
+  .searchbox input{width:100%;font:600 54px/1.2 var(--display);color:var(--ink);background:rgba(255,255,255,.08);border:3px solid rgba(255,255,255,.25);border-radius:20px;padding:22px 30px;outline:none}
+  .searchbox input:focus{border-color:var(--ink);background:rgba(255,255,255,.14)}
+  .searchbox p{font:500 24px/1.4 Inter,system-ui,sans-serif;color:var(--ink-3);margin:16px 6px 0}
   .card.app{width:260px;height:146px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background-color:#151922}
   .card.app::before{display:none}
   .card.app span{font:700 26px/1.1 var(--display);letter-spacing:-.01em;text-align:center;padding:0 12px}
@@ -123,6 +127,10 @@
     <div class="cta" id="hCta"></div>
   </section>
 
+  <div class="searchbox" id="searchBox" hidden>
+    <input id="q" type="search" placeholder="Zoek een film of serie" autocomplete="off" spellcheck="false" enterkeyhint="search">
+    <p>Zoekt in Plex, IPTV-films en -series, en op je streamingdiensten. Microfoon op het toetsenbord werkt ook.</p>
+  </div>
   <div class="rows" id="rows"></div>
   <div class="toast" id="toast" role="status"></div>
 
@@ -187,6 +195,9 @@
       jbl: function(pkg, cb){ call('jblLaunch', cb, pkg); },
       installUpdate: function(cb){ call('installUpdate', cb); },
       vodCategories: function(kind, cb){ call('vodCategories', cb, kind); },
+      vodOverview: function(kind, cb){ call('vodOverview', cb, kind); },
+      vodBrowse: function(kind, by, value, cb){ call('vodBrowse', cb, kind, by, String(value)); },
+      searchAll: function(q, cb){ call('searchAll', cb, q); },
       vodList: function(kind, cat, cb){ call('vodList', cb, kind, String(cat)); },
       vodInfo: function(kind, id, cb){ call('vodInfo', cb, kind, String(id)); },
       playVod: function(o){ Native.playVod(JSON.stringify(o)); },
@@ -302,7 +313,7 @@
     });
   }
   function openSeries(it){
-    state.vodPos = { row: state.row, col: state.col.slice() };
+    pushNav();
     state.view = 'series'; state.series = it; state.row = 0; state.col = [];
     data.seasonRows = [{ title: it.t, sub:'afleveringen laden…', items:[{ t:'Laden…', s:'iptv', kind:'Serie', img:it.img, loading:true, meta:[] }] }];
     buildRows();
@@ -349,7 +360,84 @@
     }, 450);
   }
   var ROWS = [];
-  var NAV = ['Thuis','Live tv','Apps','Instellingen'];
+  var NAV = ['Thuis','Live tv','Apps','Zoeken','Instellingen'];
+  // Terug-stapel voor schermen in schermen (Films > Netflix > serie)
+  var navStack = [];
+  function pushNav(){ navStack.push({ view:state.view, row:state.row, col:state.col.slice(), cat:state.cat, series:state.series }); }
+  function popNav(){
+    var t = navStack.pop(); if (!t) return false;
+    state.view = t.view; state.row = t.row; state.col = t.col; state.cat = t.cat; state.series = t.series; state.nav = false;
+    showSearchBox(state.view === 'search'); buildRows(); return true;
+  }
+  function showSearchBox(on){ $('searchBox').hidden = !on; $('hero').style.visibility = on ? 'hidden' : ''; if (!on && document.activeElement === $('q')) $('q').blur(); }
+
+  // ---------- IPTV: overzicht (diensten, genres, nieuw) en raster ----------
+  var CAT_COLORS = [[/netflix/i,'#E50914'],[/disney/i,'#113CCF'],[/hbo|max/i,'#5822B4'],[/prime|amazon/i,'#1A98FF'],[/videoland/i,'#E6007E'],
+    [/apple/i,'#555A63'],[/viaplay/i,'#FF0050'],[/npo|nlziet/i,'#FF6D00'],[/path/i,'#C79A00'],[/bioscoop|cinema/i,'#8A2BE2'],[/kind/i,'#2E9E5B']];
+  function catColor(n){ for (var i = 0; i < CAT_COLORS.length; i++) if (CAT_COLORS[i][0].test(n)) return CAT_COLORS[i][1]; return '#2A3140'; }
+  function openVodHome(it){
+    pushNav();
+    state.view = 'vodhome'; state.vod = { kind: it.vod, title: it.t }; state.row = 0; state.col = []; state.nav = false;
+    data.vodHome = [{ title: it.t, sub:'laden…', type:'vod', items:[{ t:'Laden…', s:'iptv', kind:it.t, img:it.img, loading:true, meta:[] }] }];
+    buildRows();
+    PL.vodOverview(it.vod, function(ok, payload){
+      if (state.view !== 'vodhome') return;
+      if (!ok) { data.vodHome[0].sub = 'mislukt: ' + payload; buildRows(); return; }
+      var o = JSON.parse(payload), word = it.vod === 'series' ? 'series' : 'films';
+      data.vodHome = [];
+      if (o.cats.length) data.vodHome.push({ title:'Diensten', sub: o.cats.length + ' · ' + o.total + ' ' + word, type:'svc', items: o.cats.map(function(c){
+        var n = vodName(c.name); return { t:n, s:'svc', key:'vodcat', vodCat:c.id, vodKind:it.vod, color:catColor(n), logo:'', img:it.img, count:c.count, kind:'Dienst', meta:[c.count + ' ' + word], d:'' }; }) });
+      if (o.genres.length) data.vodHome.push({ title:'Genres', sub:'over alle diensten', type:'svc', items: o.genres.map(function(g){
+        return { t:g.name, s:'svc', key:'vodgenre', vodGenre:g.name, vodKind:it.vod, color:'#2A3140', logo:'', img:it.img, count:g.count, kind:'Genre', meta:[g.count + ' ' + word], d:'' }; }) });
+      data.vodHome.push({ title:'Nieuw binnen', sub:'het nieuwste van alle diensten', type:'vod', items: o.newest.map(mapVod(it.vod, '')) });
+      buildRows();
+    });
+  }
+  var GRID_N = 9;
+  function openVodGrid(kind, by, value, title){
+    pushNav();
+    state.view = 'vodgrid'; state.row = 0; state.col = []; state.nav = false;
+    data.vodGrid = [{ title: title, sub:'laden…', type:'vod', items:[{ t:'Laden…', s:'iptv', kind:title, img:'neon', loading:true, meta:[] }] }];
+    buildRows();
+    PL.vodBrowse(kind, by, value, function(ok, payload){
+      if (state.view !== 'vodgrid') return;
+      if (!ok) { data.vodGrid[0].sub = 'mislukt: ' + payload; buildRows(); return; }
+      var o = JSON.parse(payload), items = o.items.map(mapVod(kind, title)), rows = [];
+      for (var i = 0; i < items.length; i += GRID_N)
+        rows.push({ title: i === 0 ? title : '', sub: i === 0 ? o.total + (kind === 'series' ? ' series' : ' films') + (o.total > items.length ? ' · nieuwste ' + items.length + ' (zoek voor de rest)' : '') : '',
+                    type:'vod', grid:true, lazy:true, items: items.slice(i, i + GRID_N) });
+      data.vodGrid = rows.length ? rows : [{ title: title, sub:'leeg', type:'vod', items:[{ t:'Leeg', s:'iptv', kind:'', img:'neon', loading:true, meta:[] }] }];
+      buildRows();
+    });
+  }
+
+  // ---------- zoeken ----------
+  var searchTimer = null, lastQuery = '';
+  function openSearch(){
+    if (state.view !== 'search') { pushNav(); state.view = 'search'; state.row = 0; state.col = []; }
+    state.nav = false;
+    if (!data.searchRows) data.searchRows = [];
+    showSearchBox(true); buildRows();
+    setTimeout(function(){ $('q').focus(); }, 50);
+  }
+  function runSearch(q){
+    q = (q || '').trim(); if (q.length < 2 || q === lastQuery) return; lastQuery = q;
+    data.searchRows = [{ title:'Zoeken naar "' + q + '"', sub:'even geduld…', type:'vod', items:[{ t:'Zoeken…', s:'iptv', kind:'', img:'neon', loading:true, meta:[] }] }];
+    buildRows();
+    if (!APP || !PL.searchAll) return;
+    PL.searchAll(q, function(ok, payload){
+      if (state.view !== 'search' || lastQuery !== q) return;
+      if (!ok) { data.searchRows[0].sub = 'mislukt: ' + payload; buildRows(); return; }
+      var r = JSON.parse(payload), rows = [];
+      if (r.plex && r.plex.length) rows.push({ title:'In je Plex', sub: r.plex.length + ' gevonden', type:'vod', items: r.plex.map(mapPlex) });
+      if (r.streaming && r.streaming.length) rows.push({ title:'Op je streamingdiensten', sub:'via TMDB', type:'pick', items: r.streaming.map(function(p){
+        return { t:p.title, s:'pick', service:p.service, kind:p.type, img:p.backdrop, thumb:p.thumb, meta:[p.year, p.rating ? '★ ' + p.rating.toFixed(1) : ''], d:p.overview }; }) });
+      if (r.movies && r.movies.length) rows.push({ title:'IPTV films', sub: r.movies.length + ' gevonden', type:'vod', items: r.movies.map(mapVod('movie', '')) });
+      if (r.series && r.series.length) rows.push({ title:'IPTV series', sub: r.series.length + ' gevonden', type:'vod', items: r.series.map(mapVod('series', '')) });
+      data.searchRows = rows.length ? rows : [{ title:'Niets gevonden voor "' + q + '"', sub:'', type:'vod', items:[{ t:'Niets gevonden', s:'iptv', kind:'', img:'neon', loading:true, meta:[] }] }];
+      state.row = 0; state.col = []; buildRows();
+    });
+  }
   var state = { row:0, col:[0,0,0,0], nav:false, navIdx:0, view:'home', cat:null, home:null };
   function catImg(name, i){
     var n = (name || '').toLowerCase();
@@ -393,6 +481,9 @@
   // ---------- rijen ----------
   var rowEls = [];
   function rowDefs(){
+    if (state.view === 'vodhome') return data.vodHome || [];
+    if (state.view === 'vodgrid') return data.vodGrid || [];
+    if (state.view === 'search') return (data.searchRows && data.searchRows.length) ? data.searchRows : [{ title:'Zoeken', sub:'typ hierboven en druk op OK', type:'vod', items:[{ t:'Typ wat je zoekt', s:'iptv', kind:'', img:'neon', loading:true, meta:[] }] }];
     if (state.view === 'vod') return (data.vodRows || []).map(function(r){ return { title:r.title, sub:r.sub, type:'vod', items:r.items }; });
     if (state.view === 'series') return (data.seasonRows || []).map(function(r){ return { title:r.title, sub:r.sub, type:'ep', items:r.items }; });
     if (state.view === 'cat' && data.catGroups) {
@@ -440,7 +531,7 @@
       r.items.forEach(function(it, ci){ tr.appendChild(card(r, it, ri, ci)); });
       vp.appendChild(tr); row.appendChild(h); row.appendChild(vp);
       host.appendChild(row);
-      rowEls.push({ row:row, track:tr, w: r.grid ? 0 : ((r.type==='app' || r.type==='svc') ? 288 : r.type==='vod' ? 178 : 428), grid: !!r.grid });
+      rowEls.push({ lazy: !!r.lazy, row:row, track:tr, w: r.grid ? 0 : ((r.type==='app' || r.type==='svc') ? 288 : r.type==='vod' ? 178 : 428), grid: !!r.grid });
       if (state.col[ri] === undefined) state.col[ri] = 0;
       if (state.col[ri] > r.items.length - 1) state.col[ri] = Math.max(0, r.items.length - 1);
     });
@@ -477,7 +568,7 @@
              thumb:o.thumb, icon:o.thumb, img:o.art || o.thumb || 'neon', backdrop:o.art, meta:meta, d:o.summary || '', p:o.progress || 0, vodItem:true };
   }
   function openPlexLib(it){
-    state.home = { row: state.row, col: state.col.slice() };
+    pushNav();
     state.view = 'vod'; state.vod = { source:'plex', title: it.t }; state.row = 0; state.col = []; state.nav = false;
     data.vodRows = [{ title: it.t, sub:'laden…', items:[{ t:'Laden…', s:'plex', kind:it.t, img:it.img, loading:true, meta:[] }] }];
     buildRows();
@@ -539,14 +630,15 @@
       if (it.logo) { var lgo = document.createElement('img'); lgo.src = it.logo; lgo.alt = ''; lgo.onerror = function(){ lgo.remove(); }; b.appendChild(lgo); }
       var nm = document.createElement('span'); nm.textContent = it.t; b.appendChild(nm);
       if (it.jbl) { var v = document.createElement('i'); v.className = 'via'; v.textContent = 'JBL'; b.appendChild(v); }
+      if (it.count && (it.vodCat || it.vodGenre)) { var cn = document.createElement('i'); cn.className = 'via'; cn.textContent = it.count; b.appendChild(cn); }
     } else if (r.type === 'vod' && it.upcoming) {
       b.className = 'card poster';
       if (it.thumb) b.style.backgroundImage = 'url(' + it.thumb + ')';
       var dt = document.createElement('span'); dt.className = 'ldot'; dt.style.cssText = 'background:rgba(0,0,0,.7);left:8px;right:auto;top:8px;font-size:13px'; dt.textContent = (it.meta[0] || '').split(' · ')[0]; b.appendChild(dt);
     } else if (r.type === 'vod' && !it.loading) {
       b.className = 'card poster';
-      if (it.thumb) b.style.backgroundImage = 'url(' + it.thumb + ')';
-      else { var pt = document.createElement('span'); pt.className = 'pt'; pt.textContent = it.t; b.appendChild(pt); }
+      if (it.thumb) { if (r.lazy) b.dataset.bg = it.thumb; else b.style.backgroundImage = 'url(' + it.thumb + ')'; }
+      var pt = document.createElement('span'); pt.className = 'pt'; pt.textContent = it.t; if (it.thumb) pt.style.opacity = '0'; b.appendChild(pt);
       if (it.p > 0.02) { b.insertAdjacentHTML('beforeend','<span class="prog" style="left:10px;right:10px"><span></span></span>'); b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%'; }
     } else if (r.type === 'app') {
       if (it.banner) {
@@ -621,6 +713,17 @@
       if (it.p > 0) { var bm = document.createElement('span'); bm.className = 'bar'; bm.innerHTML = '<span></span>'; bm.firstChild.style.width = Math.round(it.p * 100) + '%'; cm.appendChild(bm); }
       if (it.left > 0) { var tm = document.createElement('span'); tm.style.color = 'var(--ink-3)'; tm.textContent = 'nog ' + it.left + ' min'; cm.appendChild(tm); }
       setBackdrop(it.img);
+      return;
+    }
+    if (type === 'svc' && (it.vodCat || it.vodGenre)) {
+      var sc = $('hSrc'); sc.innerHTML = '';
+      var dc = document.createElement('i'); dc.style.background = it.color; sc.appendChild(dc);
+      sc.appendChild(document.createTextNode('IPTV · ' + (it.vodKind === 'series' ? 'Series' : 'Films') + ' · ' + it.kind));
+      $('hTitle').textContent = it.t;
+      var mc = $('hMeta'); mc.innerHTML = ''; var ec = document.createElement('span'); ec.textContent = it.meta[0]; mc.appendChild(ec);
+      $('hDesc').textContent = '';
+      var cc = $('hCta'); cc.innerHTML = ''; var kc = document.createElement('b'); kc.textContent = 'OK'; cc.appendChild(kc);
+      var lc = document.createElement('span'); lc.textContent = 'Alles bekijken'; cc.appendChild(lc);
       return;
     }
     if (type === 'svc' && it.lib) {
@@ -721,6 +824,10 @@
     for (var i = 0; i < pills.length; i++) pills[i].classList.toggle('focus', state.nav && i === state.navIdx);
     $('rows').style.transform = 'translateY(' + (-state.row * 340) + 'px)';
     rowEls.forEach(function(re, ri){
+      if (re.lazy && ri >= state.row - 1 && ri <= state.row + 3 && !re.loaded) {
+        re.loaded = true;
+        Array.prototype.forEach.call(re.track.children, function(c){ if (c.dataset.bg) c.style.backgroundImage = 'url(' + c.dataset.bg + ')'; });
+      }
       re.row.classList.toggle('above', ri < state.row);
       re.row.classList.toggle('dim', ri > state.row);
       var ci = state.col[ri];
@@ -746,6 +853,7 @@
       var n = NAV[state.navIdx];
       if (n === 'Thuis') { state.nav = false; if (state.view !== 'home') closeCategory(); else { state.row = 0; render(); } }
       else if (n === 'Live tv') { if (APP) PL.playLast(); else toast('Live tv opent in de app op de tv'); }
+      else if (n === 'Zoeken') { openSearch(); }
       else if (n === 'Apps') { state.nav = false; if (state.view !== 'home') closeCategory(); state.home = { row: state.row, col: state.col.slice() }; state.view = 'apps'; state.row = 0; state.col = []; buildRows(); }
       else if (n === 'Instellingen') openSettings();
       return;
@@ -755,7 +863,9 @@
     if (it.setup) { openSettings(); return; }
     if (it.loading) return;
     if (it.app && it.pkg) { if (APP) PL.launch(it.pkg); else toast('Ziggo GO wordt geopend'); return; }
-    if (it.vod) { if (APP) openVod(it); else toast('Films en series werken in de app op de tv'); return; }
+    if (it.vod) { if (APP) openVodHome(it); else toast('Films en series werken in de app op de tv'); return; }
+    if (it.vodCat) { openVodGrid(it.vodKind, 'cat', it.vodCat, it.t); return; }
+    if (it.vodGenre) { openVodGrid(it.vodKind, 'genre', it.vodGenre, it.t); return; }
     if (it.upcoming) { toast(it.t + ': ' + (it.meta[0] || 'binnenkort')); return; }
     if (it.vodItem) { if (it.vodKind === 'series') openSeries(it); else playVodItem(it); return; }
     if (it.ep) { playVodItem(it); return; }
@@ -835,6 +945,7 @@
   }
 
   function closeCategory(){
+    if (navStack.length) { var first = navStack[0]; navStack = []; showSearchBox(false); state.view = 'home'; state.cat = null; state.row = first.row; state.col = first.col; buildRows(); return; }
     state.view = 'home'; state.cat = null; data.catGroups = null;
     if (state.home) { state.row = state.home.row; state.col = state.home.col; }
     buildRows();
@@ -883,7 +994,8 @@
   window.__resume = function(){ loadPlexSections(); loadContinue(); loadLive(); loadApps(); data.recent = loadRecent(); };
   window.__back = function(){
     if (!$('settings').hidden) { settingsBack(); return; }
-    if (state.view === 'series') { state.view = 'vod'; state.series = null; if (state.vodPos) { state.row = state.vodPos.row; state.col = state.vodPos.col; } buildRows(); return; }
+    if (document.activeElement === $('q')) { $('q').blur(); if (data.searchRows && data.searchRows.length) { state.row = 0; render(); return; } }
+    if (navStack.length && state.view !== 'cat' && state.view !== 'apps') { popNav(); return; }
     if (state.view !== 'home') { closeCategory(); return; }
     state.nav = false; state.row = 0; state.col[0] = 0; render();
   };
@@ -963,8 +1075,16 @@
   });
 
   // ---------- toetsen ----------
+  $('q').addEventListener('input', function(){ clearTimeout(searchTimer); var v = $('q').value; searchTimer = setTimeout(function(){ runSearch(v); }, 900); });
   document.addEventListener('keydown', function(e){
     if (!$('settings').hidden) { settingsKey(e); return; }
+    if (e.target === $('q')) {
+      if (e.key === 'Enter' || e.keyCode === 66) { e.preventDefault(); clearTimeout(searchTimer); lastQuery = ''; runSearch($('q').value); $('q').blur(); state.row = 0; render(); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); $('q').blur(); state.nav = false; state.row = 0; render(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); $('q').blur(); state.nav = true; render(); }
+      return;
+    }
+    if (state.view === 'search' && !state.nav && state.row === 0 && e.key === 'ArrowUp') { e.preventDefault(); $('q').focus(); return; }
     var k = e.key, code = e.keyCode, handled = true;
     var rowLen = ROWS[state.row] ? ROWS[state.row].items.length : 0;
     if (k === 'ArrowUp') {

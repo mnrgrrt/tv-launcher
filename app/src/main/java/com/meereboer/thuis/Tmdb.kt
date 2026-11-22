@@ -55,6 +55,26 @@ object Tmdb {
             .put("service", service)
     }
 
+    /** Zoeken op TMDB en laten zien bij welke van jouw diensten het te zien is (NL, abonnement). */
+    fun searchStreaming(ctx: Context, p: Prefs, q: String): JSONArray {
+        val out = JSONArray()
+        if (p.tmdbToken.isEmpty()) return out
+        val services = JSONObject(ctx.assets.open("web/services.json").bufferedReader().readText()).getJSONArray("services")
+        val byProvider = HashMap<Int, String>()
+        for (i in 0 until services.length()) services.getJSONObject(i).let { s -> if (s.optInt("provider") > 0 && s.optString("key") != "plex") byProvider[s.getInt("provider")] = s.getString("key") }
+        val res = get(p.tmdbToken, "/search/multi?query=" + java.net.URLEncoder.encode(q, "UTF-8") + "&language=nl-NL&include_adult=false")
+            .optJSONArray("results") ?: return out
+        val hits = (0 until res.length()).map { res.getJSONObject(it) }.filter { it.optString("media_type") in setOf("tv", "movie") }.take(12)
+        val tasks = hits.map { h -> Callable {
+            val type = h.optString("media_type")
+            val prov = try { get(p.tmdbToken, "/$type/${h.optInt("id")}/watch/providers").optJSONObject("results")?.optJSONObject("NL")?.optJSONArray("flatrate") } catch (_: Exception) { null }
+            val key = prov?.let { a -> (0 until a.length()).map { a.getJSONObject(it).optInt("provider_id") }.firstNotNullOfOrNull { byProvider[it] } }
+            if (key == null) null else item(h.put("_type", type), key)
+        } }
+        pool.invokeAll(tasks).mapNotNull { it.get() }.forEach { out.put(it) }
+        return out
+    }
+
     /** TMDB-nummer op titel (voor ondertitels). */
     fun search(p: Prefs, type: String, title: String): Int {
         val r = get(p.tmdbToken, "/search/$type?query=" + java.net.URLEncoder.encode(title, "UTF-8") + "&language=nl-NL")

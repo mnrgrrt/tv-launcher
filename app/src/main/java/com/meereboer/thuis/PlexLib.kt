@@ -29,7 +29,7 @@ object PlexLib {
     }
 
     // Plex mengt Nederlandse en Engelse genres; hier één naam per genre.
-    private val genreMap = mapOf(
+    val genreMap = mapOf(
         "action" to "Actie", "actie" to "Actie", "adventure" to "Avontuur", "avontuur" to "Avontuur",
         "animation" to "Animatie", "animatie" to "Animatie", "biography" to "Biografie", "biografie" to "Biografie",
         "comedy" to "Komedie", "komedie" to "Komedie", "crime" to "Misdaad", "misdaad" to "Misdaad",
@@ -42,7 +42,7 @@ object PlexLib {
         "war" to "Oorlog", "oorlog" to "Oorlog", "war & politics" to "Oorlog", "western" to "Western", "sport" to "Sport",
         "reality" to "Reality", "martial arts" to "Actie", "tv film" to "", "tv movie" to ""
     )
-    private val kids = setOf("Animatie", "Familie")
+    val kids = setOf("Animatie", "Familie")
 
     private fun tmdbOf(m: JSONObject): Int {
         val g = m.optJSONArray("Guid") ?: return 0
@@ -50,7 +50,7 @@ object PlexLib {
         return 0
     }
 
-    private fun item(p: Prefs, m: JSONObject): JSONObject {
+    fun item(p: Prefs, m: JSONObject): JSONObject {
         val ep = m.optString("type") == "episode"
         val dur = m.optLong("duration"); val off = m.optLong("viewOffset")
         return JSONObject()
@@ -161,6 +161,18 @@ object PlexLib {
             .put("season", if (ep) m.optInt("parentIndex") else 0).put("episode", if (ep) m.optInt("index") else 0)
             .put("tmdb", tmdb).put("offsetMs", m.optLong("viewOffset"))
             .put("subs", subs)
+    }
+
+    /** Zoeken in je Plex-bibliotheek (films, series, afleveringen). */
+    fun search(p: Prefs, q: String): JSONArray {
+        val out = JSONArray()
+        if (p.plexUrl.isEmpty() || p.plexToken.isEmpty()) return out
+        val hubs = get(p, "/hubs/search?query=${enc(q)}&limit=20").optJSONArray("Hub") ?: return out
+        for (i in 0 until hubs.length()) {
+            val m = hubs.getJSONObject(i).optJSONArray("Metadata") ?: continue
+            for (j in 0 until m.length()) m.getJSONObject(j).let { if (it.optString("type") in setOf("movie", "show", "episode") && out.length() < 30) out.put(item(p, it)) }
+        }
+        return out
     }
 
     /** Kijkstand naar Plex, zodat de Plex-app ook weet waar je was. */
