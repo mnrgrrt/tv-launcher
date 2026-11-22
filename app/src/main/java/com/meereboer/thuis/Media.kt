@@ -42,6 +42,8 @@ object Media {
         val out = ArrayList<JSONObject>()
         for (i in 0 until items.length()) {
             val m = items.getJSONObject(i)
+            if (m.optString("type") !in setOf("movie", "episode")) continue   // geen live tv
+            if (out.isNotEmpty()) break                                         // één tegel voor Plex
             val ep = m.optString("type") == "episode"
             val art = m.optString("grandparentArt").ifEmpty { m.optString("art") }
             val dur = m.optLong("duration", 0)
@@ -89,8 +91,20 @@ object Media {
             jfUser = admin?.optString("Id").orEmpty()
             if (jfUser.isEmpty()) return emptyList()
         }
-        val res = getJson("${p.jellyfinUrl}/Users/$jfUser/Items/Resume?Limit=15&Fields=Overview&MediaTypes=Video", h)
-        val items = res.optJSONArray("Items") ?: return emptyList()
+        // Eén tegel: half gekeken, anders volgende aflevering, anders laatst gekeken, anders nieuw toegevoegd. Nooit live tv.
+        val base = "${p.jellyfinUrl}"
+        val types = "IncludeItemTypes=Movie,Episode&Fields=Overview"
+        var label = ""
+        var items = getJson("$base/Users/$jfUser/Items/Resume?Limit=1&$types&MediaTypes=Video", h).optJSONArray("Items")
+        if (items == null || items.length() == 0) items = getJson("$base/Shows/NextUp?UserId=$jfUser&Limit=1&Fields=Overview", h).optJSONArray("Items")
+        if (items == null || items.length() == 0) items = getJson("$base/Users/$jfUser/Items?Recursive=true&SortBy=DatePlayed&SortOrder=Descending&Filters=IsPlayed&Limit=1&$types", h).optJSONArray("Items")
+        if (items == null || items.length() == 0) {
+            label = "Nieuw in Jellyfin"
+            val latest = Xtream.http.newCall(Request.Builder().url("$base/Users/$jfUser/Items/Latest?Limit=1&$types").header("Authorization", auth).build())
+                .execute().use { JSONArray(it.body?.string() ?: "[]") }
+            items = latest
+        }
+        if (items == null) return emptyList()
         val out = ArrayList<JSONObject>()
         for (i in 0 until items.length()) {
             val m = items.getJSONObject(i)
@@ -104,7 +118,7 @@ object Media {
                 .put("source", "jellyfin")
                 .put("key", m.optString("Id"))
                 .put("title", if (ep) m.optString("SeriesName") else m.optString("Name"))
-                .put("sub", if (ep) "S${m.optInt("ParentIndexNumber")} · afl. ${m.optInt("IndexNumber")} · ${m.optString("Name")}" else m.optString("ProductionYear"))
+                .put("sub", listOf(label, if (ep) "S${m.optInt("ParentIndexNumber")} · afl. ${m.optInt("IndexNumber")} · ${m.optString("Name")}" else m.optString("ProductionYear")).filter { it.isNotEmpty() }.joinToString(" · "))
                 .put("overview", m.optString("Overview"))
                 .put("progress", if (ticks > 0) pos.toDouble() / ticks else 0.0)
                 .put("left", if (ticks > 0 && pos > 0) ((ticks - pos) / 600_000_000L).toInt() else -1)
@@ -181,7 +195,6 @@ object Media {
         val errors = JSONArray()
         try { all.addAll(plex(p)) } catch (e: Exception) { errors.put("Plex: ${e.message}") }
         try { all.addAll(jellyfin(p)) } catch (e: Exception) { errors.put("Jellyfin: ${e.message}") }
-        try { all.addAll(jbl(p)) } catch (e: Exception) { errors.put("JBL: ${e.message}") }
         all.sortByDescending { it.optLong("when") }
         return JSONObject().put("items", JSONArray(all.take(20))).put("errors", errors).toString()
     }

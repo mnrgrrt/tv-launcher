@@ -302,10 +302,11 @@
       return arows;
     }
     var home = [];
-    var cont = (data.media || []).concat(data.recent);
+    // Plex en Jellyfin elk één tegel, daarna één per streamingdienst. Nooit live tv of IPTV.
+    var cont = (data.media || []).concat((data.recent || []).filter(function(x){ return x.service && SVC[x.service] && x.service !== 'plex'; }));
     home.push({ title:'Live tv', sub:data.liveSub, type:'live', items:data.live });
     home.push({ title:'Streamingdiensten', sub:'', type:'svc', items:svcItems() });
-    if (cont.length) home.push({ title:'Verder kijken', sub: (data.media && data.media.length) ? 'Plex · Jellyfin · laatst geopend' : 'laatst geopend', type:'cont', items:cont });
+    if (cont.length) home.push({ title:'Verder kijken', sub: (data.media && data.media.length) ? 'Plex · Jellyfin · je diensten' : 'je diensten', type:'cont', items:cont });
     if (data.picks.length) home.push({ title:'Voor jou', sub:'populair op jouw diensten', type:'pick', items:data.picks });
     return home;
     return [
@@ -351,9 +352,15 @@
   }
   function openService(key, recentItem){
     var sv = SVC[key]; if (!sv) return;
-    if (recentItem) {
-      var list = loadRecent().filter(function(x){ return x.t !== recentItem.t; });
-      list.unshift({ t:recentItem.t, s:'cont', service:key, img:recentItem.img, thumb:recentItem.thumb, kind:recentItem.kind, meta:recentItem.meta, d:recentItem.d });
+    // Eén tegel per dienst in Verder kijken: de titel die je via Voor jou koos, of anders de dienst zelf.
+    if (key !== 'plex') {
+      var top = data.svcBd[key];
+      var entry = recentItem && !recentItem.generic
+        ? { t:recentItem.t, s:'cont', service:key, img:recentItem.img, thumb:recentItem.thumb, kind:recentItem.kind, meta:recentItem.meta, d:recentItem.d }
+        : { t:sv.name, s:'cont', service:key, generic:true, img: top ? top.backdrop : 'city', thumb: top ? top.backdrop : '',
+            kind:'Verder kijken', meta:['Ga verder waar je was'], d:'Opent ' + sv.name + (viaJbl(sv) ? ' op de JBL.' : '.') };
+      var list = loadRecent().filter(function(x){ return x.service && x.service !== key; });
+      list.unshift(entry);
       saveRecent(list); data.recent = list.slice(0, 10);
     }
     if (!APP) { toast(sv.name + ' wordt geopend'); return; }
