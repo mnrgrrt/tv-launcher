@@ -1,0 +1,60 @@
+name: APK bouwen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Signeersleutel klaarzetten
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/thuis.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/thuis.jks" >> "$GITHUB_ENV"
+          else
+            echo "Geen signeersleutel ingesteld, debug-sleutel wordt gebruikt."
+          fi
+
+      - name: Bouwen
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: thuis
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+
+      - name: APK hernoemen
+        run: cp app/build/outputs/apk/release/app-release.apk "thuis-${GITHUB_RUN_NUMBER}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thuis-apk
+          path: thuis-*.apk
+
+      - name: Release "laatste" bijwerken
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete laatste --yes --cleanup-tag || true
+          gh release create laatste "thuis-${GITHUB_RUN_NUMBER}.apk" \
+            --title "Thuis ${GITHUB_RUN_NUMBER}" \
+            --notes "Automatisch gebouwd uit ${GITHUB_SHA::7}." \
+            --latest
