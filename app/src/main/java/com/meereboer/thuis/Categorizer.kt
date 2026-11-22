@@ -106,19 +106,38 @@ object Categorizer {
                     .append(Xtream.categories[ch.categoryId] ?: "").append('\t')
                     .append(where[ch.id]?.joinToString(",") ?: "-").append('\n')
             }
-            val bytes = sb.toString().toByteArray()
+            writeDownload(ctx, "thuis-zenders.tsv", sb.toString().toByteArray())
+        } catch (_: Exception) { }
+    }
+
+    /** Lijst met film- en seriecategorieën van de IPTV-server naar Downloads/thuis-vod.tsv. */
+    fun exportVod(ctx: Context, p: Prefs) {
+        try {
+            val sb = StringBuilder("soort\tid\tnaam\n")
+            for ((soort, action) in listOf("film" to "get_vod_categories", "serie" to "get_series_categories")) {
+                val a = try { org.json.JSONArray(Xtream.api(p, action)) } catch (e: Exception) { sb.append("$soort\t-\tFOUT: ${e.message}\n"); continue }
+                for (i in 0 until a.length()) a.getJSONObject(i).let {
+                    sb.append(soort).append('\t').append(it.optString("category_id")).append('\t').append(it.optString("category_name")).append('\n')
+                }
+            }
+            writeDownload(ctx, "thuis-vod.tsv", sb.toString().toByteArray())
+        } catch (_: Exception) { }
+    }
+
+    private fun writeDownload(ctx: Context, name: String, bytes: ByteArray) {
+        try {
             if (android.os.Build.VERSION.SDK_INT >= 29) {
                 val res = ctx.contentResolver
                 val col = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-                res.delete(col, "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME}=?", arrayOf("thuis-zenders.tsv"))
+                res.delete(col, "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME}=?", arrayOf(name))
                 val values = android.content.ContentValues().apply {
-                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "thuis-zenders.tsv")
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
                     put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
                     put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Download/")
                 }
                 res.insert(col, values)?.let { uri -> res.openOutputStream(uri)?.use { it.write(bytes) } }
             } else {
-                ctx.getExternalFilesDir(null)?.let { File(it, "zenders.tsv").writeBytes(bytes) }
+                ctx.getExternalFilesDir(null)?.let { File(it, name).writeBytes(bytes) }
             }
         } catch (_: Exception) { }
     }

@@ -71,6 +71,7 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         val all = Xtream.load(prefs)
         val cats = Categorizer.build(act, all)
         Categorizer.export(act, all, cats)
+        Categorizer.exportVod(act, prefs)
         val show = prefs.categories.lowercase().split(',').map { it.trim() }.filter { it.isNotEmpty() }
         val visible = cats.filter { c ->
             c.parent == null && c.channels.isNotEmpty() && (show.isEmpty() || c.id == "alle" || show.any { c.name.lowercase().contains(it) || c.id == it })
