@@ -90,6 +90,10 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         act.runOnUiThread { act.startActivity(Intent(act, PlayerActivity::class.java)) }
     }
 
+    @JavascriptInterface fun checkUpdate(id: Int) = async(id) { Updater.check(act).toString() }
+
+    @JavascriptInterface fun installUpdate(id: Int) = async(id) { Updater.downloadAndInstall(act) }
+
     @JavascriptInterface fun openAndroidSettings() {
         act.runOnUiThread {
             try {

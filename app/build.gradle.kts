@@ -55,6 +55,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-ui:$media3")
     implementation("androidx.webkit:webkit:1.11.0")
+    implementation("androidx.core:core:1.13.1")
     implementation("androidx.annotation:annotation:1.8.2")
     implementation("androidx.annotation:annotation-experimental:1.4.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
