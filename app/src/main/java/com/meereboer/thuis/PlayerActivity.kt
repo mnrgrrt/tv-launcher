@@ -65,6 +65,15 @@ class PlayerActivity : Activity() {
     private val epgPool = Executors.newFixedThreadPool(6)
     /** Programma dat we nu terugkijken (null = live). */
     private var replay: Programme? = null
+    /** Programma dat nu op de huidige zender loopt (uit de korte gids). */
+    private var nowProg: Programme? = null
+    /** Keuze "Live / Vanaf begin" uit de gids. */
+    private lateinit var choice: LinearLayout
+    private lateinit var choiceLive: TextView
+    private lateinit var choiceStart: TextView
+    private var choiceSel = 0
+    private var choiceRow = -1
+    private var choiceProg: Programme? = null
 
     private var channels: List<Channel> = emptyList()
     private var index = -1
@@ -161,6 +170,20 @@ class PlayerActivity : Activity() {
             visibility = View.GONE
         }
         root.addView(center, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+
+        choice = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(20), dp(24), dp(20))
+            background = GradientDrawable().apply { setColor(0xF20A0D12.toInt()); cornerRadius = dp(18).toFloat() }
+            visibility = View.GONE
+        }
+        fun pill() = text(22f, true).apply { setPadding(dp(26), dp(14), dp(26), dp(14)) }
+        choiceLive = pill().apply { setText("● Live") }
+        choiceStart = pill().apply { setText("↺ Vanaf begin") }
+        choice.addView(choiceLive, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(16) })
+        choice.addView(choiceStart)
+        root.addView(choice, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
 
         guide = GuideView(this).apply { visibility = View.GONE }
         root.addView(guide, 1, FrameLayout.LayoutParams(-1, -1))
@@ -307,11 +330,33 @@ class PlayerActivity : Activity() {
         val now = System.currentTimeMillis()
         closeGuide()
         when {
+            p != null && now in p.start until p.end && p.archive && (channels.getOrNull(row)?.archiveDays ?: 0) > 0 -> showChoice(row, p)
             p == null || now in p.start until p.end -> play(row)
             p.start < now && p.archive -> playReplay(row, p)
             p.start < now -> { play(row); showCenter("Dit programma is niet terug te kijken"); ui.postDelayed({ hideCenter() }, 2500) }
             else -> { play(row); showCenter("Begint om ${clock.format(Date(p.start))}"); ui.postDelayed({ hideCenter() }, 2500) }
         }
+    }
+
+    private fun canRestart(ch: Channel): Boolean {
+        val n = nowProg ?: return false
+        return ch.archiveDays > 0 && n.start > 0 && n.start < System.currentTimeMillis()
+    }
+
+    private fun showChoice(row: Int, prog: Programme) {
+        choiceRow = row; choiceProg = prog; choiceSel = 0
+        renderChoice()
+        choice.visibility = View.VISIBLE
+        choice.bringToFront()
+    }
+
+    private fun renderChoice() {
+        val on = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(999).toFloat() }
+        val off = GradientDrawable().apply { setColor(0x33FFFFFF); cornerRadius = dp(999).toFloat() }
+        choiceLive.background = if (choiceSel == 0) on else off
+        choiceLive.setTextColor(if (choiceSel == 0) 0xFF05070A.toInt() else Color.WHITE)
+        choiceStart.background = if (choiceSel == 1) on else off
+        choiceStart.setTextColor(if (choiceSel == 1) 0xFF05070A.toInt() else Color.WHITE)
     }
 
     private fun playReplay(i: Int, prog: Programme) {
@@ -349,12 +394,14 @@ class PlayerActivity : Activity() {
         tvNow.text = ch.name
         tvTime.text = ""
         tvNext.text = ""
+        nowProg = null
         progress.visibility = View.INVISIBLE
         bg.execute {
             val epg = try { Xtream.shortEpg(prefs, ch.id, 2) } catch (_: Exception) { emptyList() }
             ui.post {
                 if (index < 0 || channels[index].id != ch.id) return@post
                 val now = epg.getOrNull(0)
+                nowProg = now
                 if (now != null) {
                     tvNow.text = now.title
                     if (now.start > 0 && now.end > now.start) {
@@ -369,6 +416,7 @@ class PlayerActivity : Activity() {
                 epg.getOrNull(1)?.let {
                     tvNext.text = if (it.start > 0) "Daarna ${clock.format(Date(it.start))}  ${it.title}" else "Daarna: ${it.title}"
                 }
+                if (canRestart(ch)) tvNext.text = "◄ vanaf begin" + (if (tvNext.text.isNotEmpty()) "     " + tvNext.text else "")
             }
         }
     }
@@ -403,6 +451,19 @@ class PlayerActivity : Activity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (choice.visibility == View.VISIBLE) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> { choiceSel = 1 - choiceSel; renderChoice() }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    choice.visibility = View.GONE
+                    val prog = choiceProg
+                    if (choiceSel == 1 && prog != null) playReplay(choiceRow, prog) else play(choiceRow)
+                }
+                KeyEvent.KEYCODE_BACK -> choice.visibility = View.GONE
+                else -> return super.onKeyDown(keyCode, event)
+            }
+            return true
+        }
         if (guide.visibility == View.VISIBLE) {
             when (keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> guide.move(-1, 0)
@@ -446,7 +507,14 @@ class PlayerActivity : Activity() {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> { play(index + 1); return true }
             KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> { play(index - 1); return true }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> { showList(); return true }
-            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_INFO -> {
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                val ch = channels.getOrNull(index)
+                val n = nowProg
+                if (ch != null && n != null && canRestart(ch)) playReplay(index, n)
+                else if (ch != null) { showInfo(ch); loadEpg(ch) }
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_INFO -> {
                 if (index >= 0) { showInfo(channels[index]); loadEpg(channels[index]) }
                 return true
             }
