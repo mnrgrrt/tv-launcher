@@ -149,6 +149,7 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
     // ---------- eigen Plex-bibliotheek ----------
     @JavascriptInterface fun plexSections(id: Int) = async(id) { PlexLib.sections(prefs) }
     @JavascriptInterface fun plexLibrary(id: Int, section: String) = async(id) { PlexLib.library(prefs, section) }
+    @JavascriptInterface fun arrUpcoming(id: Int, kind: String) = async(id) { Arr.upcoming(prefs, kind) }
     @JavascriptInterface fun plexShow(id: Int, key: String) = async(id) { PlexLib.show(prefs, key) }
     @JavascriptInterface fun plexPlay(key: String) {
         pool.execute {

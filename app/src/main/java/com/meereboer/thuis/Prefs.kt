@@ -40,6 +40,18 @@ class Prefs(ctx: Context) {
     var jellyfinUrl: String
         get() = sp.getString("jellyfinUrl", "") ?: ""
         set(v) = sp.edit().putString("jellyfinUrl", v.trim().trimEnd('/')).apply()
+    var radarrUrl: String
+        get() = sp.getString("radarrUrl", "") ?: ""
+        set(v) = sp.edit().putString("radarrUrl", v.trim().trimEnd('/')).apply()
+    var radarrKey: String
+        get() = sp.getString("radarrKey", "") ?: ""
+        set(v) = sp.edit().putString("radarrKey", v.trim()).apply()
+    var sonarrUrl: String
+        get() = sp.getString("sonarrUrl", "") ?: ""
+        set(v) = sp.edit().putString("sonarrUrl", v.trim().trimEnd('/')).apply()
+    var sonarrKey: String
+        get() = sp.getString("sonarrKey", "") ?: ""
+        set(v) = sp.edit().putString("sonarrKey", v.trim()).apply()
     var osKey: String
         get() = sp.getString("osKey", "") ?: ""
         set(v) = sp.edit().putString("osKey", v.trim()).apply()

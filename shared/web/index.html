@@ -193,7 +193,8 @@
       plexSections: function(cb){ call('plexSections', cb); },
       plexLibrary: function(sec, cb){ call('plexLibrary', cb, String(sec)); },
       plexShow: function(key, cb){ call('plexShow', cb, String(key)); },
-      plexPlay: function(key){ Native.plexPlay(String(key)); }
+      plexPlay: function(key){ Native.plexPlay(String(key)); },
+      arrUpcoming: function(kind, cb){ call('arrUpcoming', cb, kind); }
     };
   } catch (e) {}
   if (!PL && window.ThuisPlatform) PL = window.ThuisPlatform;
@@ -485,6 +486,22 @@
       data.vodRows = res.rows.map(function(r){ return { title:r.title, sub: r.total ? (r.total > r.items.length ? r.total + ' titels · nieuwste ' + r.items.length : r.total + ' titels') : '', items:r.items.map(mapPlex) }; });
       if (!data.vodRows.length) data.vodRows = [{ title: it.t, sub:'leeg', items:[{ t:'Leeg', s:'plex', kind:'', img:'neon', loading:true, meta:[] }] }];
       buildRows();
+      // Binnenkort uit Radarr (films) of Sonarr (series), na Nieuw toegevoegd.
+      if (!PL.arrUpcoming || !/^(Mijn films|Mijn series)$/.test(it.t)) return;
+      var rows = data.vodRows;
+      PL.arrUpcoming(it.libType === 'show' ? 'series' : 'movie', function(ok2, pl){
+        if (!ok2 || state.view !== 'vod' || data.vodRows !== rows) return;
+        var list = JSON.parse(pl); if (!list.length) return;
+        var at = 0; rows.forEach(function(r, i){ if (r.title === 'Nieuw toegevoegd') at = i + 1; });
+        rows.splice(at, 0, { title:'Binnenkort', sub: it.libType === 'show' ? 'uit Sonarr · komende 3 weken' : 'uit Radarr · komende 2 maanden',
+          items: list.map(function(o){
+            return { t:o.title, sub:o.sub, s:'plex', kind: it.libType === 'show' ? 'Aflevering' : 'Film', upcoming:true, thumb:o.thumb, icon:o.thumb,
+                     img:o.art || o.thumb || 'neon', meta:[o.date + (o.hasFile ? ' · al binnen' : '')].concat(o.year ? [o.year] : []), d:o.summary || '', vodItem:false };
+          }) });
+        var keepRow = state.row >= at ? state.row + 1 : state.row;
+        if (state.row >= at) state.col.splice(at, 0, 0);
+        state.row = keepRow; buildRows();
+      });
     });
   }
   function openService(key, recentItem){
@@ -520,6 +537,10 @@
       if (it.logo) { var lgo = document.createElement('img'); lgo.src = it.logo; lgo.alt = ''; lgo.onerror = function(){ lgo.remove(); }; b.appendChild(lgo); }
       var nm = document.createElement('span'); nm.textContent = it.t; b.appendChild(nm);
       if (it.jbl) { var v = document.createElement('i'); v.className = 'via'; v.textContent = 'JBL'; b.appendChild(v); }
+    } else if (r.type === 'vod' && it.upcoming) {
+      b.className = 'card poster';
+      if (it.thumb) b.style.backgroundImage = 'url(' + it.thumb + ')';
+      var dt = document.createElement('span'); dt.className = 'ldot'; dt.style.cssText = 'background:rgba(0,0,0,.7);left:8px;right:auto;top:8px;font-size:13px'; dt.textContent = (it.meta[0] || '').split(' · ')[0]; b.appendChild(dt);
     } else if (r.type === 'vod' && !it.loading) {
       b.className = 'card poster';
       if (it.thumb) b.style.backgroundImage = 'url(' + it.thumb + ')';
@@ -628,6 +649,17 @@
       setBackdrop(it.img);
       return;
     }
+    if (type === 'vod' && it.upcoming) {
+      var su = $('hSrc'); su.innerHTML = '';
+      var du = document.createElement('i'); du.style.background = '#E5A00D'; su.appendChild(du);
+      su.appendChild(document.createTextNode('Binnenkort · ' + (it.sub || '')));
+      $('hTitle').textContent = it.t;
+      var mu = $('hMeta'); mu.innerHTML = ''; (it.meta || []).forEach(function(x){ if (mu.children.length) { var sp = document.createElement('span'); sp.className = 'sep'; mu.appendChild(sp); } var e = document.createElement('span'); e.textContent = x; mu.appendChild(e); });
+      $('hDesc').textContent = it.d || '';
+      $('hCta').innerHTML = '';
+      setBackdrop(it.img);
+      return;
+    }
     if ((type === 'vod' || type === 'ep') && !it.loading) {
       var sv2 = $('hSrc'); sv2.innerHTML = '';
       var dv = document.createElement('i'); dv.style.background = it.plex ? '#E5A00D' : SRC.iptv.c; sv2.appendChild(dv);
@@ -722,6 +754,7 @@
     if (it.loading) return;
     if (it.app && it.pkg) { if (APP) PL.launch(it.pkg); else toast('Ziggo GO wordt geopend'); return; }
     if (it.vod) { if (APP) openVod(it); else toast('Films en series werken in de app op de tv'); return; }
+    if (it.upcoming) { toast(it.t + ': ' + (it.meta[0] || 'binnenkort')); return; }
     if (it.vodItem) { if (it.vodKind === 'series') openSeries(it); else playVodItem(it); return; }
     if (it.ep) { playVodItem(it); return; }
     if (it.cat) { openCategory(it); return; }
