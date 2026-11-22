@@ -61,11 +61,46 @@ class VodActivity : Activity() {
     private var menuActions: List<() -> Unit> = emptyList()
     private val extraSubs = ArrayList<MediaItem.SubtitleConfiguration>()
     private var pendingLabel: String? = null
+    // Losse ondertitelbestanden (label -> origineel) en de timing per film
+    private val subFiles = HashMap<String, java.io.File>()
+    private fun offsetKey() = "subofs:" + item.optString("key")
+    private fun subOffset() = getSharedPreferences("vod", MODE_PRIVATE).getLong(offsetKey(), 0L)
+
+    /** Kopie van het .srt-bestand met alle tijden verschoven. */
+    private fun shifted(f: java.io.File, ms: Long): java.io.File {
+        if (ms == 0L) return f
+        val re = Regex("(\\d{2}):(\\d{2}):(\\d{2})[,.](\\d{3})")
+        val txt = re.replace(f.readText()) { m ->
+            val (h, mi, s, x) = m.destructured
+            val t = ((((h.toLong() * 60) + mi.toLong()) * 60 + s.toLong()) * 1000 + x.toLong() + ms).coerceAtLeast(0)
+            "%02d:%02d:%02d,%03d".format(t / 3600000, t / 60000 % 60, t / 1000 % 60, t % 1000)
+        }
+        return java.io.File(cacheDir, "shift-" + f.name).apply { writeText(txt) }
+    }
+
+    /** Eerder of later zetten: herlaadt het bestand op dezelfde plek. */
+    private fun nudge(label: String, delta: Long) {
+        val orig = subFiles[label] ?: return
+        val p = player ?: return
+        val ofs = subOffset() + delta
+        getSharedPreferences("vod", MODE_PRIVATE).edit().putLong(offsetKey(), ofs).apply()
+        val f = shifted(orig, ofs)
+        val i = extraSubs.indexOfFirst { it.label == label }
+        if (i < 0) return
+        extraSubs[i] = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(f))
+            .setMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage(extraSubs[i].language).setLabel(label).build()
+        pendingLabel = label
+        val pos = p.currentPosition
+        p.setMediaItem(mediaItem(extraSubs), pos)
+        p.prepare()
+        flash("Ondertitels " + (if (ofs == 0L) "op de oorspronkelijke tijd" else (if (ofs < 0) "%.1f s eerder" else "%.1f s later").format(Math.abs(ofs) / 1000.0)))
+    }
 
     /** Losse ondertitel toevoegen (OpenSubtitles) en meteen kiezen. */
     private fun addExternal(f: java.io.File, lang: String, label: String) {
         val p = player ?: return
-        if (extraSubs.none { it.label == label }) extraSubs.add(MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(f))
+        subFiles[label] = f
+        if (extraSubs.none { it.label == label }) extraSubs.add(MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(shifted(f, subOffset())))
             .setMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage(lang).setLabel(label).build())
         pendingLabel = label
         val pos = p.currentPosition
@@ -108,6 +143,14 @@ class VodActivity : Activity() {
                     .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0)).build()
                 flash("Ondertitels: " + trackName(g, i))
             }
+        }
+        // Timing alleen voor losse bestanden (OpenSubtitles)
+        val cur = groups.firstOrNull { it.isSelected }?.getTrackFormat(0)?.label
+        if (!off && cur != null && subFiles.containsKey(cur)) {
+            val o = subOffset()
+            val now = if (o == 0L) "nu op tijd" else (if (o < 0) "nu %.1f s eerder" else "nu %.1f s later").format(Math.abs(o) / 1000.0)
+            labels.add("    ⏪ Ondertitels 0,5 s eerder ($now)"); acts.add { nudge(cur, -500) }
+            labels.add("    ⏩ Ondertitels 0,5 s later"); acts.add { nudge(cur, 500) }
         }
         val prefs = Prefs(this)
         val sel = if (off) 0 else groups.indexOfFirst { it.isSelected } + 1
