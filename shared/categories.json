@@ -1,5 +1,5 @@
 {
-  "_uitleg": "Slimme categorieën voor Thuis. Namen worden vergeleken zonder hoofdletters, spaties, landcodes (NL, BE) en kwaliteit (HD, FHD, 4K). Een * aan het eind betekent 'begint met'. Volgorde in 'include' = volgorde in de app. 'groups' voegt zenders toe uit Dispatcharr-groepen waarvan de naam dit woord bevat. 'exclude' haalt zenders er weer uit. Een categorie met 'parent' wordt een eigen rij binnen die hoofdcategorie; zenders die in geen enkele subrij vallen komen in 'Overige'.",
+  "_uitleg": "Slimme categorieën voor Thuis. Namen worden vergeleken zonder hoofdletters, spaties, landcodes (NL, BE) en kwaliteit (HD, FHD, 4K). Een * aan het eind betekent 'begint met'. Volgorde in 'include' = volgorde in de app. 'groups' voegt zenders toe uit Dispatcharr-groepen waarvan de naam dit woord bevat. 'exclude' haalt zenders er weer uit. Een categorie met 'parent' wordt een eigen rij binnen die hoofdcategorie; zenders die in geen enkele subrij vallen komen in 'Overige'. Met \"last\": true komt een subrij helemaal onderaan, onder 'Overige'.",
   "categories": [
     {
       "id": "standaard",
@@ -106,7 +106,8 @@
         "formula 1"
       ],
       "exclude": [],
-      "parent": "sport"
+      "parent": "sport",
+      "last": true
     },
     {
       "id": "docu",

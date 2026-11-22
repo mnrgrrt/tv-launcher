@@ -96,7 +96,7 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         val all = Xtream.load(prefs)
         val cats = Categorizer.build(act, all)
         val cat = cats.firstOrNull { it.id == catId }
-        val kids = cats.filter { it.parent == catId && it.channels.isNotEmpty() }
+        val kids = cats.filter { it.parent == catId && it.channels.isNotEmpty() }.sortedBy { it.last }
         val out = JSONObject().put("name", cat?.name ?: "")
         if (kids.isNotEmpty()) {
             val epg = withEpg(kids.flatMap { it.channels.take(60) })

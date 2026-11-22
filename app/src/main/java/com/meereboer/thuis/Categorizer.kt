@@ -8,7 +8,7 @@ import java.io.File
 import java.text.Normalizer
 import java.util.concurrent.TimeUnit
 
-data class SmartCategory(val id: String, val name: String, val img: String, val channels: List<Channel>, val parent: String? = null)
+data class SmartCategory(val id: String, val name: String, val img: String, val channels: List<Channel>, val parent: String? = null, val last: Boolean = false)
 
 /**
  * Slimme categorieën op basis van zendernamen. De regels staan in shared/categories.json.
@@ -79,7 +79,7 @@ object Categorizer {
                 for ((ch, n) in normed) if (ch.categoryId in ids && ok(n)) picked.add(ch)
             }
             val parent = c.optString("parent").ifEmpty { null }
-            out.add(SmartCategory(c.optString("id"), c.optString("name"), c.optString("img"), picked.toList(), parent))
+            out.add(SmartCategory(c.optString("id"), c.optString("name"), c.optString("img"), picked.toList(), parent, c.optBoolean("last")))
         }
         // Hoofdcategorie met subrijen: ook alles uit de subrijen hoort erbij, plus een rij "Overige".
         for (parent in out.filter { it.parent == null }) {
