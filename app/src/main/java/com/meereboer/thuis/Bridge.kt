@@ -143,7 +143,7 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         else JSONObject(Tmdb.home(act, prefs.tmdbToken)).put("configured", true).toString()
     }
 
-    @JavascriptInterface fun continueWatching(id: Int) = async(id) { Media.continueWatching(prefs) }
+    @JavascriptInterface fun continueWatching(id: Int) = async(id) { Media.continueWatching(act, prefs) }
 
     @JavascriptInterface fun openMedia(source: String, key: String) {
         when (source) {

@@ -303,7 +303,8 @@
     }
     var home = [];
     // Plex en Jellyfin elk één tegel, daarna één per streamingdienst. Nooit live tv of IPTV.
-    var cont = (data.media || []).concat((data.recent || []).filter(function(x){ return x.service && SVC[x.service] && x.service !== 'plex'; }));
+    var fromJbl = {}; (data.media || []).forEach(function(x){ if (x.service) fromJbl[x.service] = 1; });
+    var cont = (data.media || []).concat((data.recent || []).filter(function(x){ return x.service && SVC[x.service] && x.service !== 'plex' && !fromJbl[x.service]; }));
     home.push({ title:'Live tv', sub:data.liveSub, type:'live', items:data.live });
     home.push({ title:'Streamingdiensten', sub:'', type:'svc', items:svcItems() });
     if (cont.length) home.push({ title:'Verder kijken', sub: (data.media && data.media.length) ? 'Plex · Jellyfin · je diensten' : 'je diensten', type:'cont', items:cont });
@@ -661,7 +662,7 @@
       if (!ok) return;
       var res = JSON.parse(payload);
       data.media = (res.items || []).map(function(m){
-        return { t:m.title, s:'cont', media:m.source, service:m.service || '', key:m.key, sub:m.sub, d:m.overview, img:m.backdrop, thumb:m.thumb,
+        return { t:m.title, s:'cont', media: m.source === 'svc' ? '' : m.source, service:m.service || '', key:m.key, sub:m.sub, d:m.overview, img:m.backdrop, thumb:m.thumb,
                  p:m.progress || 0, left:m.left, kind:'Verder kijken' };
       });
       if (state.view === 'home') buildRows();

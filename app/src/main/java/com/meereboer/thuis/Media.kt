@@ -190,11 +190,12 @@ object Media {
     }
 
     /** Plex en Jellyfin samen, meest recent bovenaan. Een bron die faalt slaat hij over. */
-    fun continueWatching(p: Prefs): String {
+    fun continueWatching(ctx: Context, p: Prefs): String {
         val all = ArrayList<JSONObject>()
         val errors = JSONArray()
         try { all.addAll(plex(p)) } catch (e: Exception) { errors.put("Plex: ${e.message}") }
         try { all.addAll(jellyfin(p)) } catch (e: Exception) { errors.put("Jellyfin: ${e.message}") }
+        try { all.addAll(Tmdb.playNext(ctx, p)) } catch (e: Exception) { errors.put("JBL: ${e.message}") }
         all.sortByDescending { it.optLong("when") }
         return JSONObject().put("items", JSONArray(all.take(20))).put("errors", errors).toString()
     }

@@ -73,6 +73,7 @@ class MainActivity : Activity() {
         e.getString("jellyfinUrl")?.let { p.jellyfinUrl = it }
         e.getString("jellyfinKey")?.let { p.jellyfinKey = it }
         e.getString("brugUrl")?.let { p.brugUrl = it }
+        e.getString("jblListUrl")?.let { p.jblListUrl = it }
     }
 
     override fun onNewIntent(intent: Intent?) {
