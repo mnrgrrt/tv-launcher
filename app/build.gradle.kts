@@ -54,6 +54,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-ui:$media3")
+    // FFmpeg-geluid voor AC3, E-AC3 en MP2 (veel NL-zenders); gebouwd door het Jellyfin-project
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:$media3+1")
     implementation("androidx.webkit:webkit:1.11.0")
     implementation("androidx.core:core:1.13.1")
     implementation("androidx.annotation:annotation:1.8.2")

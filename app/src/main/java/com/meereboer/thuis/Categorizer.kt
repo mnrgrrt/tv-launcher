@@ -68,7 +68,12 @@ object Categorizer {
             val groups = strings(c.optJSONArray("groups")).map { it.lowercase() }
             val picked = LinkedHashSet<Channel>()
             fun ok(n: String) = exclude.none { matches(n, it) }
-            for (p in include) for ((ch, n) in normed) if (matches(n, p) && ok(n)) picked.add(ch)
+            for (p in include) {
+                // Een exacte naam (zonder *) levert maar één zender op: de laagste nummering wint.
+                // Zo komt "NPO 1" niet twee keer voor als de lijst ook een reservekopie heeft.
+                val hits = normed.filter { (_, n) -> matches(n, p) && ok(n) }.map { it.first }
+                if (p.endsWith("*")) picked.addAll(hits) else hits.firstOrNull { it !in picked }?.let { picked.add(it) }
+            }
             if (groups.isNotEmpty()) {
                 val ids = Xtream.categories.filterValues { g -> groups.any { g.lowercase().contains(it) } }.keys
                 for ((ch, n) in normed) if (ch.categoryId in ids && ok(n)) picked.add(ch)
@@ -90,10 +95,9 @@ object Categorizer {
         return out
     }
 
-    /** Schrijft de zenderlijst met indeling weg, zodat de regels af te stemmen zijn (adb kan dit bestand lezen). */
+    /** Schrijft de zenderlijst met indeling naar Downloads/thuis-zenders.tsv, zodat de regels af te stemmen zijn. */
     fun export(ctx: Context, all: List<Channel>, cats: List<SmartCategory>) {
         try {
-            val dir = ctx.getExternalFilesDir(null) ?: return
             val where = HashMap<Int, MutableList<String>>()
             for (c in cats) if (c.id != "alle") for (ch in c.channels) where.getOrPut(ch.id) { mutableListOf() }.add(c.id)
             val sb = StringBuilder("num\tnaam\tgenormaliseerd\tgroep\tcategorie\n")
@@ -102,7 +106,20 @@ object Categorizer {
                     .append(Xtream.categories[ch.categoryId] ?: "").append('\t')
                     .append(where[ch.id]?.joinToString(",") ?: "-").append('\n')
             }
-            File(dir, "zenders.tsv").writeText(sb.toString())
+            val bytes = sb.toString().toByteArray()
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                val res = ctx.contentResolver
+                val col = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                res.delete(col, "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME}=?", arrayOf("thuis-zenders.tsv"))
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "thuis-zenders.tsv")
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Download/")
+                }
+                res.insert(col, values)?.let { uri -> res.openOutputStream(uri)?.use { it.write(bytes) } }
+            } else {
+                ctx.getExternalFilesDir(null)?.let { File(it, "zenders.tsv").writeBytes(bytes) }
+            }
         } catch (_: Exception) { }
     }
 }

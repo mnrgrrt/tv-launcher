@@ -27,6 +27,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -165,7 +166,11 @@ class PlayerActivity : Activity() {
             .setUserAgent("Thuis/1.0")
             .setConnectTimeoutMs(8000)
             .setReadTimeoutMs(15000)
-        val p = ExoPlayer.Builder(this)
+        // Eerst FFmpeg voor geluid: dan speelt AC3/MP2 altijd als gewone stereo/surround af.
+        val renderers = DefaultRenderersFactory(this)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setEnableDecoderFallback(true)
+        val p = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
             .build()
         p.addListener(object : Player.Listener {
