@@ -1,5 +1,5 @@
 {
-  "_uitleg": "Slimme categorieën voor Thuis. Namen worden vergeleken zonder hoofdletters, spaties, landcodes (NL, BE) en kwaliteit (HD, FHD, 4K). Een * aan het eind betekent 'begint met'. Volgorde in 'include' = volgorde in de app. 'groups' voegt zenders toe uit Dispatcharr-groepen waarvan de naam dit woord bevat. 'exclude' haalt zenders er weer uit. Een categorie met 'parent' wordt een eigen rij binnen die hoofdcategorie; zenders die in geen enkele subrij vallen komen in 'Overige'. Met \"last\": true komt een subrij helemaal onderaan, onder 'Overige'.",
+  "_uitleg": "Slimme categorieën voor Thuis. Namen worden vergeleken zonder hoofdletters, spaties, landcodes (NL, BE) en kwaliteit (HD, FHD, 4K). Een * aan het eind betekent 'begint met'. Volgorde in 'include' = volgorde in de app. 'groups' voegt zenders toe uit Dispatcharr-groepen waarvan de naam dit woord bevat. 'exclude' haalt zenders er weer uit. Een categorie met 'parent' wordt een eigen rij binnen die hoofdcategorie; zenders die in geen enkele subrij vallen komen in 'Overige'.",
   "categories": [
     {
       "id": "standaard",
@@ -55,13 +55,20 @@
         "playsports*",
         "dazn*",
         "skysport*",
-        "bein*",
-        "f1*"
+        "bein*"
       ],
       "groups": [
         "sport"
       ],
-      "exclude": []
+      "exclude": [
+        "daznf1*",
+        "f1*",
+        "formula1*",
+        "formule1*",
+        "skysportf1*",
+        "viaplayf1*",
+        "ziggosportf1*"
+      ]
     },
     {
       "id": "ziggosport",
@@ -86,28 +93,6 @@
       ],
       "groups": [],
       "exclude": []
-    },
-    {
-      "id": "f1",
-      "name": "F1",
-      "img": "peaks",
-      "include": [
-        "f1*",
-        "formula1*",
-        "formule1*",
-        "skysportf1*",
-        "viaplayf1*",
-        "ziggosportf1*",
-        "daznf1*"
-      ],
-      "groups": [
-        "f1",
-        "formule 1",
-        "formula 1"
-      ],
-      "exclude": [],
-      "parent": "sport",
-      "last": true
     },
     {
       "id": "docu",
@@ -168,6 +153,26 @@
         "mtvnl",
         "mtvbe"
       ]
+    },
+    {
+      "id": "f1",
+      "name": "F1",
+      "img": "peaks",
+      "include": [
+        "f1*",
+        "formula1*",
+        "formule1*",
+        "skysportf1*",
+        "viaplayf1*",
+        "ziggosportf1*",
+        "daznf1*"
+      ],
+      "groups": [
+        "f1",
+        "formule 1",
+        "formula 1"
+      ],
+      "exclude": []
     }
   ],
   "alle": true
