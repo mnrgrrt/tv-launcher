@@ -55,6 +55,9 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <activity android:name=".RemoteActivity" android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
+
         <activity
             android:name=".PlayerActivity"
             android:exported="false"

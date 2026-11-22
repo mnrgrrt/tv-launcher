@@ -161,6 +161,8 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         Xtream.http.newCall(okhttp3.Request.Builder().url(url).post(body).build()).execute().use {
             if (!it.isSuccessful) throw RuntimeException("Home Assistant gaf fout ${it.code}")
         }
+        // Afstandsbediening van de Formuler doorsturen naar de JBL zolang de dienst daar speelt.
+        act.runOnUiThread { act.startActivity(android.content.Intent(act, RemoteActivity::class.java)) }
         "ok"
     }
 

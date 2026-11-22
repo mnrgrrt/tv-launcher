@@ -32,7 +32,9 @@ object Tmdb {
 
     private fun discover(token: String, type: String, provider: Int): List<JSONObject> {
         val o = get(token, "/discover/$type?watch_region=NL&with_watch_providers=$provider" +
-            "&with_watch_monetization_types=flatrate&sort_by=popularity.desc&language=nl-NL&page=1&include_adult=false")
+            "&with_watch_monetization_types=flatrate&sort_by=popularity.desc&language=nl-NL&page=1&include_adult=false" +
+            // Geen kinderprogramma's: Kids en Familie eruit, bij films ook animatie.
+            (if (type == "tv") "&without_genres=10762,10751" else "&without_genres=10751,16"))
         val a = o.optJSONArray("results") ?: JSONArray()
         return (0 until a.length()).map { a.getJSONObject(it).put("_type", type) }
             .filter { it.optString("backdrop_path").isNotEmpty() }

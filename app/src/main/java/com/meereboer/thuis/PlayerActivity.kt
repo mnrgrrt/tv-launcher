@@ -21,7 +21,10 @@ import android.widget.ListView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.annotation.OptIn
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -224,6 +227,30 @@ class PlayerActivity : Activity() {
                 }
             }
         })
+        // Geluid: Nederlands eerst, dan Engels; geen audiodescriptie als er een gewoon spoor is.
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .setPreferredAudioLanguages("nl", "nld", "dut", "en")
+            .setPreferredAudioRoleFlags(C.ROLE_FLAG_MAIN)
+            .build()
+        p.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+                if (audio.isEmpty()) return
+                val ch = channels.getOrNull(index) ?: return
+                // Eerder zelf gekozen spoor voor deze zender terugzetten.
+                val want = getSharedPreferences("audio", MODE_PRIVATE).getInt("ch${ch.id}", -1)
+                if (want in audio.indices && !audio[want].isSelected && !audioApplied) {
+                    audioApplied = true
+                    p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                        .setOverrideForType(TrackSelectionOverride(audio[want].mediaTrackGroup, 0)).build()
+                    return
+                }
+                if (audio.none { it.isSelected }) {
+                    val fmt = audio.first().getTrackFormat(0).sampleMimeType ?: "onbekend"
+                    flash("Geen geluid: dit geluidsformaat ($fmt) speelt niet af. Probeer de groene knop voor een ander spoor.")
+                }
+            }
+        })
         playerView.player = p
         return p
     }
@@ -274,8 +301,32 @@ class PlayerActivity : Activity() {
 
     private fun startStream(ch: Channel) = startUrl(Xtream.streamUrl(prefs, ch))
 
+    private var audioApplied = false
+
+    /** Volgende geluidsspoor kiezen (groene knop of audioknop) en per zender onthouden. */
+    private fun nextAudio() {
+        val p = player ?: return
+        val audio = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        if (audio.size < 2) { flash("Deze zender heeft maar één geluidsspoor"); return }
+        val cur = audio.indexOfFirst { it.isSelected }
+        val next = (cur + 1) % audio.size
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .setOverrideForType(TrackSelectionOverride(audio[next].mediaTrackGroup, 0)).build()
+        channels.getOrNull(index)?.let { getSharedPreferences("audio", MODE_PRIVATE).edit().putInt("ch${it.id}", next).apply() }
+        val f = audio[next].getTrackFormat(0)
+        flash("Geluid ${next + 1} van ${audio.size}: " + listOfNotNull(f.language, f.label, f.sampleMimeType?.substringAfter("/")).joinToString(" · "))
+    }
+
+    private fun flash(msg: String) {
+        showCenter(msg)
+        ui.postDelayed({ hideCenter() }, 3500)
+    }
+
     private fun startUrl(url: String) {
+        audioApplied = false
         val p = player ?: buildPlayer().also { player = it }
+        // Bij een nieuwe zender geen geluidskeuze van de vorige meenemen.
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().clearOverridesOfType(C.TRACK_TYPE_AUDIO).build()
         p.setMediaItem(MediaItem.fromUri(url))
         p.prepare()
         p.playWhenReady = true
@@ -519,6 +570,7 @@ class PlayerActivity : Activity() {
                 return true
             }
             KeyEvent.KEYCODE_LAST_CHANNEL -> { if (prevIndex >= 0) play(prevIndex); return true }
+            KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK, KeyEvent.KEYCODE_PROG_GREEN, KeyEvent.KEYCODE_A -> { nextAudio(); return true }
             KeyEvent.KEYCODE_BACK -> { finish(); return true }
         }
         val digit = when (keyCode) {
