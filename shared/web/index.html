@@ -77,13 +77,18 @@
   .card.app span{font:700 26px/1.1 var(--display);letter-spacing:-.01em;text-align:center;padding:0 12px}
   .card.app img{width:64px;height:64px}
 
+  .card.svc{width:260px;height:146px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background-image:none}
+  .card.svc::before{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(0,0,0,.25))}
+  .card.svc img{width:72px;height:72px;border-radius:16px;position:relative}
+  .card.svc span{position:relative;font:700 24px/1 var(--display);letter-spacing:-.01em}
+  .card.svc .via{position:absolute;right:12px;top:10px;font:700 14px/1 Inter,system-ui,sans-serif;letter-spacing:.08em;opacity:.85}
   .toast{position:absolute;left:50%;bottom:64px;transform:translate(-50%,20px);opacity:0;background:rgba(255,255,255,.95);color:#05070a;font:600 28px/1 Inter,system-ui,sans-serif;padding:20px 34px;border-radius:999px;transition:all .3s var(--ease);z-index:9;white-space:nowrap}
   .toast.on{opacity:1;transform:translate(-50%,0)}
 
   /* instellingen */
   .sheet{position:absolute;inset:0;z-index:20;background:rgba(4,6,10,.86);display:flex;align-items:center;justify-content:center}
   .sheet[hidden]{display:none}
-  .sheet-in{width:1100px;background:#10141b;border-radius:24px;padding:56px 64px;box-shadow:0 40px 120px rgba(0,0,0,.6)}
+  .sheet-in{width:1100px;max-height:1000px;overflow-y:auto;background:#10141b;border-radius:24px;padding:56px 64px;box-shadow:0 40px 120px rgba(0,0,0,.6)}
   .sheet h2{font:700 52px/1 var(--display);margin:0 0 14px}
   .sheet .hint{font:400 26px/1.4 Inter,system-ui,sans-serif;color:var(--ink-2);margin:0 0 34px}
   .field{display:grid;grid-template-columns:330px 1fr;align-items:center;gap:24px;margin-bottom:18px;font:600 26px/1 Inter,system-ui,sans-serif;color:var(--ink-2)}
@@ -128,6 +133,8 @@
       <label class="field">Wachtwoord<input id="sPass" type="password" autocomplete="off"></label>
       <div class="field">Streamformaat<button class="btn" id="sFormat" type="button">ts</button></div>
       <label class="field">Categorieën<input id="sGroup" placeholder="leeg = alle, of bijv. sport, docu" autocomplete="off" spellcheck="false"></label>
+      <label class="field">TMDB-sleutel<input id="sTmdb" placeholder="voor de rij Voor jou" autocomplete="off" spellcheck="false"></label>
+      <label class="field">JBL-webhook<input id="sJbl" placeholder="Home Assistant-webhook (optioneel)" autocomplete="off" spellcheck="false"></label>
       <div class="btns">
         <button class="btn" id="sTest" type="button">Verbinding testen</button>
         <button class="btn pri" id="sSave" type="button">Opslaan</button>
@@ -165,6 +172,8 @@
       launch: function(id){ Native.launch(id); },
       systemSettings: function(){ Native.openAndroidSettings(); },
       checkUpdate: function(cb){ call('checkUpdate', cb); },
+      streamingHome: function(cb){ call('streamingHome', cb); },
+      jbl: function(pkg, cb){ call('jblLaunch', cb, pkg); },
       installUpdate: function(cb){ call('installUpdate', cb); }
     };
   } catch (e) {}
@@ -201,6 +210,11 @@
     { t:'Neonregen', s:'netflix', kind:'Serie', img:'neon', meta:['2026','8 afleveringen'], tag:'4K', p:0, sample:true, d:'Een privédetective in een stad waar het nooit ophoudt met regenen.' },
     { t:'Kustlicht', s:'videoland', kind:'Serie', img:'coast', meta:['2025','S1'], tag:'HD', p:0, sample:true, d:'Een familie runt al drie generaties het enige hotel aan de kust. Dit voorjaar loopt het mis.' }
   ];
+  var SERVICES = [{"key": "netflix", "name": "Netflix", "provider": 8, "color": "#E50914", "logo": "/rK1KljqmbvO9HQa1PBFLILWah72.png", "match": "netflix", "jbl": "com.netflix.ninja", "forceJbl": true}, {"key": "prime", "name": "Prime Video", "provider": 119, "color": "#1A98FF", "logo": "/gMZdpavHmxFNnLpMHwVxfqeux2g.png", "match": "prime"}, {"key": "videoland", "name": "Videoland", "provider": 72, "color": "#E6007E", "logo": "/3IdfSLRjSoDoo9lrpvX4oxZmnVi.png", "match": "videoland", "jbl": "nl.rtl.videoland.v2"}, {"key": "skyshowtime", "name": "SkyShowtime", "provider": 1773, "color": "#6E3CF5", "logo": "/ube1pVpP3FklRkeyQjlDkkC3tL2.png", "match": "skyshowtime"}, {"key": "withlove", "name": "WithLove", "color": "#C2185B", "match": "withlove", "jbl": "nl.withlove.app"}, {"key": "youtube", "name": "YouTube", "color": "#FF0033", "match": "youtube"}, {"key": "npo", "name": "NPO Start", "provider": 360, "color": "#FF6D00", "logo": "/iVAJklPcCjj15989GVJufXqsVtS.png", "match": "npo"}, {"key": "plex", "name": "Plex", "provider": 538, "color": "#E5A00D", "logo": "/blAEhvx3XX8sV0fFVFk88FFjubs.png", "match": "plex"}];
+  var SVC = {}; SERVICES.forEach(function(x){ SVC[x.key] = x; });
+  var TMDB_IMG = 'https://image.tmdb.org/t/p/';
+  function loadRecent(){ try { return JSON.parse(localStorage.getItem('thuis.recent') || '[]'); } catch (e) { return []; } }
+  function saveRecent(list){ try { localStorage.setItem('thuis.recent', JSON.stringify(list.slice(0, 10))); } catch (e) {} }
   var SAMPLE_APPS = ['Plex','Netflix','Prime Video','Videoland','SkyShowtime','YouTube','NPO Start','Ziggo GO'].map(function(n,i){
     return { t:n, s:'app', img:IMGS[i % IMGS.length], d:'' };
   });
@@ -208,7 +222,10 @@
   var data = { cont: SAMPLE_CONT, live: APP ? [{ t:'Zenders laden…', ch:'Live tv', s:'iptv', kind:'Live tv', img:'aurora', meta:[], p:0, d:'', loading:true }] : SAMPLE_LIVE,
                rec: SAMPLE_REC, apps: SAMPLE_APPS, liveSub: 'Dispatcharr', ziggo: null };
   data.channels = data.live;
-  if (!APP) { data.cats = SAMPLE_CATS; }
+  data.recent = loadRecent();
+  data.picks = [];
+  data.svcBd = {};
+  if (!APP) { data.cats = SAMPLE_CATS; data.picks = SAMPLE_REC.map(function(x){ var y = {}; for (var k in x) y[k] = x[k]; y.s = 'pick'; y.service = x.s === 'sky' ? 'skyshowtime' : x.s; return y; }); }
 
   // Vaste tegel voor Ziggo GO vooraan in "Nu live" (handig als de ene IPTV-stream al in gebruik is).
   function composeLive(){
@@ -272,6 +289,17 @@
       }
       return rows;
     }
+    if (state.view === 'apps') {
+      var ap = data.apps, arows = [];
+      for (var a = 0; a < ap.length; a += 6) arows.push({ title: a === 0 ? 'Alle apps' : '', sub: a === 0 ? ap.length + ' apps' : '', type:'app', grid:true, items: ap.slice(a, a + 6) });
+      return arows;
+    }
+    var home = [];
+    if (data.recent.length) home.push({ title:'Verder kijken', sub:'laatst geopend', type:'cont', items:data.recent });
+    home.push({ title:'Live tv', sub:data.liveSub, type:'live', items:data.live });
+    home.push({ title:'Streamingdiensten', sub:'', type:'svc', items:svcItems() });
+    if (data.picks.length) home.push({ title:'Voor jou', sub:'populair op jouw diensten', type:'pick', items:data.picks });
+    return home;
     return [
       { title:'Verder kijken', sub: APP ? 'voorbeeld, Plex volgt' : 'uit al je diensten', type:'cont', items:data.cont },
       { title:'Live tv', sub:data.liveSub, type:'live', items:data.live },
@@ -293,18 +321,54 @@
       r.items.forEach(function(it, ci){ tr.appendChild(card(r, it, ri, ci)); });
       vp.appendChild(tr); row.appendChild(h); row.appendChild(vp);
       host.appendChild(row);
-      rowEls.push({ row:row, track:tr, w: r.grid ? 0 : (r.type==='app' ? 288 : 428), grid: !!r.grid });
+      rowEls.push({ row:row, track:tr, w: r.grid ? 0 : ((r.type==='app' || r.type==='svc') ? 288 : 428), grid: !!r.grid });
       if (state.col[ri] === undefined) state.col[ri] = 0;
       if (state.col[ri] > r.items.length - 1) state.col[ri] = Math.max(0, r.items.length - 1);
     });
     render();
   }
 
+  function localApp(sv){
+    var m = (sv.match || '').toLowerCase();
+    return data.apps.filter(function(a){ return a.pkg && m && a.t.toLowerCase().indexOf(m) >= 0; })[0];
+  }
+  function viaJbl(sv){ return !!sv.jbl && (sv.forceJbl || !localApp(sv)); }
+  function svcItems(){
+    return SERVICES.map(function(sv, i){
+      var top = data.svcBd[sv.key];
+      return { t:sv.name, s:'svc', key:sv.key, color:sv.color, logo: sv.logo ? TMDB_IMG + 'w154' + sv.logo : '',
+               img: top ? top.backdrop : IMGS[i % IMGS.length], kind:'Streamingdienst',
+               meta: top ? ['Populair nu: ' + top.title] : [], d: top ? top.overview : '', jbl: viaJbl(sv) };
+    });
+  }
+  function openService(key, recentItem){
+    var sv = SVC[key]; if (!sv) return;
+    if (recentItem) {
+      var list = loadRecent().filter(function(x){ return x.t !== recentItem.t; });
+      list.unshift({ t:recentItem.t, s:'cont', service:key, img:recentItem.img, thumb:recentItem.thumb, kind:recentItem.kind, meta:recentItem.meta, d:recentItem.d });
+      saveRecent(list); data.recent = list.slice(0, 10);
+    }
+    if (!APP) { toast(sv.name + ' wordt geopend'); return; }
+    if (viaJbl(sv)) {
+      if (!PL.jbl) { toast(sv.name + ' staat op de JBL'); return; }
+      PL.jbl(sv.jbl, function(ok, msg){ toast(ok ? sv.name + ' opent op de JBL' : sv.name + ' staat op de JBL: ' + msg); });
+      return;
+    }
+    var a = localApp(sv);
+    if (a) PL.launch(a.pkg); else toast(sv.name + ' is niet geïnstalleerd');
+  }
+
   function card(r, it, ri, ci){
     var b = document.createElement('button');
     b.className = 'card' + (r.type==='app' ? ' app' : '');
     b.setAttribute('aria-label', (it.ch ? it.ch+', ' : '') + it.t);
-    if (r.type === 'app') {
+    if (r.type === 'svc') {
+      b.className = 'card svc';
+      b.style.backgroundColor = it.color;
+      if (it.logo) { var lgo = document.createElement('img'); lgo.src = it.logo; lgo.alt = ''; lgo.onerror = function(){ lgo.remove(); }; b.appendChild(lgo); }
+      var nm = document.createElement('span'); nm.textContent = it.t; b.appendChild(nm);
+      if (it.jbl) { var v = document.createElement('i'); v.className = 'via'; v.textContent = 'JBL'; b.appendChild(v); }
+    } else if (r.type === 'app') {
       if (it.banner) {
         b.style.backgroundImage = 'url(' + it.banner + ')';
         b.style.backgroundSize = 'cover';
@@ -313,7 +377,7 @@
         var sp = document.createElement('span'); sp.textContent = it.t; b.appendChild(sp);
       }
     } else {
-      b.style.backgroundImage = 'url(' + IMG + it.img + '-s.jpg)';
+      b.style.backgroundImage = 'url(' + (it.thumb || (IMG + it.img + '-s.jpg')) + ')';
       if (r.type === 'live') {
         var ch = document.createElement('span'); ch.className = 'ch';
         if (it.logo) {
@@ -329,7 +393,7 @@
         var now = document.createElement('span'); now.className = 'now'; now.textContent = it.app ? 'Live tv en terugkijken' : (it.cat ? it.count + ' zenders' : it.t); b.appendChild(now);
         if (it.p > 0) { b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>'); b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%'; }
       } else {
-        var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = SRC[it.s].n; b.appendChild(bd);
+        var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = it.service && SVC[it.service] ? SVC[it.service].name : (SRC[it.s] ? SRC[it.s].n : ''); b.appendChild(bd);
         if (it.p > 0) {
           b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>');
           b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%';
@@ -353,7 +417,7 @@
     bdTimer = setTimeout(function(){
       curImg = name;
       var back = front === bdA ? bdB : bdA;
-      back.style.backgroundImage = 'url(' + IMG + name + '.jpg)';
+      back.style.backgroundImage = 'url(' + (/^https?:/.test(name) ? name : IMG + name + '.jpg') + ')';
       back.classList.add('on'); front.classList.remove('on');
       front = back;
     }, 220);
@@ -362,6 +426,21 @@
   // ---------- hero ----------
   function hero(it, type){
     var src = SRC[it.s] || SRC.app;
+    if (type === 'svc' || type === 'pick' || (type === 'cont' && it.service)) {
+      var sv = SVC[type === 'svc' ? it.key : it.service] || { name:'', color:'#999' };
+      var s0 = $('hSrc'); s0.innerHTML = '';
+      var d0 = document.createElement('i'); d0.style.background = sv.color; s0.appendChild(d0);
+      s0.appendChild(document.createTextNode(type === 'svc' ? 'Streamingdienst' + (it.jbl ? ' · via JBL' : '') : sv.name + ' · ' + (it.kind || '')));
+      $('hTitle').textContent = it.t;
+      var m0 = $('hMeta'); m0.innerHTML = '';
+      (it.meta || []).forEach(function(x, k){ if (!x) return; if (m0.children.length) { var sp = document.createElement('span'); sp.className = 'sep'; m0.appendChild(sp); } var e = document.createElement('span'); e.textContent = x; m0.appendChild(e); });
+      $('hDesc').textContent = it.d || '';
+      var c0 = $('hCta'); c0.innerHTML = '';
+      var k0 = document.createElement('b'); k0.textContent = 'OK'; c0.appendChild(k0);
+      var l0 = document.createElement('span'); l0.textContent = 'Open ' + sv.name + (it.jbl || (type !== 'svc' && SVC[it.service] && viaJbl(SVC[it.service])) ? ' op de JBL' : ''); c0.appendChild(l0);
+      setBackdrop(it.img);
+      return;
+    }
     var s = $('hSrc'); s.innerHTML = '';
     if (it.cat) {
       var cd = document.createElement('i'); cd.style.background = SRC.iptv.c; s.appendChild(cd);
@@ -427,9 +506,9 @@
   function enter(){
     if (state.nav) {
       var n = NAV[state.navIdx];
-      if (n === 'Thuis') { state.nav = false; if (state.view === 'cat') closeCategory(); else { state.row = 0; render(); } }
+      if (n === 'Thuis') { state.nav = false; if (state.view !== 'home') closeCategory(); else { state.row = 0; render(); } }
       else if (n === 'Live tv') { if (APP) PL.playLast(); else toast('Live tv opent in de app op de tv'); }
-      else if (n === 'Apps') { state.nav = false; if (state.view === 'cat') closeCategory(); state.row = 3; render(); }
+      else if (n === 'Apps') { state.nav = false; if (state.view !== 'home') closeCategory(); state.home = { row: state.row, col: state.col.slice() }; state.view = 'apps'; state.row = 0; state.col = []; buildRows(); }
       else if (n === 'Instellingen') openSettings();
       return;
     }
@@ -439,6 +518,8 @@
     if (it.loading) return;
     if (it.app && it.pkg) { if (APP) PL.launch(it.pkg); else toast('Ziggo GO wordt geopend'); return; }
     if (it.cat) { openCategory(it); return; }
+    if (r.type === 'svc') { openService(it.key); return; }
+    if (r.type === 'pick' || (r.type === 'cont' && it.service)) { openService(it.service, it); return; }
     if (r.type === 'live') { if (APP && it.streamId) PL.play(it.streamId, it.catId); else toast('Live: ' + it.ch + ' · ' + it.t); }
     else if (r.type === 'app') { if (APP && it.pkg) PL.launch(it.pkg); else toast(it.t + ' wordt geopend'); }
     else toast('Dit is een voorbeeld. De koppeling met Plex volgt.');
@@ -527,15 +608,30 @@
     });
   }
 
-  window.__resume = function(){ loadLive(); loadApps(); };
+  function loadStreaming(){
+    if (!APP || !PL.streamingHome) return;
+    PL.streamingHome(function(ok, payload){
+      if (!ok) return;
+      var res = JSON.parse(payload);
+      if (!res.configured) return;
+      data.svcBd = res.services || {};
+      data.picks = (res.picks || []).map(function(p){
+        return { t:p.title, s:'pick', service:p.service, kind:p.type, img:p.backdrop, thumb:p.thumb,
+                 meta:[p.year, p.rating ? '★ ' + p.rating.toFixed(1) : ''], d:p.overview };
+      });
+      if (state.view === 'home') buildRows();
+    });
+  }
+
+  window.__resume = function(){ loadLive(); loadApps(); data.recent = loadRecent(); };
   window.__back = function(){
     if (!$('settings').hidden) { settingsBack(); return; }
-    if (state.view === 'cat') { closeCategory(); return; }
+    if (state.view !== 'home') { closeCategory(); return; }
     state.nav = false; state.row = 0; state.col[0] = 0; render();
   };
 
   // ---------- instellingen ----------
-  var sItems = ['sServer','sUser','sPass','sFormat','sGroup','sTest','sSave','sClose','sAndroid','sUpdate'];
+  var sItems = ['sServer','sUser','sPass','sFormat','sGroup','sTmdb','sJbl','sTest','sSave','sClose','sAndroid','sUpdate'];
   var update = null;
   function checkUpdate(silent){
     if (!APP || !PL.checkUpdate) return;
@@ -549,12 +645,12 @@
     });
   }
   var sIdx = 0;
-  function sRender(){ sItems.forEach(function(id, i){ $(id).classList.toggle('sf', i === sIdx); }); }
+  function sRender(){ sItems.forEach(function(id, i){ $(id).classList.toggle('sf', i === sIdx); }); try { $(sItems[sIdx]).scrollIntoView({ block:'nearest' }); } catch (e) {} }
   function openSettings(){
     var cfg = { server:'', user:'', pass:'', format:'ts', categories:'' };
     if (APP) { try { cfg = PL.getSettings(); } catch (e) {} }
     $('sServer').value = cfg.server || ''; $('sUser').value = cfg.user || ''; $('sPass').value = cfg.pass || '';
-    $('sFormat').textContent = cfg.format || 'ts'; $('sGroup').value = cfg.categories || '';
+    $('sFormat').textContent = cfg.format || 'ts'; $('sGroup').value = cfg.categories || ''; $('sTmdb').value = cfg.tmdbToken || ''; $('sJbl').value = cfg.jblWebhook || '';
     $('sStatus').textContent = '';
     $('settings').hidden = false; state.nav = false; sIdx = 0; sRender();
     checkUpdate(false);
@@ -562,7 +658,7 @@
   function closeSettings(){ $('settings').hidden = true; if (document.activeElement) document.activeElement.blur(); render(); }
   function editing(){ var a = document.activeElement; return a && a.tagName === 'INPUT'; }
   function settingsBack(){ if (editing()) document.activeElement.blur(); else closeSettings(); }
-  function collect(){ return { server:$('sServer').value, user:$('sUser').value, pass:$('sPass').value, format:$('sFormat').textContent, categories:$('sGroup').value }; }
+  function collect(){ return { server:$('sServer').value, user:$('sUser').value, pass:$('sPass').value, format:$('sFormat').textContent, categories:$('sGroup').value, tmdbToken:$('sTmdb').value, jblWebhook:$('sJbl').value }; }
   function sActivate(){
     var id = sItems[sIdx], el = $(id);
     if (el.tagName === 'INPUT') { el.focus(); return; }
@@ -582,7 +678,7 @@
     }
     if (!APP) { $('sStatus').textContent = 'Dit werkt alleen in de app op de tv.'; return; }
     PL.saveSettings(collect());
-    if (id === 'sSave') { closeSettings(); toast('Opgeslagen'); loadLive(); return; }
+    if (id === 'sSave') { closeSettings(); toast('Opgeslagen'); loadLive(); loadStreaming(); return; }
     $('sStatus').textContent = 'Verbinden…';
     PL.test(function(ok, payload){
       if (!ok) { $('sStatus').textContent = 'Mislukt: ' + payload; return; }
@@ -628,7 +724,7 @@
     } else if (k === 'Enter' || code === 23) {
       enter();
     } else if (k === 'Escape' || k === 'Backspace' || k === 'GoBack' || k === 'BrowserBack' || code === 461) {
-      if (state.view === 'cat') { closeCategory(); e.preventDefault(); return; }
+      if (state.view !== 'home') { closeCategory(); e.preventDefault(); return; }
       state.nav = false; state.row = 0; state.col[0] = 0;
     } else handled = false;
     if (handled) { e.preventDefault(); render(); }
@@ -636,8 +732,9 @@
 
   buildRows();
   if (APP) {
-    loadLive(); loadApps();
+    loadLive(); loadApps(); loadStreaming();
     setInterval(loadLive, 5 * 60 * 1000);
+    setInterval(loadStreaming, 3 * 3600 * 1000);
     setTimeout(function(){ checkUpdate(true); }, 4000);
   }
 })();

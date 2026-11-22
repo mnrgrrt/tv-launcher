@@ -1,0 +1,13 @@
+{
+  "_uitleg": "Streamingdiensten voor de logo-rij. provider = TMDB-code voor Nederland (voor voorstellen). match = woord in de app-naam op het apparaat. jbl = pakketnaam op de JBL; forceJbl = altijd via de JBL openen.",
+  "services": [
+    { "key": "netflix",     "name": "Netflix",     "provider": 8,    "color": "#E50914", "logo": "/rK1KljqmbvO9HQa1PBFLILWah72.png", "match": "netflix",     "jbl": "com.netflix.ninja", "forceJbl": true },
+    { "key": "prime",       "name": "Prime Video", "provider": 119,  "color": "#1A98FF", "logo": "/gMZdpavHmxFNnLpMHwVxfqeux2g.png", "match": "prime" },
+    { "key": "videoland",   "name": "Videoland",   "provider": 72,   "color": "#E6007E", "logo": "/3IdfSLRjSoDoo9lrpvX4oxZmnVi.png", "match": "videoland",   "jbl": "nl.rtl.videoland.v2" },
+    { "key": "skyshowtime", "name": "SkyShowtime", "provider": 1773, "color": "#6E3CF5", "logo": "/ube1pVpP3FklRkeyQjlDkkC3tL2.png", "match": "skyshowtime" },
+    { "key": "withlove",    "name": "WithLove",                      "color": "#C2185B",                                            "match": "withlove",    "jbl": "nl.withlove.app" },
+    { "key": "youtube",     "name": "YouTube",                       "color": "#FF0033",                                            "match": "youtube" },
+    { "key": "npo",         "name": "NPO Start",   "provider": 360,  "color": "#FF6D00", "logo": "/iVAJklPcCjj15989GVJufXqsVtS.png", "match": "npo" },
+    { "key": "plex",        "name": "Plex",        "provider": 538,  "color": "#E5A00D", "logo": "/blAEhvx3XX8sV0fFVFk88FFjubs.png", "match": "plex" }
+  ]
+}

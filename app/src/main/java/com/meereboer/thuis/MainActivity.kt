@@ -2,6 +2,7 @@ package com.meereboer.thuis
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
@@ -43,8 +44,23 @@ class MainActivity : Activity() {
         }
         web.addJavascriptInterface(Bridge(this, web), "Native")
         setContentView(web)
+        applyExtras(intent)
         web.loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
         web.requestFocus()
+    }
+
+    /** Instellingen op afstand zetten via adb: am start -n com.meereboer.thuis/.MainActivity --es tmdbToken ... */
+    private fun applyExtras(i: Intent?) {
+        val e = i?.extras ?: return
+        val p = Prefs(this)
+        e.getString("tmdbToken")?.let { p.tmdbToken = it }
+        e.getString("jblWebhook")?.let { p.jblWebhook = it }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        applyExtras(intent)
+        if (intent?.extras?.containsKey("tmdbToken") == true && ::web.isInitialized) web.reload()
     }
 
     @Suppress("DEPRECATION")

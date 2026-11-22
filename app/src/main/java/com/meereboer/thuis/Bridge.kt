@@ -3,6 +3,8 @@ package com.meereboer.thuis
 import android.content.Intent
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Callable
@@ -133,6 +135,23 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
 
     @JavascriptInterface fun playLast() {
         act.runOnUiThread { act.startActivity(Intent(act, PlayerActivity::class.java)) }
+    }
+
+    /** Voorstellen en achtergronden per dienst uit TMDB. */
+    @JavascriptInterface fun streamingHome(id: Int) = async(id) {
+        if (prefs.tmdbToken.isEmpty()) JSONObject().put("configured", false).toString()
+        else JSONObject(Tmdb.home(act, prefs.tmdbToken)).put("configured", true).toString()
+    }
+
+    /** Start een app op de JBL via de Home Assistant-webhook. */
+    @JavascriptInterface fun jblLaunch(id: Int, pkg: String) = async(id) {
+        val url = prefs.jblWebhook
+        if (url.isEmpty()) throw RuntimeException("geen JBL-koppeling ingesteld")
+        val body = JSONObject().put("app", pkg).toString().toRequestBody("application/json".toMediaType())
+        Xtream.http.newCall(okhttp3.Request.Builder().url(url).post(body).build()).execute().use {
+            if (!it.isSuccessful) throw RuntimeException("Home Assistant gaf fout ${it.code}")
+        }
+        "ok"
     }
 
     @JavascriptInterface fun checkUpdate(id: Int) = async(id) { Updater.check(act).toString() }

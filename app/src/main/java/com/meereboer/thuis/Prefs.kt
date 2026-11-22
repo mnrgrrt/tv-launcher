@@ -24,6 +24,13 @@ class Prefs(ctx: Context) {
     var categories: String
         get() = sp.getString("categories", "") ?: ""
         set(v) = sp.edit().putString("categories", v.trim()).apply()
+    var tmdbToken: String
+        get() = sp.getString("tmdbToken", "") ?: ""
+        set(v) = sp.edit().putString("tmdbToken", v.trim()).apply()
+    /** Home Assistant-webhook die een app op de JBL start, bijv. http://192.168.x.x:8123/api/webhook/... */
+    var jblWebhook: String
+        get() = sp.getString("jblWebhook", "") ?: ""
+        set(v) = sp.edit().putString("jblWebhook", v.trim()).apply()
     var lastChannel: Int
         get() = sp.getInt("lastChannel", -1)
         set(v) = sp.edit().putInt("lastChannel", v).apply()
@@ -33,6 +40,7 @@ class Prefs(ctx: Context) {
     fun toJson(): JSONObject = JSONObject()
         .put("server", server).put("user", user).put("pass", pass)
         .put("format", format).put("categories", categories)
+        .put("tmdbToken", tmdbToken).put("jblWebhook", jblWebhook)
         .put("configured", configured)
 
     fun fromJson(o: JSONObject) {
@@ -41,5 +49,7 @@ class Prefs(ctx: Context) {
         pass = o.optString("pass")
         format = o.optString("format", "ts")
         categories = o.optString("categories")
+        if (o.has("tmdbToken")) tmdbToken = o.optString("tmdbToken")
+        if (o.has("jblWebhook")) jblWebhook = o.optString("jblWebhook")
     }
 }
