@@ -59,6 +59,12 @@ class PlayerActivity : Activity() {
     private lateinit var listView: ListView
     private lateinit var listTitle: TextView
     private lateinit var center: TextView
+    private lateinit var root: FrameLayout
+    private lateinit var guide: GuideView
+    private val epgCache = HashMap<Int, Pair<Long, List<Programme>>>()
+    private val epgPool = Executors.newFixedThreadPool(6)
+    /** Programma dat we nu terugkijken (null = live). */
+    private var replay: Programme? = null
 
     private var channels: List<Channel> = emptyList()
     private var index = -1
@@ -90,7 +96,7 @@ class PlayerActivity : Activity() {
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
             or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
 
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
 
         playerView = PlayerView(this).apply {
             useController = false
@@ -156,6 +162,9 @@ class PlayerActivity : Activity() {
         }
         root.addView(center, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
 
+        guide = GuideView(this).apply { visibility = View.GONE }
+        root.addView(guide, 1, FrameLayout.LayoutParams(-1, -1))
+
         setContentView(root)
         loadChannels()
     }
@@ -186,9 +195,9 @@ class PlayerActivity : Activity() {
                 if (!retried) {
                     retried = true
                     showCenter("Opnieuw proberen…")
-                    ui.postDelayed({ if (index >= 0) startStream(channels[index]) }, 1500)
+                    ui.postDelayed({ if (index >= 0) { val r = replay; if (r != null) startUrl(Xtream.timeshiftUrl(prefs, channels[index], r)) else startStream(channels[index]) } }, 1500)
                 } else {
-                    showCenter("Deze zender speelt niet\n${error.errorCodeName}")
+                    showCenter(if (replay != null) "Terugkijken lukt niet voor dit programma" else "Deze zender speelt niet\n${error.errorCodeName}")
                 }
             }
         })
@@ -232,6 +241,7 @@ class PlayerActivity : Activity() {
         if (n != index) prevIndex = index
         index = n
         retried = false
+        replay = null
         val ch = channels[n]
         prefs.lastChannel = ch.id
         startStream(ch)
@@ -239,11 +249,88 @@ class PlayerActivity : Activity() {
         loadEpg(ch)
     }
 
-    private fun startStream(ch: Channel) {
+    private fun startStream(ch: Channel) = startUrl(Xtream.streamUrl(prefs, ch))
+
+    private fun startUrl(url: String) {
         val p = player ?: buildPlayer().also { player = it }
-        p.setMediaItem(MediaItem.fromUri(Xtream.streamUrl(prefs, ch)))
+        p.setMediaItem(MediaItem.fromUri(url))
         p.prepare()
         p.playWhenReady = true
+    }
+
+    // ---------- gids ----------
+
+    private fun openGuide() {
+        if (channels.isEmpty()) return
+        hideList()
+        guide.channels = channels
+        guide.title = listTitle.text.toString()
+        val now = System.currentTimeMillis()
+        guide.epg = channels.mapNotNull { c -> epgCache[c.id]?.takeIf { now - it.first < 10 * 60_000L }?.let { c.id to it.second } }.toMap()
+        guide.loading = guide.epg.size < channels.size
+        guide.visibility = View.VISIBLE
+        guide.start(index)
+        infoBar.visibility = View.GONE
+        root.post {
+            val r = guide.previewRect(root.width, root.height)
+            playerView.layoutParams = FrameLayout.LayoutParams(r.width().toInt(), r.height().toInt()).apply {
+                leftMargin = r.left.toInt(); topMargin = r.top.toInt()
+            }
+            playerView.bringToFront()
+        }
+        val missing = channels.filter { it.id !in guide.epg }
+        if (missing.isEmpty()) return
+        bg.execute {
+            val tasks = missing.map { c -> java.util.concurrent.Callable { c.id to (try { Xtream.fullEpg(prefs, c) } catch (_: Exception) { emptyList() }) } }
+            val got = epgPool.invokeAll(tasks).map { it.get() }
+            ui.post {
+                val t = System.currentTimeMillis()
+                for ((id, list) in got) epgCache[id] = t to list
+                guide.epg = guide.epg + got.toMap()
+                guide.loading = false
+                guide.start(guide.row)
+            }
+        }
+    }
+
+    private fun closeGuide() {
+        guide.visibility = View.GONE
+        playerView.layoutParams = FrameLayout.LayoutParams(-1, -1)
+        guide.bringToFront()
+        listPanel.bringToFront(); infoBar.bringToFront(); center.bringToFront()
+    }
+
+    private fun guideOk() {
+        val row = guide.row
+        val ch = channels.getOrNull(row) ?: return
+        val p = guide.selectedProgramme()
+        val now = System.currentTimeMillis()
+        closeGuide()
+        when {
+            p == null || now in p.start until p.end -> play(row)
+            p.start < now && p.archive -> playReplay(row, p)
+            p.start < now -> { play(row); showCenter("Dit programma is niet terug te kijken"); ui.postDelayed({ hideCenter() }, 2500) }
+            else -> { play(row); showCenter("Begint om ${clock.format(Date(p.start))}"); ui.postDelayed({ hideCenter() }, 2500) }
+        }
+    }
+
+    private fun playReplay(i: Int, prog: Programme) {
+        if (i != index) prevIndex = index
+        index = i
+        retried = false
+        replay = prog
+        val ch = channels[i]
+        startUrl(Xtream.timeshiftUrl(prefs, ch, prog))
+        tvNum.text = ch.num.toString()
+        tvName.text = ch.name
+        tvNow.text = "↺ " + prog.title
+        tvTime.text = "Terugkijken · ${clock.format(Date(prog.start))} tot ${clock.format(Date(prog.end))}  ·  ◄► 30 sec  ·  OK pauze  ·  Terug = live"
+        tvNext.text = ""
+        progress.visibility = View.INVISIBLE
+        infoBar.alpha = 1f
+        infoBar.visibility = View.VISIBLE
+        ui.removeCallbacks(hideInfo)
+        ui.postDelayed(hideInfo, 6000)
     }
 
     private fun showInfo(ch: Channel) {
@@ -316,6 +403,33 @@ class PlayerActivity : Activity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (guide.visibility == View.VISIBLE) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> guide.move(-1, 0)
+                KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> guide.move(1, 0)
+                KeyEvent.KEYCODE_DPAD_LEFT -> guide.move(0, -1)
+                KeyEvent.KEYCODE_DPAD_RIGHT -> guide.move(0, 1)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> guideOk()
+                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_GUIDE, KeyEvent.KEYCODE_MENU -> closeGuide()
+                else -> return super.onKeyDown(keyCode, event)
+            }
+            return true
+        }
+        if (replay != null) {
+            val p = player
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> { p?.seekTo((p.currentPosition - 30_000).coerceAtLeast(0)); return true }
+                KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { p?.seekTo(p.currentPosition + 30_000); return true }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    p?.let { it.playWhenReady = !it.playWhenReady; showCenter(if (it.playWhenReady) "▶" else "❚❚"); ui.postDelayed({ hideCenter() }, 800) }
+                    return true
+                }
+                KeyEvent.KEYCODE_BACK -> { play(index); return true }
+            }
+        }
+        if (keyCode == KeyEvent.KEYCODE_GUIDE || keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_G) {
+            openGuide(); return true
+        }
         if (listPanel.visibility == View.VISIBLE) {
             return when (keyCode) {
                 KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_DPAD_RIGHT -> { hideList(); true }
@@ -332,7 +446,7 @@ class PlayerActivity : Activity() {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> { play(index + 1); return true }
             KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> { play(index - 1); return true }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> { showList(); return true }
-            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_INFO, KeyEvent.KEYCODE_GUIDE -> {
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_INFO -> {
                 if (index >= 0) { showInfo(channels[index]); loadEpg(channels[index]) }
                 return true
             }
@@ -370,6 +484,7 @@ class PlayerActivity : Activity() {
         super.onDestroy()
         ui.removeCallbacksAndMessages(null)
         bg.shutdownNow()
+        epgPool.shutdownNow()
     }
 
     private inner class ChannelAdapter(items: List<Channel>) :

@@ -13,10 +13,12 @@ data class Channel(
     val num: Int,
     val name: String,
     val icon: String,
-    val categoryId: String
+    val categoryId: String,
+    /** Dagen terugkijken die de aanbieder voor deze zender bewaart (0 = geen). */
+    val archiveDays: Int = 0
 )
 
-data class Programme(val title: String, val desc: String, val start: Long, val end: Long)
+data class Programme(val title: String, val desc: String, val start: Long, val end: Long, val archive: Boolean = false)
 
 /** Praat met Dispatcharr via de Xtream Codes-API, net als MYTVOnline. */
 object Xtream {
@@ -28,6 +30,8 @@ object Xtream {
     @Volatile var channels: List<Channel> = emptyList()
     @Volatile var categories: Map<String, String> = emptyMap()
     @Volatile private var loadedAt = 0L
+    /** Tijdzone van de server; nodig voor de terugkijk-links. */
+    @Volatile var serverTz: java.util.TimeZone = java.util.TimeZone.getDefault()
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
@@ -75,11 +79,16 @@ object Xtream {
                     num = o.optInt("num", i + 1),
                     name = o.optString("name"),
                     icon = o.optString("stream_icon"),
-                    categoryId = o.optString("category_id")
+                    categoryId = o.optString("category_id"),
+                    archiveDays = if (o.optInt("tv_archive", 0) == 1) o.optInt("tv_archive_duration", 1).coerceAtLeast(1) else 0
                 )
             )
         }
         list.sortBy { it.num }
+        try {
+            val tz = JSONObject(api(p, null)).optJSONObject("server_info")?.optString("timezone").orEmpty()
+            if (tz.isNotEmpty()) serverTz = java.util.TimeZone.getTimeZone(tz)
+        } catch (_: Exception) { }
         categories = cm
         channels = list
         loadedAt = System.currentTimeMillis()
@@ -98,6 +107,40 @@ object Xtream {
             val d = String(Base64.decode(s, Base64.DEFAULT), Charsets.UTF_8)
             if (d.contains('�') || d.any { it.code < 9 }) s else d
         } catch (_: Exception) { s }
+    }
+
+    /**
+     * Volledige gids van één zender, ook wat al geweest is (voor terugkijken).
+     * Valt terug op de korte gids als de server dat niet ondersteunt.
+     */
+    fun fullEpg(p: Prefs, ch: Channel): List<Programme> {
+        val now = System.currentTimeMillis()
+        val from = now - (if (ch.archiveDays > 0) ch.archiveDays.coerceAtMost(3) else 0) * 86_400_000L - 3 * 3600_000L
+        val until = now + 24 * 3600_000L
+        try {
+            val o = JSONObject(api(p, "get_simple_data_table", "&stream_id=${ch.id}"))
+            val a = o.optJSONArray("epg_listings")
+            if (a != null && a.length() > 0) {
+                val out = ArrayList<Programme>()
+                for (i in 0 until a.length()) {
+                    val e = a.getJSONObject(i)
+                    val st = (e.optString("start_timestamp").toLongOrNull() ?: 0L) * 1000
+                    val en = (e.optString("stop_timestamp").toLongOrNull() ?: 0L) * 1000
+                    if (en < from || st > until || st == 0L) continue
+                    val arch = e.optInt("has_archive", 0) == 1 || (ch.archiveDays > 0 && st < now)
+                    out.add(Programme(text(e.optString("title")), text(e.optString("description")), st, en, arch))
+                }
+                if (out.isNotEmpty()) return out.sortedBy { it.start }.distinctBy { it.start }
+            }
+        } catch (_: Exception) { }
+        return shortEpg(p, ch.id, 12)
+    }
+
+    /** Link om een programma terug te kijken (Xtream timeshift), tijd in de tijdzone van de server. */
+    fun timeshiftUrl(p: Prefs, ch: Channel, prog: Programme): String {
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd:HH-mm", java.util.Locale.US).apply { timeZone = serverTz }
+        val minutes = ((prog.end - prog.start) / 60_000L).coerceAtLeast(1)
+        return "${p.server}/timeshift/${enc(p.user)}/${enc(p.pass)}/$minutes/${fmt.format(java.util.Date(prog.start))}/${ch.id}.ts"
     }
 
     /** Wat er nu en straks op een zender is. Wordt bij elke zap opnieuw opgehaald. */
