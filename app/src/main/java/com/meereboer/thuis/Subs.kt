@@ -44,6 +44,10 @@ object Subs {
     }
 
     private fun tmdbId(p: Prefs, item: JSONObject): Int {
+        item.optInt("tmdb").let { if (it > 0) return it }
+        if (item.optString("key").startsWith("plex:")) return try {
+            Tmdb.search(p, if (item.optString("kind") == "series") "tv" else "movie", item.optString("title"))
+        } catch (_: Exception) { 0 }
         // 1. Uit de IPTV-server
         try {
             val series = item.optString("kind") == "series"

@@ -73,7 +73,7 @@ class VodActivity : Activity() {
                 val sub = MediaItem.SubtitleConfiguration.Builder(android.net.Uri.fromFile(f))
                     .setMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage("nl").setLabel("Nederlands (OpenSubtitles)")
                     .setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()
-                p.setMediaItem(MediaItem.Builder().setUri(item.optString("url")).setSubtitleConfigurations(listOf(sub)).build(), pos)
+                p.setMediaItem(mediaItem(listOf(sub)), pos)
                 p.prepare()
                 p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
                 flash("Nederlandse ondertitels geladen")
@@ -83,7 +83,12 @@ class VodActivity : Activity() {
 
     private val hideOsd = Runnable { osd.visibility = View.GONE }
     private val tick = object : Runnable {
-        override fun run() { updateOsd(); ui.postDelayed(this, 1000) }
+        override fun run() {
+            updateOsd()
+            val now = System.currentTimeMillis()
+            if (now - lastReport > 10_000) { lastReport = now; report(if (player?.isPlaying == true) "playing" else "paused") }
+            ui.postDelayed(this, 1000)
+        }
     }
 
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
@@ -150,7 +155,7 @@ class VodActivity : Activity() {
                         center.visibility = View.GONE
                         if (!resumed) {
                             resumed = true
-                            val pos = Vod.position(this@VodActivity, item.optString("key"))
+                            val pos = if (item.has("offsetMs")) item.optLong("offsetMs") else Vod.position(this@VodActivity, item.optString("key"))
                             if (pos > 60_000 && (p.duration <= 0 || pos < p.duration * 0.95)) {
                                 p.seekTo(pos); flash("Verder vanaf ${fmt(pos)}")
                             }
@@ -167,11 +172,43 @@ class VodActivity : Activity() {
         })
         pv.player = p
         player = p
-        p.setMediaItem(MediaItem.fromUri(item.optString("url")))
+        p.setMediaItem(mediaItem(emptyList()))
         p.prepare()
         p.playWhenReady = true
         showOsd()
         ui.post(tick)
+    }
+
+    /** Losse ondertitels uit Plex (bijv. een .nl.srt naast de film) meteen meegeven. */
+    private fun mediaItem(extra: List<MediaItem.SubtitleConfiguration>): MediaItem {
+        val subs = ArrayList<MediaItem.SubtitleConfiguration>()
+        item.optJSONArray("subs")?.let { a ->
+            for (i in 0 until a.length()) a.getJSONObject(i).let { s ->
+                val mime = when (s.optString("codec").lowercase()) {
+                    "srt", "subrip" -> MimeTypes.APPLICATION_SUBRIP
+                    "ass", "ssa" -> MimeTypes.TEXT_SSA
+                    "vtt", "webvtt" -> MimeTypes.TEXT_VTT
+                    else -> null
+                } ?: return@let
+                val nl = s.optString("lang").lowercase() in setOf("nl", "nld", "dut")
+                subs.add(MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(s.optString("url")))
+                    .setMimeType(mime).setLanguage(s.optString("lang")).setLabel(s.optString("label"))
+                    .setSelectionFlags(if (nl) C.SELECTION_FLAG_DEFAULT else 0).build())
+            }
+        }
+        subs.addAll(extra)
+        return MediaItem.Builder().setUri(item.optString("url")).setSubtitleConfigurations(subs).build()
+    }
+
+    // Plex bijhouden waar je bent (elke 10 seconden en bij pauze/stop).
+    private var lastReport = 0L
+    private fun report(state: String) {
+        val k = item.optString("plexKey"); if (k.isEmpty()) return
+        val p = player ?: return
+        val pos = p.currentPosition; val dur = p.duration
+        if (dur <= 0) return
+        val prefs = Prefs(this)
+        Thread { PlexLib.timeline(prefs, k, state, pos, dur) }.start()
     }
 
     private fun fmt(ms: Long): String {
@@ -250,7 +287,9 @@ class VodActivity : Activity() {
 
     private fun save() {
         val p = player ?: return
-        if (p.duration > 0) Vod.save(this, item, p.currentPosition, p.duration)
+        if (p.duration <= 0) return
+        // Plex onthoudt zelf waar je was (en zet het in Verder kijken); IPTV onthoudt Thuis.
+        if (item.optString("plexKey").isNotEmpty()) report("stopped") else Vod.save(this, item, p.currentPosition, p.duration)
     }
 
     override fun onStop() {

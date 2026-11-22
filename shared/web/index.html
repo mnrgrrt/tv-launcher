@@ -189,7 +189,11 @@
       vodCategories: function(kind, cb){ call('vodCategories', cb, kind); },
       vodList: function(kind, cat, cb){ call('vodList', cb, kind, String(cat)); },
       vodInfo: function(kind, id, cb){ call('vodInfo', cb, kind, String(id)); },
-      playVod: function(o){ Native.playVod(JSON.stringify(o)); }
+      playVod: function(o){ Native.playVod(JSON.stringify(o)); },
+      plexSections: function(cb){ call('plexSections', cb); },
+      plexLibrary: function(sec, cb){ call('plexLibrary', cb, String(sec)); },
+      plexShow: function(key, cb){ call('plexShow', cb, String(key)); },
+      plexPlay: function(key){ Native.plexPlay(String(key)); }
     };
   } catch (e) {}
   if (!PL && window.ThuisPlatform) PL = window.ThuisPlatform;
@@ -301,7 +305,8 @@
     state.view = 'series'; state.series = it; state.row = 0; state.col = [];
     data.seasonRows = [{ title: it.t, sub:'afleveringen laden…', items:[{ t:'Laden…', s:'iptv', kind:'Serie', img:it.img, loading:true, meta:[] }] }];
     buildRows();
-    PL.vodInfo('series', it.id, function(ok, payload){
+    var loader = it.plex ? function(cb){ PL.plexShow(it.key, cb); } : function(cb){ PL.vodInfo('series', it.id, cb); };
+    loader(function(ok, payload){
       if (state.view !== 'series' || state.series !== it) return;
       if (!ok) { data.seasonRows[0].sub = 'mislukt: ' + payload; buildRows(); return; }
       var info = JSON.parse(payload);
@@ -310,7 +315,7 @@
       data.seasonRows = info.seasons.map(function(se){
         return { title: 'Seizoen ' + se.season, sub: se.episodes.length + ' afleveringen', items: se.episodes.map(function(e){
           var sub = 'S' + se.season + ' · afl. ' + e.num + (e.title && e.title.indexOf(it.t) < 0 ? ' · ' + e.title : '');
-          return { t: it.t, sub: sub, s:'iptv', kind:'Aflevering', ep:true, season: parseInt(se.season, 10) || 0, id:e.id, ext:e.ext, thumb: e.img || it.icon, img: it.backdrop || e.img || it.icon || 'coast',
+          return { t: it.t, sub: sub, s: it.plex ? 'plex' : 'iptv', kind:'Aflevering', ep:true, plex: !!it.plex, key:e.key, p: e.progress || 0, season: parseInt(se.season, 10) || 0, id:e.id, ext:e.ext, thumb: e.img || it.icon, img: it.backdrop || e.img || it.icon || 'coast',
                    icon: it.icon, meta:[ 'Seizoen ' + se.season, 'Aflevering ' + e.num ].concat(e.dur ? [Math.round(e.dur / 60) + ' min'] : []), d: e.plot || it.d || '', num:e.num };
         }) };
       });
@@ -320,13 +325,14 @@
   }
   function playVodItem(it){
     if (!APP) { toast('Speelt af in de app op de tv'); return; }
+    if (it.plex) { PL.plexPlay(it.key); return; }
     if (it.ep) PL.playVod({ kind:'series', id:it.id, ext:it.ext, title:it.t, sub:it.sub, img:it.thumb, backdrop:state.series ? state.series.backdrop : '', plot:it.d,
                             seriesId: state.series ? state.series.id : '', season: it.season, episode: it.num });
     else PL.playVod({ kind:'movie', id:it.id, ext:it.ext, title:it.t, sub:(it.meta || []).join(' · '), img:it.icon, backdrop:it.backdrop, plot:it.d });
   }
   var infoTimer = null;
   function loadVodInfo(it){
-    if (it.infoDone || it.vodKind !== 'movie' || !APP) return;
+    if (it.infoDone || it.vodKind !== 'movie' || it.plex || !APP) return;
     clearTimeout(infoTimer);
     infoTimer = setTimeout(function(){
       it.infoDone = true;
@@ -446,11 +452,39 @@
   }
   function viaJbl(sv){ return !!sv.jbl && (sv.forceJbl || !localApp(sv)); }
   function svcItems(){
-    return SERVICES.map(function(sv, i){
+    var libs = (data.plexSecs || []).map(function(sc){
+      return { t: sc.type === 'show' ? 'Mijn series' : (/^films?$/i.test(sc.title) ? 'Mijn films' : sc.title), s:'svc', key:'lib', lib:sc.key, libType:sc.type,
+               color:'#E5A00D', logo:'', img: sc.type === 'show' ? 'coast' : 'neon', kind:'Bibliotheek', meta:['Plex · ' + sc.title], d:'', jbl:false };
+    });
+    return libs.concat(SERVICES.map(function(sv, i){
       var top = data.svcBd[sv.key];
       return { t:sv.name, s:'svc', key:sv.key, color:sv.color, logo: sv.logo ? TMDB_IMG + 'w154' + sv.logo : '',
                img: top ? top.backdrop : IMGS[i % IMGS.length], kind:'Streamingdienst',
                meta: top ? ['Populair nu: ' + top.title] : [], d: top ? top.overview : '', jbl: viaJbl(sv) };
+    }));
+  }
+  function loadPlexSections(){
+    if (!APP || !PL.plexSections) return;
+    PL.plexSections(function(ok, payload){ if (!ok) return; data.plexSecs = JSON.parse(payload); if (state.view === 'home') buildRows(); });
+  }
+  function mapPlex(o){
+    var meta = []; if (o.year) meta.push(o.year); if (o.rating) meta.push('★ ' + (Math.round(o.rating * 10) / 10)); if (o.minutes) meta.push(o.minutes + ' min');
+    var vk = o.type === 'show' ? 'series' : o.type === 'episode' ? 'episode' : 'movie';
+    return { t:o.title, sub:o.sub, s:'plex', kind: vk === 'series' ? 'Serie' : vk === 'episode' ? 'Aflevering' : 'Film', vodKind:vk, plex:true, key:o.key,
+             thumb:o.thumb, icon:o.thumb, img:o.art || o.thumb || 'neon', backdrop:o.art, meta:meta, d:o.summary || '', p:o.progress || 0, vodItem:true };
+  }
+  function openPlexLib(it){
+    state.home = { row: state.row, col: state.col.slice() };
+    state.view = 'vod'; state.vod = { source:'plex', title: it.t }; state.row = 0; state.col = []; state.nav = false;
+    data.vodRows = [{ title: it.t, sub:'laden…', items:[{ t:'Laden…', s:'plex', kind:it.t, img:it.img, loading:true, meta:[] }] }];
+    buildRows();
+    PL.plexLibrary(it.lib, function(ok, payload){
+      if (state.view !== 'vod') return;
+      if (!ok) { data.vodRows[0].sub = 'mislukt: ' + payload; buildRows(); return; }
+      var res = JSON.parse(payload);
+      data.vodRows = res.rows.map(function(r){ return { title:r.title, sub: r.total ? (r.total > r.items.length ? r.total + ' titels · nieuwste ' + r.items.length : r.total + ' titels') : '', items:r.items.map(mapPlex) }; });
+      if (!data.vodRows.length) data.vodRows = [{ title: it.t, sub:'leeg', items:[{ t:'Leeg', s:'plex', kind:'', img:'neon', loading:true, meta:[] }] }];
+      buildRows();
     });
   }
   function openService(key, recentItem){
@@ -490,6 +524,7 @@
       b.className = 'card poster';
       if (it.thumb) b.style.backgroundImage = 'url(' + it.thumb + ')';
       else { var pt = document.createElement('span'); pt.className = 'pt'; pt.textContent = it.t; b.appendChild(pt); }
+      if (it.p > 0.02) { b.insertAdjacentHTML('beforeend','<span class="prog" style="left:10px;right:10px"><span></span></span>'); b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%'; }
     } else if (r.type === 'app') {
       if (it.banner) {
         b.style.backgroundImage = 'url(' + it.banner + ')';
@@ -565,6 +600,19 @@
       setBackdrop(it.img);
       return;
     }
+    if (type === 'svc' && it.lib) {
+      var sl = $('hSrc'); sl.innerHTML = '';
+      var dl = document.createElement('i'); dl.style.background = '#E5A00D'; sl.appendChild(dl);
+      sl.appendChild(document.createTextNode('Jouw bibliotheek · Plex'));
+      $('hTitle').textContent = it.t;
+      $('hMeta').innerHTML = '';
+      $('hDesc').textContent = it.libType === 'show' ? 'Je eigen series per genre, met seizoenen en afleveringen. Plex onthoudt waar je was.' : 'Je eigen films per genre, met Verder kijken en Nieuw toegevoegd. Afspelen in Thuis, met ondertitels.';
+      var cl = $('hCta'); cl.innerHTML = '';
+      var kl = document.createElement('b'); kl.textContent = 'OK'; cl.appendChild(kl);
+      var ll = document.createElement('span'); ll.textContent = 'Bladeren'; cl.appendChild(ll);
+      setBackdrop(it.img);
+      return;
+    }
     if (type === 'svc' || type === 'pick' || (type === 'cont' && it.service)) {
       var sv = SVC[type === 'svc' ? it.key : it.service] || { name:'', color:'#999' };
       var s0 = $('hSrc'); s0.innerHTML = '';
@@ -582,8 +630,8 @@
     }
     if ((type === 'vod' || type === 'ep') && !it.loading) {
       var sv2 = $('hSrc'); sv2.innerHTML = '';
-      var dv = document.createElement('i'); dv.style.background = SRC.iptv.c; sv2.appendChild(dv);
-      sv2.appendChild(document.createTextNode('IPTV · ' + (type === 'ep' ? 'Serie · ' + (it.sub || '') : it.kind + (it.catName ? ' · ' + it.catName : ''))));
+      var dv = document.createElement('i'); dv.style.background = it.plex ? '#E5A00D' : SRC.iptv.c; sv2.appendChild(dv);
+      sv2.appendChild(document.createTextNode((it.plex ? 'Plex · ' : 'IPTV · ') + (type === 'ep' ? 'Serie · ' + (it.sub || '') : it.kind + (it.sub ? ' · ' + it.sub : it.catName ? ' · ' + it.catName : ''))));
       $('hTitle').textContent = it.t;
       var mv = $('hMeta'); mv.innerHTML = '';
       (it.meta || []).forEach(function(x){ if (!x) return; if (mv.children.length) { var sp = document.createElement('span'); sp.className = 'sep'; mv.appendChild(sp); } var e = document.createElement('span'); e.textContent = x; mv.appendChild(e); });
@@ -591,7 +639,8 @@
       var cv = $('hCta'); cv.innerHTML = '';
       var kv = document.createElement('b'); kv.textContent = 'OK'; cv.appendChild(kv);
       var lv = document.createElement('span'); lv.textContent = it.vodKind === 'series' ? 'Bekijk afleveringen' : 'Afspelen'; cv.appendChild(lv);
-      var gv = document.createElement('span'); gv.style.color = 'var(--ink-3)'; gv.textContent = 'groen = geluid · geel = ondertitels'; if (it.vodKind !== 'series') cv.appendChild(gv);
+      var gv = document.createElement('span'); gv.style.color = 'var(--ink-3)'; gv.textContent = 'groen = geluid · geel = ondertitels'; if (it.p > 0.02) { var bv = document.createElement('span'); bv.className = 'bar'; bv.innerHTML = '<span></span>'; bv.firstChild.style.width = Math.round(it.p * 100) + '%'; cv.appendChild(bv); }
+      if (it.vodKind !== 'series') cv.appendChild(gv);
       setBackdrop(it.img);
       loadVodInfo(it);
       return;
@@ -677,6 +726,7 @@
     if (it.ep) { playVodItem(it); return; }
     if (it.cat) { openCategory(it); return; }
     if (it.media) { if (APP && PL.openMedia) PL.openMedia(it.media, it.key); else toast('Opent in ' + it.media); return; }
+    if (r.type === 'svc' && it.lib) { if (APP) openPlexLib(it); else toast('Werkt in de app op de tv'); return; }
     if (r.type === 'svc') { openService(it.key); return; }
     if (r.type === 'pick' || (r.type === 'cont' && it.service)) { openService(it.service, it); return; }
     if (r.type === 'live') { if (APP && it.streamId) PL.play(it.streamId, it.catId); else toast('Live: ' + it.ch + ' · ' + it.t); }
@@ -795,7 +845,7 @@
     });
   }
 
-  window.__resume = function(){ loadContinue(); loadLive(); loadApps(); data.recent = loadRecent(); };
+  window.__resume = function(){ loadPlexSections(); loadContinue(); loadLive(); loadApps(); data.recent = loadRecent(); };
   window.__back = function(){
     if (!$('settings').hidden) { settingsBack(); return; }
     if (state.view === 'series') { state.view = 'vod'; state.series = null; if (state.vodPos) { state.row = state.vodPos.row; state.col = state.vodPos.col; } buildRows(); return; }
@@ -905,7 +955,7 @@
 
   buildRows();
   if (APP) {
-    loadLive(); loadApps(); loadStreaming(); loadContinue();
+    loadLive(); loadApps(); loadStreaming(); loadContinue(); loadPlexSections();
     setInterval(loadLive, 5 * 60 * 1000);
     setInterval(loadStreaming, 3 * 3600 * 1000);
     setTimeout(function(){ checkUpdate(true); }, 4000);

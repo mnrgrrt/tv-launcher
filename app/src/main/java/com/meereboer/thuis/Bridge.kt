@@ -146,6 +146,19 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
 
     @JavascriptInterface fun continueWatching(id: Int) = async(id) { Media.continueWatching(act, prefs) }
 
+    // ---------- eigen Plex-bibliotheek ----------
+    @JavascriptInterface fun plexSections(id: Int) = async(id) { PlexLib.sections(prefs) }
+    @JavascriptInterface fun plexLibrary(id: Int, section: String) = async(id) { PlexLib.library(prefs, section) }
+    @JavascriptInterface fun plexShow(id: Int, key: String) = async(id) { PlexLib.show(prefs, key) }
+    @JavascriptInterface fun plexPlay(key: String) {
+        pool.execute {
+            try {
+                val item = PlexLib.playItem(prefs, key)
+                act.runOnUiThread { act.startActivity(android.content.Intent(act, VodActivity::class.java).putExtra("item", item.toString())) }
+            } catch (_: Exception) { act.runOnUiThread { Media.openPlex(act, key) } }
+        }
+    }
+
     // ---------- films en series (IPTV) ----------
     @JavascriptInterface fun vodCategories(id: Int, kind: String) = async(id) { Vod.categories(prefs, kind) }
     @JavascriptInterface fun vodList(id: Int, kind: String, cat: String) = async(id) { Vod.list(prefs, kind, cat, 40) }
@@ -167,7 +180,7 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         }
         when (source) {
             "jbl" -> pool.execute { try { Media.openJbl(prefs, key) } catch (_: Exception) { } }
-            "plex" -> act.runOnUiThread { Media.openPlex(act, key) }
+            "plex" -> plexPlay(key)
             else -> act.runOnUiThread { Media.openJellyfin(act) }
         }
     }
