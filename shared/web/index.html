@@ -237,7 +237,7 @@
   // Vaste tegel voor Ziggo GO vooraan in "Nu live" (handig als de ene IPTV-stream al in gebruik is).
   function composeLive(){
     var list = (data.cats || data.channels).slice();
-    if (data.ziggo) list.unshift({ t:'Ziggo GO', ch:'Ziggo GO', s:'ziggo', kind:'App', img:'city', meta:['Live tv en terugkijken van Ziggo'], p:0,
+    if (data.ziggo) list.unshift({ t:'Ziggo GO', ch:'Ziggo GO', s:'ziggo', kind:'App', img:'ocean', meta:['Live tv en terugkijken van Ziggo'], p:0,
       d:'Opent de app van Ziggo. Gebruik deze als de IPTV-stream al ergens anders speelt, of voor terugkijken van Ziggo.', app:true, pkg:data.ziggo });
     data.live = list;
   }

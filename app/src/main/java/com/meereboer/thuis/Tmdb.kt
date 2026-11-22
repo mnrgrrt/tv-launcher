@@ -18,8 +18,12 @@ object Tmdb {
     @Volatile private var cache: Pair<Long, String>? = null
 
     private fun get(token: String, path: String): JSONObject {
-        val req = Request.Builder().url(API + path)
-            .header("Authorization", "Bearer $token").header("accept", "application/json").build()
+        // Korte v3-sleutel (32 tekens) gaat als api_key mee, de lange v4-sleutel als Bearer.
+        val v3 = token.length <= 40 && !token.contains(".")
+        val url = if (v3) API + path + (if (path.contains("?")) "&" else "?") + "api_key=$token" else API + path
+        val b = Request.Builder().url(url).header("accept", "application/json")
+        if (!v3) b.header("Authorization", "Bearer $token")
+        val req = b.build()
         Xtream.http.newCall(req).execute().use { r ->
             if (!r.isSuccessful) throw RuntimeException("TMDB gaf fout ${r.code}")
             return JSONObject(r.body?.string() ?: "{}")
