@@ -134,6 +134,10 @@
       <div class="field">Streamformaat<button class="btn" id="sFormat" type="button">ts</button></div>
       <label class="field">Categorieën<input id="sGroup" placeholder="leeg = alle, of bijv. sport, docu" autocomplete="off" spellcheck="false"></label>
       <label class="field">TMDB-sleutel<input id="sTmdb" placeholder="voor de rij Voor jou" autocomplete="off" spellcheck="false"></label>
+      <label class="field">Plex-adres<input id="sPlexUrl" placeholder="http://192.168.x.x:32400" autocomplete="off" spellcheck="false"></label>
+      <label class="field">Plex-token<input id="sPlexTok" type="password" autocomplete="off"></label>
+      <label class="field">Jellyfin-adres<input id="sJfUrl" placeholder="http://192.168.x.x:8096" autocomplete="off" spellcheck="false"></label>
+      <label class="field">Jellyfin-sleutel<input id="sJfKey" type="password" autocomplete="off"></label>
       <label class="field">JBL-webhook<input id="sJbl" placeholder="Home Assistant-webhook (optioneel)" autocomplete="off" spellcheck="false"></label>
       <div class="btns">
         <button class="btn" id="sTest" type="button">Verbinding testen</button>
@@ -173,6 +177,8 @@
       systemSettings: function(){ Native.openAndroidSettings(); },
       checkUpdate: function(cb){ call('checkUpdate', cb); },
       streamingHome: function(cb){ call('streamingHome', cb); },
+      continueWatching: function(cb){ call('continueWatching', cb); },
+      openMedia: function(src, key){ Native.openMedia(src, key); },
       jbl: function(pkg, cb){ call('jblLaunch', cb, pkg); },
       installUpdate: function(cb){ call('installUpdate', cb); }
     };
@@ -223,6 +229,7 @@
                rec: SAMPLE_REC, apps: SAMPLE_APPS, liveSub: 'Dispatcharr', ziggo: null };
   data.channels = data.live;
   data.recent = loadRecent();
+  data.media = [];
   data.picks = [];
   data.svcBd = {};
   if (!APP) { data.cats = SAMPLE_CATS; data.picks = SAMPLE_REC.map(function(x){ var y = {}; for (var k in x) y[k] = x[k]; y.s = 'pick'; y.service = x.s === 'sky' ? 'skyshowtime' : x.s; return y; }); }
@@ -295,7 +302,8 @@
       return arows;
     }
     var home = [];
-    if (data.recent.length) home.push({ title:'Verder kijken', sub:'laatst geopend', type:'cont', items:data.recent });
+    var cont = (data.media || []).concat(data.recent);
+    if (cont.length) home.push({ title:'Verder kijken', sub: (data.media && data.media.length) ? 'Plex · Jellyfin · laatst geopend' : 'laatst geopend', type:'cont', items:cont });
     home.push({ title:'Live tv', sub:data.liveSub, type:'live', items:data.live });
     home.push({ title:'Streamingdiensten', sub:'', type:'svc', items:svcItems() });
     if (data.picks.length) home.push({ title:'Voor jou', sub:'populair op jouw diensten', type:'pick', items:data.picks });
@@ -393,7 +401,7 @@
         var now = document.createElement('span'); now.className = 'now'; now.textContent = it.app ? 'Live tv en terugkijken' : (it.cat ? it.count + ' zenders' : it.t); b.appendChild(now);
         if (it.p > 0) { b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>'); b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%'; }
       } else {
-        var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = it.service && SVC[it.service] ? SVC[it.service].name : (SRC[it.s] ? SRC[it.s].n : ''); b.appendChild(bd);
+        var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = it.media ? (it.media === 'plex' ? 'Plex' : 'Jellyfin') : (it.service && SVC[it.service] ? SVC[it.service].name : (SRC[it.s] ? SRC[it.s].n : '')); b.appendChild(bd);
         if (it.p > 0) {
           b.insertAdjacentHTML('beforeend','<span class="prog"><span></span></span>');
           b.querySelector('.prog>span').style.width = Math.round(it.p*100)+'%';
@@ -426,6 +434,21 @@
   // ---------- hero ----------
   function hero(it, type){
     var src = SRC[it.s] || SRC.app;
+    if (type === 'cont' && it.media) {
+      var sm = $('hSrc'); sm.innerHTML = '';
+      var dm = document.createElement('i'); dm.style.background = it.media === 'plex' ? '#E5A00D' : '#AA5CC3'; sm.appendChild(dm);
+      sm.appendChild(document.createTextNode((it.media === 'plex' ? 'Plex' : 'Jellyfin') + ' · verder kijken'));
+      $('hTitle').textContent = it.t;
+      var mm = $('hMeta'); mm.innerHTML = ''; var me = document.createElement('span'); me.textContent = it.sub || ''; mm.appendChild(me);
+      $('hDesc').textContent = it.d || '';
+      var cm = $('hCta'); cm.innerHTML = '';
+      var km = document.createElement('b'); km.textContent = 'OK'; cm.appendChild(km);
+      var lm = document.createElement('span'); lm.textContent = 'Verder kijken in ' + (it.media === 'plex' ? 'Plex' : 'Jellyfin'); cm.appendChild(lm);
+      if (it.p > 0) { var bm = document.createElement('span'); bm.className = 'bar'; bm.innerHTML = '<span></span>'; bm.firstChild.style.width = Math.round(it.p * 100) + '%'; cm.appendChild(bm); }
+      if (it.left > 0) { var tm = document.createElement('span'); tm.style.color = 'var(--ink-3)'; tm.textContent = 'nog ' + it.left + ' min'; cm.appendChild(tm); }
+      setBackdrop(it.img);
+      return;
+    }
     if (type === 'svc' || type === 'pick' || (type === 'cont' && it.service)) {
       var sv = SVC[type === 'svc' ? it.key : it.service] || { name:'', color:'#999' };
       var s0 = $('hSrc'); s0.innerHTML = '';
@@ -518,6 +541,7 @@
     if (it.loading) return;
     if (it.app && it.pkg) { if (APP) PL.launch(it.pkg); else toast('Ziggo GO wordt geopend'); return; }
     if (it.cat) { openCategory(it); return; }
+    if (it.media) { if (APP && PL.openMedia) PL.openMedia(it.media, it.key); else toast('Opent in ' + it.media); return; }
     if (r.type === 'svc') { openService(it.key); return; }
     if (r.type === 'pick' || (r.type === 'cont' && it.service)) { openService(it.service, it); return; }
     if (r.type === 'live') { if (APP && it.streamId) PL.play(it.streamId, it.catId); else toast('Live: ' + it.ch + ' · ' + it.t); }
@@ -623,7 +647,20 @@
     });
   }
 
-  window.__resume = function(){ loadLive(); loadApps(); data.recent = loadRecent(); };
+  function loadContinue(){
+    if (!APP || !PL.continueWatching) return;
+    PL.continueWatching(function(ok, payload){
+      if (!ok) return;
+      var res = JSON.parse(payload);
+      data.media = (res.items || []).map(function(m){
+        return { t:m.title, s:'cont', media:m.source, key:m.key, sub:m.sub, d:m.overview, img:m.backdrop, thumb:m.thumb,
+                 p:m.progress || 0, left:m.left, kind:'Verder kijken' };
+      });
+      if (state.view === 'home') buildRows();
+    });
+  }
+
+  window.__resume = function(){ loadContinue(); loadLive(); loadApps(); data.recent = loadRecent(); };
   window.__back = function(){
     if (!$('settings').hidden) { settingsBack(); return; }
     if (state.view !== 'home') { closeCategory(); return; }
@@ -631,7 +668,7 @@
   };
 
   // ---------- instellingen ----------
-  var sItems = ['sServer','sUser','sPass','sFormat','sGroup','sTmdb','sJbl','sTest','sSave','sClose','sAndroid','sUpdate'];
+  var sItems = ['sServer','sUser','sPass','sFormat','sGroup','sTmdb','sPlexUrl','sPlexTok','sJfUrl','sJfKey','sJbl','sTest','sSave','sClose','sAndroid','sUpdate'];
   var update = null;
   function checkUpdate(silent){
     if (!APP || !PL.checkUpdate) return;
@@ -650,7 +687,7 @@
     var cfg = { server:'', user:'', pass:'', format:'ts', categories:'' };
     if (APP) { try { cfg = PL.getSettings(); } catch (e) {} }
     $('sServer').value = cfg.server || ''; $('sUser').value = cfg.user || ''; $('sPass').value = cfg.pass || '';
-    $('sFormat').textContent = cfg.format || 'ts'; $('sGroup').value = cfg.categories || ''; $('sTmdb').value = cfg.tmdbToken || ''; $('sJbl').value = cfg.jblWebhook || '';
+    $('sFormat').textContent = cfg.format || 'ts'; $('sGroup').value = cfg.categories || ''; $('sTmdb').value = cfg.tmdbToken || ''; $('sJbl').value = cfg.jblWebhook || ''; $('sPlexUrl').value = cfg.plexUrl || ''; $('sPlexTok').value = cfg.plexToken || ''; $('sJfUrl').value = cfg.jellyfinUrl || ''; $('sJfKey').value = cfg.jellyfinKey || '';
     $('sStatus').textContent = '';
     $('settings').hidden = false; state.nav = false; sIdx = 0; sRender();
     checkUpdate(false);
@@ -658,7 +695,7 @@
   function closeSettings(){ $('settings').hidden = true; if (document.activeElement) document.activeElement.blur(); render(); }
   function editing(){ var a = document.activeElement; return a && a.tagName === 'INPUT'; }
   function settingsBack(){ if (editing()) document.activeElement.blur(); else closeSettings(); }
-  function collect(){ return { server:$('sServer').value, user:$('sUser').value, pass:$('sPass').value, format:$('sFormat').textContent, categories:$('sGroup').value, tmdbToken:$('sTmdb').value, jblWebhook:$('sJbl').value }; }
+  function collect(){ return { server:$('sServer').value, user:$('sUser').value, pass:$('sPass').value, format:$('sFormat').textContent, categories:$('sGroup').value, tmdbToken:$('sTmdb').value, jblWebhook:$('sJbl').value, plexUrl:$('sPlexUrl').value, plexToken:$('sPlexTok').value, jellyfinUrl:$('sJfUrl').value, jellyfinKey:$('sJfKey').value }; }
   function sActivate(){
     var id = sItems[sIdx], el = $(id);
     if (el.tagName === 'INPUT') { el.focus(); return; }
@@ -678,7 +715,7 @@
     }
     if (!APP) { $('sStatus').textContent = 'Dit werkt alleen in de app op de tv.'; return; }
     PL.saveSettings(collect());
-    if (id === 'sSave') { closeSettings(); toast('Opgeslagen'); loadLive(); loadStreaming(); return; }
+    if (id === 'sSave') { closeSettings(); toast('Opgeslagen'); loadLive(); loadStreaming(); loadContinue(); return; }
     $('sStatus').textContent = 'Verbinden…';
     PL.test(function(ok, payload){
       if (!ok) { $('sStatus').textContent = 'Mislukt: ' + payload; return; }
@@ -732,7 +769,7 @@
 
   buildRows();
   if (APP) {
-    loadLive(); loadApps(); loadStreaming();
+    loadLive(); loadApps(); loadStreaming(); loadContinue();
     setInterval(loadLive, 5 * 60 * 1000);
     setInterval(loadStreaming, 3 * 3600 * 1000);
     setTimeout(function(){ checkUpdate(true); }, 4000);

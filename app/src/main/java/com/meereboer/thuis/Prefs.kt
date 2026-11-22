@@ -31,6 +31,18 @@ class Prefs(ctx: Context) {
     var jblWebhook: String
         get() = sp.getString("jblWebhook", "") ?: ""
         set(v) = sp.edit().putString("jblWebhook", v.trim()).apply()
+    var plexUrl: String
+        get() = sp.getString("plexUrl", "") ?: ""
+        set(v) = sp.edit().putString("plexUrl", v.trim().trimEnd('/')).apply()
+    var plexToken: String
+        get() = sp.getString("plexToken", "") ?: ""
+        set(v) = sp.edit().putString("plexToken", v.trim()).apply()
+    var jellyfinUrl: String
+        get() = sp.getString("jellyfinUrl", "") ?: ""
+        set(v) = sp.edit().putString("jellyfinUrl", v.trim().trimEnd('/')).apply()
+    var jellyfinKey: String
+        get() = sp.getString("jellyfinKey", "") ?: ""
+        set(v) = sp.edit().putString("jellyfinKey", v.trim()).apply()
     var lastChannel: Int
         get() = sp.getInt("lastChannel", -1)
         set(v) = sp.edit().putInt("lastChannel", v).apply()
@@ -41,6 +53,7 @@ class Prefs(ctx: Context) {
         .put("server", server).put("user", user).put("pass", pass)
         .put("format", format).put("categories", categories)
         .put("tmdbToken", tmdbToken).put("jblWebhook", jblWebhook)
+        .put("plexUrl", plexUrl).put("plexToken", plexToken).put("jellyfinUrl", jellyfinUrl).put("jellyfinKey", jellyfinKey)
         .put("configured", configured)
 
     fun fromJson(o: JSONObject) {
@@ -51,5 +64,9 @@ class Prefs(ctx: Context) {
         categories = o.optString("categories")
         if (o.has("tmdbToken")) tmdbToken = o.optString("tmdbToken")
         if (o.has("jblWebhook")) jblWebhook = o.optString("jblWebhook")
+        if (o.has("plexUrl")) plexUrl = o.optString("plexUrl")
+        if (o.has("plexToken")) plexToken = o.optString("plexToken")
+        if (o.has("jellyfinUrl")) jellyfinUrl = o.optString("jellyfinUrl")
+        if (o.has("jellyfinKey")) jellyfinKey = o.optString("jellyfinKey")
     }
 }

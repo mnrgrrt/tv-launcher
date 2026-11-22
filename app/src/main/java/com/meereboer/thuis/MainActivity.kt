@@ -55,12 +55,16 @@ class MainActivity : Activity() {
         val p = Prefs(this)
         e.getString("tmdbToken")?.let { p.tmdbToken = it }
         e.getString("jblWebhook")?.let { p.jblWebhook = it }
+        e.getString("plexUrl")?.let { p.plexUrl = it }
+        e.getString("plexToken")?.let { p.plexToken = it }
+        e.getString("jellyfinUrl")?.let { p.jellyfinUrl = it }
+        e.getString("jellyfinKey")?.let { p.jellyfinKey = it }
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         applyExtras(intent)
-        if (intent?.extras?.containsKey("tmdbToken") == true && ::web.isInitialized) web.reload()
+        if (intent?.extras?.isEmpty == false && ::web.isInitialized) web.reload()
     }
 
     @Suppress("DEPRECATION")
