@@ -22,28 +22,45 @@ export function item(o, key) {
     poster: o.poster_path ? TIMG + 'w342' + o.poster_path : '', service: key };
 }
 
-/** Voor jou + achtergrond per dienst; alleen inbegrepen in een abonnement, geen kinderprogramma's. */
-export function home() {
-  if (!S('tmdbToken')) return Promise.resolve({ configured: false });
-  return cached('tmdb:home', 6 * 3600e3, async () => {
-    const list = services().filter(s => s.provider > 0 && s.key !== 'plex');
-    const disc = (type, p) => tmdb(`/discover/${type}?watch_region=NL&with_watch_providers=${p}&with_watch_monetization_types=flatrate&sort_by=popularity.desc&language=nl-NL&page=1&include_adult=false` +
+/** Populair bij één dienst (NL, in het abonnement), zonder kinderprogramma's. type = 'tv' of 'movie'. */
+export function byService(type, provider) {
+  return cached(`tmdb:svc:${type}:${provider}`, 6 * 3600e3, () =>
+    tmdb(`/discover/${type}?watch_region=NL&with_watch_providers=${provider}&with_watch_monetization_types=flatrate&sort_by=popularity.desc&language=nl-NL&page=1&include_adult=false` +
       (type === 'tv' ? '&without_genres=10762,10751' : '&without_genres=10751,16'))
-      .then(o => (o.results || []).filter(x => x.backdrop_path).map(x => ({ ...x, _type: type }))).catch(() => []);
-    const per = (await pool(list, 4, async s => {
-      const [tv, mv] = await Promise.all([disc('tv', s.provider), disc('movie', s.provider)]);
-      return [s.key, [...tv.slice(0, 4), ...mv.slice(0, 2)].map(x => item(x, s.key))];
-    })).filter(Boolean);
-    const svc = {}, picks = [], seen = new Set();
-    per.forEach(([k, l]) => { if (l[0]) svc[k] = l[0]; });
-    for (let r = 0; r < 6 && picks.length < 14; r++) per.forEach(([, l]) => { const it = l[r]; if (it && !seen.has(it.id) && picks.length < 14) { seen.add(it.id); picks.push(it); } });
-    return { configured: true, services: svc, picks };
-  });
+      .then(o => (o.results || []).filter(x => x.backdrop_path || x.poster_path).map(x => item({ ...x, _type: type }, ''))));
+}
+const streamingServices = () => services().filter(s => s.provider > 0 && s.key !== 'plex');
+
+/** Voor jou: om en om van de gekozen diensten (of alle diensten als er niets gekozen is). */
+export async function home(keys) {
+  if (!S('tmdbToken')) return { configured: false };
+  const list = streamingServices().filter(s => !keys || !keys.length || keys.includes(s.key));
+  const per = (await pool(list, 4, async s => {
+    const [tv, mv] = await Promise.all([byService('tv', s.provider).catch(() => []), byService('movie', s.provider).catch(() => [])]);
+    return [s.key, [...tv.filter(x => x.backdrop).slice(0, 4), ...mv.filter(x => x.backdrop).slice(0, 2)].map(x => ({ ...x, service: s.key }))];
+  })).filter(Boolean);
+  const picks = [], seen = new Set();
+  for (let r = 0; r < 6 && picks.length < 14; r++) per.forEach(([, l]) => { const it = l[r]; if (it && !seen.has(it.id) && picks.length < 14) { seen.add(it.id); picks.push(it); } });
+  return { configured: true, picks };
+}
+
+/** Rijen per dienst voor de pagina Films of Series. */
+export async function serviceRows(type, keys) {
+  if (!S('tmdbToken')) return [];
+  const list = streamingServices().filter(s => keys.includes(s.key));
+  return (await pool(list, 4, async s => ({ service: s.key, name: s.name, items: (await byService(type, s.provider)).map(x => ({ ...x, service: s.key })) })))
+    .filter(r => r && r.items.length);
+}
+
+/** Genres van één titel (Engelse namen, die vertalen we zelf). Voor IPTV-titels zonder genre. */
+export async function genresOf(type, id) {
+  const d = await tmdb(`/${type}/${id}?language=en-US`);
+  return (d.genres || []).map(g => g.name);
 }
 
 /** Bij welke van jouw diensten (NL, abonnement) staat dit? */
 export async function providers(type, id) {
-  const byProvider = new Map(services().filter(s => s.provider > 0 && s.key !== 'plex').map(s => [s.provider, s.key]));
+  const byProvider = new Map(streamingServices().map(s => [s.provider, s.key]));
   const r = await tmdb(`/${type}/${id}/watch/providers`).catch(() => null);
   const flat = r?.results?.NL?.flatrate || [];
   return flat.map(p => byProvider.get(p.provider_id)).filter(Boolean);

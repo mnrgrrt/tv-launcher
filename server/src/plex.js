@@ -5,9 +5,9 @@ import { sign } from './auth.js';
 
 const CLIENT = 'tv-serverr';
 export const on = () => !!(S('plexUrl') && S('plexToken'));
-async function get(path, token) {
+async function get(path, method = 'GET') {
   const sep = path.includes('?') ? '&' : '?';
-  const o = await json(`${S('plexUrl')}${path}${sep}X-Plex-Token=${enc(token || S('plexToken'))}`, {
+  const o = await json(`${S('plexUrl')}${path}${sep}X-Plex-Token=${enc(S('plexToken'))}`, { method,
     headers: { Accept: 'application/json', 'X-Plex-Client-Identifier': CLIENT, 'X-Plex-Product': 'Thuis', 'X-Plex-Device-Name': 'tv-serverr' }, what: 'Plex' });
   return (o && o.MediaContainer) || {};
 }
@@ -24,7 +24,7 @@ export const GENRE = { action: 'Actie', actie: 'Actie', adventure: 'Avontuur', a
   musical: 'Muziek', mystery: 'Mysterie', mysterie: 'Mysterie', romance: 'Romantiek', romantiek: 'Romantiek', 'science fiction': 'Sciencefiction',
   'sci-fi': 'Sciencefiction', sciencefiction: 'Sciencefiction', 'sci-fi & fantasy': 'Sciencefiction', thriller: 'Thriller', suspense: 'Thriller',
   war: 'Oorlog', oorlog: 'Oorlog', 'war & politics': 'Oorlog', western: 'Western', sport: 'Sport', reality: 'Reality', 'martial arts': 'Actie',
-  'tv film': '', 'tv movie': '' };
+  'action & adventure': 'Actie', soap: 'Drama', geschiedenis: 'Historisch', 'tv film': '', 'tv movie': '', news: '', talk: '' };
 export const KIDS = new Set(['Animatie', 'Familie']);
 export const genreName = raw => (Object.prototype.hasOwnProperty.call(GENRE, raw.toLowerCase()) ? GENRE[raw.toLowerCase()] : raw);
 
@@ -33,7 +33,7 @@ const tmdbOf = m => { for (const g of m?.Guid || []) if (/^tmdb:\/\//.test(g.id)
 export function item(m) {
   const ep = m.type === 'episode', dur = m.duration || 0, off = m.viewOffset || 0;
   return { key: String(m.ratingKey), source: 'plex', type: m.type, title: ep ? m.grandparentTitle : m.title,
-    sub: ep ? `S${m.parentIndex} · afl. ${m.index} · ${m.title}` : '', year: String(m.year || ''),
+    sub: ep ? `S${m.parentIndex} · afl. ${m.index} · ${m.title}` : '', show: ep ? String(m.grandparentRatingKey || '') : '', year: String(m.year || ''),
     rating: m.audienceRating || m.rating || 0, summary: m.summary || '', tmdb: tmdbOf(m),
     thumb: img(ep ? (m.grandparentThumb || m.thumb) : m.thumb, 300, 450),
     art: img((ep ? m.grandparentArt : '') || m.art, 1280, 720),
@@ -46,22 +46,6 @@ export async function sections() {
   return (c.Directory || []).filter(d => d.type === 'movie' || d.type === 'show').map(d => ({ key: String(d.key), title: d.title, type: d.type }));
 }
 export async function all(section) { return (await get(`/library/sections/${section}/all?sort=addedAt:desc&includeGuids=1`)).Metadata || []; }
-
-export async function library(section) {
-  const [items, deck] = await Promise.all([all(section), get(`/library/sections/${section}/onDeck`).then(c => c.Metadata || []).catch(() => [])]);
-  const rows = [];
-  if (deck.length) rows.push({ title: 'Verder kijken', items: deck.slice(0, 20).map(item) });
-  if (items.length) rows.push({ title: 'Nieuw toegevoegd', total: items.length, items: items.slice(0, 40).map(item) });
-  const by = {};
-  for (const m of items) {
-    const names = new Set((m.Genre || []).map(g => genreName(g.tag || '')).filter(Boolean));
-    names.forEach(n => (by[n] = by[n] || []).push(m));
-  }
-  Object.keys(by).filter(n => by[n].length >= 3)
-    .sort((a, b) => (KIDS.has(a) - KIDS.has(b)) || by[b].length - by[a].length)
-    .forEach(n => rows.push({ title: n, total: by[n].length, items: by[n].slice(0, 40).map(item) }));
-  return { total: items.length, rows };
-}
 
 export async function show(key) {
   const [meta, leaves] = await Promise.all([get(`/library/metadata/${key}`), get(`/library/metadata/${key}/allLeaves`)]);
@@ -97,21 +81,11 @@ export function timeline(key, state, pos, dur) {
   if (state === 'stopped' && dur > 0 && pos > dur * 0.9) get(`/:/scrobble?identifier=com.plexapp.plugins.library&key=${key}`).catch(() => {});
 }
 
+/** Uit "Verder kijken" van Plex halen. */
+export function removeFromDeck(key) { if (on()) get(`/actions/removeFromContinueWatching?ratingKey=${enc(key)}`, 'PUT').catch(() => {}); }
+
 export async function deck() {
   if (!on()) return [];
   const c = await get('/library/onDeck?X-Plex-Container-Size=20');
   return (c.Metadata || []).filter(x => x.type === 'movie' || x.type === 'episode').map(item);
-}
-
-export async function search(q) {
-  if (!on()) return [];
-  const hubs = (await get(`/hubs/search?query=${enc(q)}&limit=20`)).Hub || [];
-  return hubs.flatMap(h => h.Metadata || []).filter(m => ['movie', 'show', 'episode'].includes(m.type)).slice(0, 30).map(item);
-}
-
-/** Alle TMDB-nummers in je Plex: om te weten wat je al hebt. */
-export async function tmdbIndex() {
-  const out = new Map();
-  for (const s of await sections()) for (const m of await all(s.key)) { const t = tmdbOf(m); if (t) out.set(`${s.type === 'show' ? 'tv' : 'movie'}:${t}`, String(m.ratingKey)); }
-  return out;
 }
