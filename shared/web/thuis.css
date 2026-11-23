@@ -84,7 +84,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .snav .sv.hdmi { background: #2b2e36 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.6' stroke-linejoin='round'%3E%3Cpath d='M3 8h18v5l-3 3H6l-3-3z'/%3E%3Cpath d='M7 11h10' stroke-linecap='round'/%3E%3C/svg%3E") center/70% no-repeat; }
 .snav .svcs { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-height: 0; overflow: hidden; margin: 0 -10px; padding: 0 10px; }
 .vscroll { scroll-behavior: smooth; }
-.snav .it.bottom { margin-top: auto; }
 
 /* Scherm met rijen */
 .screen { position: absolute; inset: 0; }
@@ -94,7 +93,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 /* De foto heeft 16:9, dus over het hele scherm (1080 hoog) staat hij er in zijn geheel; onderaan loopt hij weg naar de achtergrond. */
 .hero { position: relative; height: 780px; margin-bottom: -200px; padding: 0 80px; }
 .hero-bg { position: absolute; inset: 0; transition: opacity .6s var(--ease); }
-.screen.down .hero-bg { opacity: .32; }
+.screen.down .hero-bg, .hero-bg.dim { opacity: .32; }
 .hero-bg .bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.2s var(--ease); animation: drift 40s ease-in-out infinite alternate; }
 .hero-bg .bg.on { opacity: 1; }
 /* Onderkant van de foto zelf laten wegvloeien: ook bij inzoomen en scrollen geen harde rand */
@@ -112,6 +111,12 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 @keyframes drift { from { transform: scale(1); } to { transform: scale(1.04); } }
 .hero .txt { position: absolute; left: 80px; bottom: 260px; width: 760px; display: flex; flex-direction: column; gap: 14px; z-index: 2; transition: opacity .6s; }
 .hero .txt.uit { opacity: 0; }
+/* Bolletjes van de carrousel: welke dia je ziet. Focus: links/rechts bladeren, OK opent de titel. */
+.hero .dots { position: absolute; left: 50%; bottom: 300px; z-index: 3; display: flex; align-items: center; gap: 9px; padding: 9px 14px; border-radius: 999px; background: rgba(20,20,24,.35); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); transform: translateX(-50%); }
+.hero .dots.none { display: none; }
+.hero .dots i { width: 8px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.4); transition: width .3s var(--ease), background .3s; }
+.hero .dots i.on { width: 26px; background: #fff; }
+.hero .dots.focus { background: rgba(255,255,255,.22); transform: translateX(-50%) scale(1.12); }
 .hero .logo { max-width: 520px; max-height: 170px; object-fit: contain; object-position: left bottom; display: none; filter: drop-shadow(0 4px 18px rgba(0,0,0,.6)); }
 .hero .logo.on { display: block; }
 .hero ~ div { position: relative; z-index: 2; }

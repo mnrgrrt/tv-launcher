@@ -181,7 +181,7 @@
   // Eerste knop in de inhoud: bij voorkeur in het bovenste blok (.first), anders de eerste buiten de bovenbalk.
   // Rijen komen los van elkaar binnen; zolang je nog niets hebt ingedrukt, schuift de focus mee naar de bovenste.
   var touched = false;
-  function firstContent() { var all = focusables(); return all.filter(function (e) { return e.closest('.first'); })[0] || all.filter(function (e) { return !e.closest('.top'); })[0] || all[0]; }
+  function firstContent() { var all = focusables().filter(function (e) { return !e.classList.contains('dots'); }); return all.filter(function (e) { return e.closest('.first'); })[0] || all.filter(function (e) { return !e.closest('.top'); })[0] || all[0]; }
   function contentReady() { if (overlay || touched) return; var f = firstContent(); if (f && f !== cur && !f.closest('.top')) focus(f); }
   function back() {
     if (overlay) { if (overlay._sticky) return; var o = overlay; closeOverlay(); if (o._onclose) o._onclose(); return; }
@@ -244,15 +244,15 @@
     installedServices().then(function (l) {
       l = sortServices(l.filter(function (x) { return x.svc.key !== 'plex'; }));
       if (!l.length) return;
-      svcBox.appendChild(h('div', { class: 'hd' }, 'Diensten'));
+      svcBox.insertBefore(h('div', { class: 'hd' }, 'Diensten'), tail[0]);   // diensten vóór Alle apps en Instellingen
       l.forEach(function (x) {
         var logo = (S.logos && S.logos[x.svc.key]) || x.app.icon || x.app.banner;
-        svcBox.appendChild(F(h('button', { class: 'it' }, (logo ? '<i class="sv" style="' + bg(logo) + '"></i>' : '<i class="sv hdmi"></i>') + '<span>' + esc(x.svc.name) + '</span>'), function () { closeOverlay(); openService(x); }, close));
+        svcBox.insertBefore(F(h('button', { class: 'it' }, (logo ? '<i class="sv" style="' + bg(logo) + '"></i>' : '<i class="sv hdmi"></i>') + '<span>' + esc(x.svc.name) + '</span>'), function () { closeOverlay(); openService(x); }, close), tail[0]);
       });
     });
-    item('apps', 'Alle apps', NAVICON.apps, function () { go('apps'); });
-    var st = item('settings', 'Instellingen', NAVICON.settings, function () { go('settings'); });
-    st.classList.add('bottom');
+    // Alle apps en Instellingen staan onderaan in hetzelfde scrollende blok als de diensten.
+    var tail = [item('apps', 'Alle apps', NAVICON.apps, function () { go('apps'); }), item('settings', 'Instellingen', NAVICON.settings, function () { go('settings'); })];
+    tail.forEach(function (b) { svcBox.appendChild(b); });
     openOverlay(nav);
     overlay.classList.add('side-ov');
     focus(nav.querySelector('#nav-cur') || nav.querySelector('.it'));
@@ -272,8 +272,9 @@
       var r = pick.getBoundingClientRect(), top = (r.top - inner.getBoundingClientRect().top) / SCALE, start = inner.parentNode.getBoundingClientRect().top / SCALE;
       var add = Math.max(0, H - start - top - r.height / SCALE);
       pick.style.marginTop = add + 'px';
+      // Bolletjes net boven de rij, de titeltekst daar weer boven.
       var txt = inner.querySelector('.hero .txt'), hero = txt && txt.parentNode;
-      if (hero) txt.style.bottom = Math.max(40, hero.offsetHeight - (top + add - 24)) + 'px';
+      if (hero) { var base = hero.offsetHeight - (top + add); hero.querySelector('.dots').style.bottom = (base + 16) + 'px'; txt.style.bottom = Math.max(40, base + 74) + 'px'; }
       if (!pick.querySelector(':scope > .more')) pick.appendChild(h('div', { class: 'more' }, '<svg viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l9 8 9-8"/></svg>'));
     }, 0);
   }
@@ -600,56 +601,89 @@
   }
 
   // ---------- thuis ----------
-  // Grote achtergrond bovenaan (Thuis, Films, Series). In rust een beeld uit nextRest(), elke minuut een ander zolang je bovenin staat.
-  // Met focus op een titel: zacht overfaden naar het beeld van die titel, met logo (of titel) en een regel info.
-  function heroBlock(inner, nextRest) {
+  // Grote achtergrond bovenaan (Thuis, Films, Series) als carrousel met bolletjes.
+  // In rust wisselen de dia's vanzelf: een eigen foto ({ photo }) en/of uitgelichte titels ({ item, ok }).
+  // Met focus op een tegel: het beeld van die tegel. Omhoog naar de bolletjes: links/rechts bladeren, OK opent de titel.
+  function heroBlock(inner) {
     // Het beeld staat vast achter de pagina; de rijen schuiven eroverheen. De tekst schuift wel mee.
     var hero = h('div', { class: 'hero first' }, '<div class="txt uit"><img class="logo" alt=""><h1></h1><div class="meta"></div></div>');
-    var back = h('div', { class: 'hero-bg' }, '<div class="bg on"></div><div class="bg"></div>');
-    inner.appendChild(hero); inner.parentNode.parentNode.insertBefore(back, inner.parentNode);
-    var layers = back.querySelectorAll('.bg'), txt = hero.querySelector('.txt'), shown = '', heroT = 0, resting = true, restUrl = '';
-    function setBg(u) {
-      if (!u || u === shown) return; shown = u;
-      var nxt = layers[0].classList.contains('on') ? layers[1] : layers[0], old = nxt === layers[0] ? layers[1] : layers[0];
-      var pic = new Image(); pic.onload = function () { if (shown !== u) return; nxt.style.backgroundImage = "url('" + pic.src + "')"; nxt.classList.add('on'); old.classList.remove('on'); }; pic.src = img(u);
+    inner.appendChild(hero);
+    var bgl = backdrop(inner.parentNode.parentNode, inner.parentNode), setBg = bgl.set;
+    var txt = hero.querySelector('.txt'), heroT = 0, resting = true;
+    var slides = [], idx = 0, slideT = 0;
+    var dots = F(h('button', { class: 'dots' }), function () { var sl = slides[idx]; if (sl && sl.ok) sl.ok(); },
+      { move: function (dir) { if (dir === 'left' || dir === 'right') { show(idx + (dir === 'left' ? -1 : 1)); return true; } },
+        focus: function () { if (!resting) { resting = true; show(idx); } } });
+    hero.appendChild(dots);
+    // Beeld, logo (of titel) en een regel info van een titel.
+    function paint(it, mine) {
+      var art = it.tmdb ? artFor(it.type, it.tmdb) : Promise.resolve({ backdrop: it.img || '' });
+      art.then(function (a) {
+        if (!a.backdrop || !mine()) return;
+        setBg(a.backdrop);
+        var lg = hero.querySelector('.logo'), t1 = hero.querySelector('h1');
+        lg.classList.remove('on'); t1.textContent = it.title || '';
+        if (a.logo) logoFor(a.logo, function (u) { if (bgl.shown() !== a.backdrop) return; lg.src = u; lg.classList.add('on'); t1.textContent = ''; });
+        hero.querySelector('.meta').textContent = it.meta || '';
+        txt.classList.remove('uit');
+      });
     }
-    function rest() { clearTimeout(heroT); resting = true; txt.classList.add('uit'); setBg(restUrl); }
-    function newRest() { nextRest().then(function (u) { restUrl = u || restUrl; if (resting) rest(); }, function () {}); }
-    newRest();
-    clearInterval(S.heroTimer);
-    S.heroTimer = setInterval(function () { if (!document.body.contains(hero)) return clearInterval(S.heroTimer); if (resting && cur && cur.closest('.first')) newRest(); }, 60000);
+    function show(i) {
+      clearTimeout(slideT); if (!slides.length) return;
+      idx = (i + slides.length) % slides.length;
+      var sl = slides[idx], want = idx;
+      [].forEach.call(dots.children, function (d, k) { d.classList.toggle('on', k === idx); });
+      if (sl.photo) { sl.photo().then(function (u) { if (resting && idx === want) { setBg(u); txt.classList.add('uit'); } }); }
+      else paint(sl.item, function () { return resting && idx === want; });
+      // Vanzelf verder, alleen als je bovenin staat (op de eerste rij of op de bolletjes). Een foto blijft langer staan.
+      slideT = setTimeout(function () {
+        if (!document.body.contains(hero)) return;
+        if (resting && cur && (cur === dots || cur.closest('.first'))) show(idx + 1); else show(idx);
+      }, sl.photo ? 20000 : 8000);
+    }
+    function setSlides(l) {
+      slides = l; dots.innerHTML = slides.length > 1 ? slides.map(function () { return '<i></i>'; }).join('') : '';
+      dots.classList.toggle('none', slides.length < 2); if (resting) show(0);
+    }
+    function rest() { clearTimeout(heroT); if (resting) return; resting = true; show(idx); }
     function showArt(it) {
-      clearTimeout(heroT);
-      heroT = setTimeout(function () {
-        var art = it.tmdb ? (S.art[it.type + it.tmdb] ? Promise.resolve(S.art[it.type + it.tmdb]) : get('/api/art/' + it.type + '/' + it.tmdb).then(function (a) { S.art[it.type + it.tmdb] = a; return a; }, function () { return {}; }))
-          : Promise.resolve({ backdrop: it.img || '' });
-        art.then(function (a) {
-          if (!a.backdrop) return;
-          resting = false;
-          setBg(a.backdrop);
-          var lg = hero.querySelector('.logo'), t1 = hero.querySelector('h1');
-          lg.classList.remove('on'); t1.textContent = it.title || '';
-          if (a.logo) logoFor(a.logo, function (u) { if (shown !== a.backdrop) return; lg.src = u; lg.classList.add('on'); t1.textContent = ''; });
-          hero.querySelector('.meta').textContent = it.meta || '';
-          txt.classList.remove('uit');
-        });
-      }, 350);
+      clearTimeout(heroT); clearTimeout(slideT);
+      heroT = setTimeout(function () { resting = false; paint(it, function () { return !resting; }); }, 350);
     }
-    return { showArt: showArt, rest: rest, refresh: newRest };
+    return { showArt: showArt, rest: rest, setSlides: setSlides };
   }
+  // Achtergrondbeeld dat vast blijft staan (achter de pagina), met zacht overvloeien. Zet het voor 'before' in 'parent'.
+  function backdrop(parent, before, cls) {
+    var back = h('div', { class: 'hero-bg' + (cls ? ' ' + cls : '') }, '<div class="bg on"></div><div class="bg"></div>'), layers = back.querySelectorAll('.bg'), shown = '';
+    parent.insertBefore(back, before);
+    return {
+      shown: function () { return shown; },
+      set: function (u) {
+        if (!u || u === shown) return; shown = u;
+        var nxt = layers[0].classList.contains('on') ? layers[1] : layers[0], old = nxt === layers[0] ? layers[1] : layers[0];
+        var pic = new Image(); pic.onload = function () { if (shown !== u) return; nxt.style.backgroundImage = "url('" + pic.src.replace(/'/g, '%27') + "')"; nxt.classList.add('on'); old.classList.remove('on'); }; pic.src = img(u);
+      }
+    };
+  }
+  function artFor(type, tmdb) {
+    return S.art[type + tmdb] ? Promise.resolve(S.art[type + tmdb]) : get('/api/art/' + type + '/' + tmdb).then(function (a) { S.art[type + tmdb] = a; return a; }, function () { return {}; });
+  }
+  // Een titel als dia: beeld en logo, OK opent de titel.
+  function slideOf(o, kind) { return { item: artOf(o, kind), ok: function () { openTitle(o, kind); } }; }
   function artOf(o, kind) { return { tmdb: o.tmdb, type: kind === 'series' ? 'tv' : 'movie', title: o.title, meta: [o.year, rating(o), whereFrom(o) || 'Niet bij jou'].filter(Boolean).join(' · ') }; }
   screens.home = function () {
     var el = h('div', { class: 'screen' }); el.appendChild(topbar('home'));
     // De foto loopt door tot achter de bovenbalk.
     var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
-    // Rust: een eigen foto (album 1), zonder tekst. Elke keer een andere.
-    var photo = null;
-    var hb = heroBlock(inner, function () {
+    // Carrousel: eerst een eigen foto (album 1, elke keer een andere), daarna een paar titels uit Nieuw voor jou.
+    var photo = null, photoSlide = { photo: function () {
       return (S.photos ? Promise.resolve(S.photos) : get('/api/photos').then(function (l) { S.photos = l; return l; }, function () { return []; })).then(function (l) {
         var cand = l.filter(function (p) { return p !== photo; }); photo = cand[Math.floor(Math.random() * cand.length)] || l[0];
         return photo ? photo.url : '';
       });
-    }), showArt = hb.showArt, showPhoto = hb.rest;
+    } };
+    var hb = heroBlock(inner), showArt = hb.showArt, showPhoto = hb.rest;
+    hb.setSlides([photoSlide]);
     // Thuis: eerst de apps (daar begin je meestal), dan wat nieuw is in je eigen bibliotheek. Verder kijken en live staan in Films, Series en Live tv.
     var slots = {}; ['svc', 'foryou', 'fav', 'later'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.svc.className = 'first';
@@ -661,6 +695,7 @@
       };
       if (d.now.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', d.now.map(tile)));
       fold([slots.svc, slots.foryou]);
+      hb.setSlides([photoSlide].concat(d.now.filter(function (o) { return o.tmdb; }).slice(0, 5).map(function (o) { return slideOf(o, o.kind); })));
       if (d.later.length) slots.later.appendChild(rowSection('Populair, niet bij jou', d.later.map(tile)));
     }).catch(function (e) { slots.foryou.innerHTML = '<div class="empty">Thuis kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
     // Favoriet genre van dit profiel (Mijn profiel › Voorkeuren): de beste titels die je kunt kijken.
@@ -821,13 +856,8 @@
     el.appendChild(topbar(kind === 'movie' ? 'films' : 'series'));
     // Zoeken binnen alleen films of alleen series (omhoog vanaf de eerste rij).
     el.appendChild(F(h('button', { class: 'pill lsearch' }, NAVICON.search + '<span>Zoeken in ' + (kind === 'movie' ? 'films' : 'series') + '</span>'), function () { go('search', { only: kind }); }));
-    // Bovenaan fanart van je eigen titels; met focus op een titel het beeld van die titel.
-    var pool = [];
-    var hb = heroBlock(inner, function () {
-      var l = pool.filter(function (o) { return o.tmdb; }); if (!l.length) return Promise.resolve('');
-      var o = l[Math.floor(Math.random() * l.length)], t = kind === 'series' ? 'tv' : 'movie';
-      return (S.art[t + o.tmdb] ? Promise.resolve(S.art[t + o.tmdb]) : get('/api/art/' + t + '/' + o.tmdb).then(function (a) { S.art[t + o.tmdb] = a; return a; })).then(function (a) { return a.backdrop || ''; });
-    });
+    // Bovenaan een carrousel met het nieuwste uit je eigen bibliotheek; met focus op een titel het beeld van die titel.
+    var hb = heroBlock(inner);
     var tile = function (m) { return titleTile(m, kind, function () { if (m.tmdb) hb.showArt(artOf(m, kind)); else hb.rest(); }); };
     var slots = {}; ['cont', 'newest', 'rec', 'genres', 'coll'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.cont.className = 'first'; slots.newest.appendChild(loading());
@@ -840,7 +870,8 @@
       fold([slots.cont, slots.newest]);
     }).catch(function () {});
     get('/api/catalog/' + kind + '/overview?profile=' + S.profile).then(function (o) {
-      S.ov[kind] = o; slots.newest.innerHTML = ''; pool = o.newest || []; hb.refresh();
+      S.ov[kind] = o; slots.newest.innerHTML = '';
+      hb.setSlides((o.newest || []).filter(function (m) { return m.tmdb; }).slice(0, 6).map(function (m) { return slideOf(m, kind); }));
       if (!o.total) { slots.newest.innerHTML = '<div class="empty">Nog geen ' + (kind === 'movie' ? 'films' : 'series') + ' gevonden.</div>'; return; }
       slots.newest.appendChild(rowSection('Nieuw', o.newest.map(tile)));
       fold([slots.cont, slots.newest]);
@@ -868,6 +899,9 @@
     el.appendChild(bar);
     var sc = h('div', { class: 'scroll', style: 'top:200px' }), inner = h('div', { class: 'scroll-inner' }), grid = h('div', { class: 'grid' });
     inner.appendChild(grid); sc.appendChild(inner); el.appendChild(sc);
+    // Rustige achtergrond: het beeld van de titel met focus, gedimd achter het raster.
+    var bgl = backdrop(el, el.firstChild, 'dim'), bgT = 0;
+    var bgOf = function (m) { clearTimeout(bgT); if (m.tmdb) bgT = setTimeout(function () { artFor(a.kind === 'series' ? 'tv' : 'movie', m.tmdb).then(function (x) { bgl.set(x.backdrop); }); }, 400); };
     (function () {
       var srcs = [['', 'Plex en IPTV'], ['plex', 'Plex'], ['iptv', 'IPTV']];
       // Bibliotheek: alles wat je zelf hebt, films of series.
@@ -889,7 +923,7 @@
           '&cat=' + encodeURIComponent(a.cat || '') + '&sort=' + (a.sort || '') + '&alles=' + (a.alles || '') + '&offset=' + offset).then(function (r) {
           total = r.total; count.textContent = total + ' titels';
           r.items.forEach(function (m) {
-            var t = titleTile(m, a.kind); grid.appendChild(t);
+            var t = titleTile(m, a.kind, function () { bgOf(m); }); grid.appendChild(t);
             t._onfocus = function () { if (!busy && grid.children.length < total && [].indexOf.call(grid.children, t) >= grid.children.length - 12) load(grid.children.length); };
           });
           if (!offset && !want) focus(grid.firstChild || focusables()[0]);
@@ -937,7 +971,7 @@
       var d = r[0] || {}, seen = !!r[2].on, show = r[3];
       var inList = r[1].some(function (x) { return x.key === (src || 'tmdb:' + a.type + a.tmdb); });
       var bgMain = d.backdrop || (show && show.backdrop) || (a.plex && a.plex.art) || (a.vod && a.vod.backdrop), bgNow = '';
-      // Achtergrond wisselen met zacht overvloeien (per seizoen fanart van fanart.tv, anders de gewone).
+      // Achtergrond wisselen (per seizoen fanart van fanart.tv, anders de gewone). Pas na het laden, zodat er geen leeg vlak is.
       var setInfoBg = function (u) {
         if (!u || u === bgNow) return; bgNow = u;
         var pic = new Image(); pic.onload = function () { if (bgNow !== u) return; bgEl.style.backgroundImage = "url('" + pic.src.replace(/'/g, '%27') + "')"; }; pic.src = img(u);
@@ -957,7 +991,7 @@
         '<p class="desc">' + esc(d.overview || (show && show.plot) || (a.plex && a.plex.summary) || (a.vod && a.vod.plot) || '') + '</p>' +
         '<div class="wherebox">' + (canWatch ? '' : '<span class="dim">Nog niet te zien</span>') +
         (other.length ? '<span class="dim"' + (canWatch ? '' : ' style="margin-left:14px"') + '>Ook op</span>' + other.slice(0, 4).map(chip).join('') : '') + '</div>';
-      if (d.tmdb) (S.art[a.type + d.tmdb] ? Promise.resolve(S.art[a.type + d.tmdb]) : get('/api/art/' + a.type + '/' + d.tmdb).then(function (x) { S.art[a.type + d.tmdb] = x; return x; }, function () { return {}; })).then(function (x) {
+      if (d.tmdb) artFor(a.type, d.tmdb).then(function (x) {
         if (x.logo) logoFor(x.logo, function (u) { var lg = new Image(); lg.className = 'ilogo'; lg.alt = d.title || ''; lg.onload = function () { var t = txt.querySelector('h1'); if (t) t.replaceWith(lg); }; lg.src = u; });
       });
       var bt = h('div', { class: 'ibtns' });
