@@ -115,11 +115,14 @@ export const seriesState = (profile, seriesKey) => db.prepare('SELECT key, pos, 
 export async function continueWatching(profile) {
   const rows = db.prepare('SELECT * FROM progress WHERE profile = ? AND updated > ? ORDER BY updated DESC LIMIT 200').all(+profile, Date.now() - 60 * 86400e3);
   const seen = new Set(), out = [];
+  // Dezelfde film via Plex en via IPTV: één tegel. Herkend aan TMDB, anders aan de titel zonder jaartal.
+  const tkey = t => 't:' + String(t || '').toLowerCase().replace(/\(\d{4}\)/g, '').replace(/[^a-z0-9]/g, '');
   for (const r of rows) {
     const group = r.series_key || r.key, same = r.tmdb > 0 ? (r.kind === 'movie' ? 'm' : 's') + r.tmdb : '';
     if (seen.has(group) || (same && seen.has(same))) continue; seen.add(group); seen.add(r.key); if (same) seen.add(same);
     if (r.hidden) continue;
     const meta = JSON.parse(r.meta || '{}'), kind = r.kind === 'movie' && !EPISODE.test(meta.title || '') ? 'movie' : 'series';
+    if (kind === 'movie') { if (seen.has(tkey(meta.title))) continue; seen.add(tkey(meta.title)); }
     if (!r.watched && r.pos > 30000) { out.push({ ...meta, kind, key: r.key, progress: r.dur ? r.pos / r.dur : 0, left: r.dur ? Math.round((r.dur - r.pos) / 60000) : -1, when: r.updated, resume: true }); continue; }
     if (r.watched && r.series_key && r.series_key.startsWith('series:')) {
       const next = await nextEpisode(profile, r.series_key).catch(() => null);
@@ -131,6 +134,7 @@ export async function continueWatching(profile) {
   if (usesPlex(profile)) try {
     (await plex.deck()).slice(0, 8).forEach(p => {
       if (seen.has('plex:' + p.key) || (p.show && seen.has('plex:' + p.show))) return;
+      if (p.type === 'movie' && ((p.tmdb && seen.has('m' + p.tmdb)) || seen.has(tkey(p.title)))) return;
       out.push({ ...p, kind: p.type === 'movie' && !EPISODE.test(p.title) ? 'movie' : 'series', key: 'plex:' + p.key, when: p.added, resume: true });
     });
   } catch {}
