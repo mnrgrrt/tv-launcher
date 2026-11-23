@@ -146,12 +146,7 @@ on('GET', '/api/live/catchup/:id', 'device', ({ p, q }) => {
 on('GET', '/api/live/url/:id', 'device', ({ p }) => ({ url: auth.sign(`/stream/live/${+p.id}`) }));
 
 // services = de diensten van dit profiel (de tv weet welke er op het apparaat staan); leeg = alle diensten.
-on('GET', '/api/home', 'device', async ({ q }) => {
-  const prof = +q.get('profile') || 1;
-  const [picks, cont] = await Promise.all([
-    tmdb.home(svcOf(q)).catch(() => ({})), profiles.continueWatching(prof).catch(() => [])]);
-  return { picks, continue: cont.map(withUrl) };
-});
+on('GET', '/api/home', 'device', async ({ q }) => ({ picks: await tmdb.home(svcOf(q)).catch(() => ({})) }));
 // Nieuw voor jou: nieuw uit alle bronnen, wat bij de smaak van dit profiel past bovenaan.
 on('GET', '/api/foryou', 'device', async ({ q }) => {
   const prof = +q.get('profile') || 1;
