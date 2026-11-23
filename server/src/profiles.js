@@ -14,6 +14,10 @@ db.exec('CREATE TABLE IF NOT EXISTS searches (profile INTEGER, q TEXT, n INTEGER
 const EPISODE = /\bS\d{1,2}E\d{1,3}\b/i;
 // Verder kijken: zelf weggehaalde titels komen pas terug als je ze opnieuw kijkt.
 try { db.exec('ALTER TABLE progress ADD COLUMN hidden INTEGER DEFAULT 0'); } catch {}
+// Zelfde titel in Plex en IPTV herkennen: TMDB-nummer (bij series dat van de serie) plus seizoen en aflevering.
+for (const c of ['tmdb', 'season', 'episode']) try { db.exec(`ALTER TABLE progress ADD COLUMN ${c} INTEGER DEFAULT 0`); } catch {}
+const ident = p => ({ tmdb: Math.max(0, parseInt(p.tmdb ?? p.meta?.tmdb) || 0), season: Math.max(0, parseInt(p.season) || 0), episode: Math.max(0, parseInt(p.episode) || 0) });
+const srcName = key => (String(key).startsWith('plex:') ? 'Plex' : 'IPTV');
 // Terugkijken loopt via de live-speler en heeft geen kijkstand meer.
 db.prepare("DELETE FROM progress WHERE key LIKE 'catchup:%'").run();
 const PHOTOS = path.join(process.env.THUIS_DATA || '/data', 'photos');
@@ -78,22 +82,35 @@ export function setPrefs(id, prefs) {
 export function progress(profile, p) {
   if (p.kind === 'clip') return;   // extra's (trailers e.d.) komen niet in Verder kijken
   const watched = p.dur > 0 && p.pos >= p.dur * 0.95 ? 1 : 0;
-  db.prepare(`INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(profile, key) DO UPDATE SET pos = excluded.pos, dur = excluded.dur, watched = MAX(progress.watched, excluded.watched), meta = excluded.meta, updated = excluded.updated, series_key = excluded.series_key, hidden = 0`)
-    .run(+profile, p.key, p.seriesKey || '', p.kind || '', Math.round(p.pos || 0), Math.round(p.dur || 0), watched, JSON.stringify(p.meta || {}), Date.now());
+  const id = ident(p);
+  db.prepare(`INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated, tmdb, season, episode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(profile, key) DO UPDATE SET pos = excluded.pos, dur = excluded.dur, watched = MAX(progress.watched, excluded.watched), meta = excluded.meta, updated = excluded.updated, series_key = excluded.series_key, hidden = 0,
+      tmdb = CASE WHEN excluded.tmdb > 0 THEN excluded.tmdb ELSE progress.tmdb END, season = CASE WHEN excluded.tmdb > 0 THEN excluded.season ELSE progress.season END, episode = CASE WHEN excluded.tmdb > 0 THEN excluded.episode ELSE progress.episode END`)
+    .run(+profile, p.key, p.seriesKey || '', p.kind || '', Math.round(p.pos || 0), Math.round(p.dur || 0), watched, JSON.stringify(p.meta || {}), Date.now(), id.tmdb, id.season, id.episode);
   if (p.plexKey) plex.timeline(p.plexKey, p.state || (watched ? 'stopped' : 'playing'), p.pos, p.dur);
 }
-export function position(profile, key) {
-  const r = db.prepare('SELECT pos, dur, watched FROM progress WHERE profile = ? AND key = ?').get(+profile, key);
-  return r && !r.watched ? r.pos : 0;
+/** Waar ben je gebleven? Eerst bij deze bron; anders bij dezelfde titel via de andere bron (Plex of IPTV), 10 seconden eerder. */
+export function position(profile, key, tmdb = 0, season = 0, episode = 0) {
+  const r = db.prepare('SELECT pos, dur, watched, updated FROM progress WHERE profile = ? AND key = ?').get(+profile, key);
+  if (r && (r.watched || r.pos > 30000)) return { pos: r.watched ? 0 : r.pos, via: '' };
+  if (+tmdb > 0) {
+    const o = db.prepare(`SELECT key, pos, updated FROM progress WHERE profile = ? AND key != ? AND tmdb = ? AND season = ? AND episode = ? AND watched = 0 AND pos > 30000
+      ORDER BY updated DESC LIMIT 1`).get(+profile, key, +tmdb, +season, +episode);
+    if (o && (!r || o.updated > r.updated)) return { pos: Math.max(0, o.pos - 10000), via: srcName(o.key) };
+  }
+  return { pos: r && !r.watched ? r.pos : 0, via: '' };
 }
+/** Afleveringen die je via welke bron dan ook gezien hebt: "seizoen:aflevering" voor een serie (TMDB-nummer). */
+export const watchedEps = (profile, tmdb) => +tmdb > 0 ? new Set(db.prepare('SELECT season, episode FROM progress WHERE profile = ? AND tmdb = ? AND watched = 1 AND season > 0')
+  .all(+profile, +tmdb).map(r => r.season + ':' + r.episode)) : new Set();
 export const seriesState = (profile, seriesKey) => db.prepare('SELECT key, pos, dur, watched, updated FROM progress WHERE profile = ? AND series_key = ?').all(+profile, seriesKey);
 /** Verder kijken voor dit profiel: één tegel per serie of film; afgeronde aflevering = volgende. */
 export async function continueWatching(profile) {
   const rows = db.prepare('SELECT * FROM progress WHERE profile = ? AND updated > ? ORDER BY updated DESC LIMIT 200').all(+profile, Date.now() - 60 * 86400e3);
   const seen = new Set(), out = [];
   for (const r of rows) {
-    const group = r.series_key || r.key; if (seen.has(group)) continue; seen.add(group); seen.add(r.key);
+    const group = r.series_key || r.key, same = r.tmdb > 0 ? (r.kind === 'movie' ? 'm' : 's') + r.tmdb : '';
+    if (seen.has(group) || (same && seen.has(same))) continue; seen.add(group); seen.add(r.key); if (same) seen.add(same);
     if (r.hidden) continue;
     const meta = JSON.parse(r.meta || '{}'), kind = r.kind === 'movie' && !EPISODE.test(meta.title || '') ? 'movie' : 'series';
     if (!r.watched && r.pos > 30000) { out.push({ ...meta, kind, key: r.key, progress: r.dur ? r.pos / r.dur : 0, left: r.dur ? Math.round((r.dur - r.pos) / 60000) : -1, when: r.updated, resume: true }); continue; }
@@ -118,13 +135,17 @@ export const usesPlex = profile => +profile === 1 || db.prepare('SELECT plex_use
 
 /** Gezien of niet gezien zetten. items = [{ key, seriesKey, kind, meta }]. Bij Plex ook in Plex, als het Plex-account van dit profiel is. */
 export function setWatched(profile, items, yes) {
-  const put = db.prepare(`INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)
+  const put = db.prepare(`INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated, tmdb, season, episode) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(profile, key) DO UPDATE SET pos = 0, watched = excluded.watched, updated = excluded.updated, hidden = 0,
+      tmdb = CASE WHEN excluded.tmdb > 0 THEN excluded.tmdb ELSE progress.tmdb END, season = CASE WHEN excluded.tmdb > 0 THEN excluded.season ELSE progress.season END, episode = CASE WHEN excluded.tmdb > 0 THEN excluded.episode ELSE progress.episode END,
       series_key = CASE WHEN excluded.series_key = '' THEN progress.series_key ELSE excluded.series_key END,
       meta = CASE WHEN excluded.meta = '{}' THEN progress.meta ELSE excluded.meta END`);
   for (const it of (items || []).slice(0, 500)) {
     const key = String(it.key || ''); if (!/^(plex|movie|series):\d+$/.test(key)) continue;
-    put.run(+profile, key, String(it.seriesKey || ''), String(it.kind || ''), yes ? 1 : 0, JSON.stringify(it.meta || {}).slice(0, 4000), Date.now());
+    const id = ident(it);
+    put.run(+profile, key, String(it.seriesKey || ''), String(it.kind || ''), yes ? 1 : 0, JSON.stringify(it.meta || {}).slice(0, 4000), Date.now(), id.tmdb, id.season, id.episode);
+    // Ook de andere bron van dezelfde titel (of aflevering) gelijkzetten.
+    if (id.tmdb > 0) db.prepare('UPDATE progress SET watched = ?, pos = 0, updated = ? WHERE profile = ? AND key != ? AND tmdb = ? AND season = ? AND episode = ?').run(yes ? 1 : 0, Date.now(), +profile, key, id.tmdb, id.season, id.episode);
     if (key.startsWith('plex:') && usesPlex(profile)) plex.setWatched(key.slice(5), yes);
   }
 }
@@ -138,12 +159,13 @@ export async function showState(profile, src) {
   const mine = new Map(db.prepare("SELECT key, pos, dur, watched FROM progress WHERE profile = ? AND (key LIKE 'plex:%' OR key LIKE 'series:%')").all(+profile).map(r => [r.key, r]));
   const own = usesPlex(profile);
   const d = src.plex ? await plex.show(+src.plex) : await vod.info('series', +src.vod);
+  const other = watchedEps(profile, d.tmdb);   // gezien via de andere bron
   for (const s of d.seasons) for (const e of s.episodes) {
     const key = src.plex ? 'plex:' + e.key : 'series:' + e.id, r = mine.get(key);
     e.skey = key;
     if (src.vod) e.url = sign(`/stream/series/${+e.id}.${/^[a-z0-9]{2,4}$/.test(e.ext) ? e.ext : 'mkv'}`);
     const plexWatched = src.plex && own && e.watched, plexProg = src.plex && own ? e.progress : 0;
-    e.watched = !!(r ? r.watched : plexWatched);
+    e.watched = !!(r ? r.watched : plexWatched) || other.has(+s.season + ':' + e.num);
     e.progress = r ? (r.watched ? 0 : r.dur ? r.pos / r.dur : 0) : plexProg;
   }
   return d;
@@ -154,6 +176,8 @@ export function hide(profile, key) {
   const row = db.prepare('SELECT series_key FROM progress WHERE profile = ? AND key = ?').get(+profile, key);
   if (row) db.prepare("UPDATE progress SET hidden = 1 WHERE profile = ? AND (key = ? OR (series_key != '' AND series_key = ?))").run(+profile, key, row.series_key || key);
   else db.prepare('INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated, hidden) VALUES (?, ?, \'\', \'\', 0, 0, 0, \'{}\', ?, 1)').run(+profile, key, Date.now());
+  const t = db.prepare('SELECT tmdb, kind FROM progress WHERE profile = ? AND key = ?').get(+profile, key);
+  if (t && t.tmdb > 0) db.prepare('UPDATE progress SET hidden = 1 WHERE profile = ? AND tmdb = ?').run(+profile, t.tmdb);
   if (key.startsWith('plex:')) plex.removeFromDeck(key.slice(5));
 }
 
@@ -161,7 +185,8 @@ export function hide(profile, key) {
 export async function nextEpisode(profile, seriesKey) {
   const id = seriesKey.slice('series:'.length);
   const info = await vod.info('series', id);
-  const done = new Set(seriesState(profile, seriesKey).filter(r => r.watched).map(r => r.key));
+  const done = new Set(seriesState(profile, seriesKey).filter(r => r.watched).map(r => r.key)), viaOther = watchedEps(profile, info.tmdb);
+  for (const s of info.seasons) for (const e of s.episodes) if (viaOther.has(+s.season + ':' + e.num)) done.add('series:' + e.id);
   // De eerste na de laatst geziene (zoals de infopagina); overgeslagen afleveringen tellen niet.
   const all = info.seasons.flatMap(s => s.episodes.map(e => ({ s, e }))), last = all.findLastIndex(x => done.has('series:' + x.e.id));
   for (const { s, e } of all.slice(last + 1)) {
