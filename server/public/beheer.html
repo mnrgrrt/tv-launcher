@@ -104,6 +104,7 @@ async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/se
   <select data-dev="${x.id}" data-f="ask">${[['altijd','Altijd vragen'],['samen','Vragen bij Samen'],['nooit','Nooit vragen']].map(([v,t])=>`<option value="${v}" ${v===x.ask?'selected':''}>${t}</option>`).join('')}</select>
   <button class="ghost" data-unpair="${x.id}">Ontkoppelen</button></div></div>`).join('')||'<div class="dim">Nog geen apparaten.</div>';
  $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div class="pl"><img class="av" src="${esc(p.avatarUrl)}" alt="" data-pick="${p.id}">${esc(p.name)} ${p.admin?'<span class="dim">&nbsp;· mag alles</span>':''}</div><div class="acts">
+  ${p.id>1?`<button class="ghost" data-move="${p.id}" data-dir="-1" aria-label="Omhoog">↑</button><button class="ghost" data-move="${p.id}" data-dir="1" aria-label="Omlaag">↓</button>`:''}
   <button class="ghost" data-pick="${p.id}">Avatar kiezen</button><button class="ghost" data-upload="${p.id}">Eigen foto</button>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div></div>`).join('');
  $('settings').innerHTML=Object.keys(F).map(k=>`<div><label>${F[k]}</label><input data-k="${k}" ${SECRET.includes(k)?'type="password" autocomplete="off" placeholder="'+(d.settings[k]?'••••':'')+'"':'value="'+esc(d.settings[k])+'"'}></div>`).join('');
  const e=d.epg;$('epg').textContent=e.at?`${e.count} programma's bewaard`+(e.oldest?`, terug tot ${when(e.oldest)}`:'')+`. Laatst bijgewerkt ${when(e.at)}.`+(e.error?` Laatste poging mislukt: ${e.error}`:''):(e.error?'Fout: '+e.error:'Nog niet geladen');
@@ -121,6 +122,7 @@ $('photo').onchange=async()=>{const f=$('photo').files[0];if(!f)return;if(f.size
  const data=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)});
  try{await api('POST','/api/admin/profiles/'+PICK+'/photo',{data});load()}catch(x){alert(x.message)}$('photo').value=''};
 document.addEventListener('click',async e=>{const t=e.target.dataset;
+ if(t.move){await api('POST','/api/admin/profiles/'+t.move+'/move',{dir:+t.dir});load();return}
  if(t.pick){picker(t.pick);return}
  if(t.set){await api('POST','/api/admin/profiles/'+PICK+'/avatar',{avatar:+t.set});$('picker').hidden=true;load();return}
  if(t.upload){PICK=t.upload;$('photo').click();return}

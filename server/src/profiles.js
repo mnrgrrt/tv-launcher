@@ -31,6 +31,15 @@ export function savePhoto(id, b64) {
 
 export const list = () => db.prepare('SELECT id, name, color, admin, plex_user, prefs, avatar FROM profiles ORDER BY sort, id').all()
   .map(p => ({ ...p, admin: !!p.admin, prefs: JSON.parse(p.prefs || '{}'), avatarUrl: avatarUrl(p) }));
+/** Profiel een plek omhoog (-1) of omlaag (+1). Samen blijft altijd vooraan. */
+export function move(id, dir) {
+  const ids = list().map(p => p.id).filter(x => x !== 1);
+  const i = ids.indexOf(+id), j = i + (dir < 0 ? -1 : 1);
+  if (i < 0 || j < 0 || j >= ids.length) return;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  db.prepare('UPDATE profiles SET sort = 0 WHERE id = 1').run();
+  ids.forEach((x, k) => db.prepare('UPDATE profiles SET sort = ? WHERE id = ?').run(k + 1, x));
+}
 export function setAvatar(id, avatar) {
   const v = String(avatar) === 'photo' ? 'photo' : String(Math.max(1, Math.min(73, +avatar || 1)));
   db.prepare('UPDATE profiles SET avatar = ? WHERE id = ?').run(v, +id);
@@ -38,8 +47,8 @@ export function setAvatar(id, avatar) {
 export function save(p) {
   if (p.id) db.prepare('UPDATE profiles SET name = ?, color = ?, admin = ?, plex_user = ?, prefs = ?, sort = ? WHERE id = ?')
     .run(p.name, p.color || '#3DDBB0', p.admin ? 1 : 0, p.plex_user || '', JSON.stringify(p.prefs || {}), +p.sort || 0, +p.id);
-  else db.prepare('INSERT INTO profiles (name, color, admin, plex_user, prefs, sort) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(p.name, p.color || '#3DDBB0', p.admin ? 1 : 0, p.plex_user || '', JSON.stringify(p.prefs || {}), +p.sort || 0);
+  else db.prepare('INSERT INTO profiles (name, color, admin, plex_user, prefs, sort) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM profiles))')
+    .run(p.name, p.color || '#3DDBB0', p.admin ? 1 : 0, p.plex_user || '', JSON.stringify(p.prefs || {}));
 }
 export const remove = id => {
   if (+id === 1) return;                     // Samen blijft altijd
