@@ -111,6 +111,7 @@
       if (score < bestScore) { bestScore = score; best = el; }
     });
     if (best) focus(best);
+    else if (dir === 'left' && !overlay && isMain()) openSidebar();
   }
   var okDown = 0, longFired = false;
   // Sommige tv's geven geen e.key mee maar alleen een code (23 = OK op Android).
@@ -164,7 +165,7 @@
     if (overlay) { var o = overlay; closeOverlay(); if (o._onclose) o._onclose(); return; }
     if (current && current.args && current.args._onback && current.args._onback() === true) return;
     if (stack.length) { current = stack.pop(); render(); return; }
-    if (current && current.name !== 'home' && S.profile) go('home', {}, true);
+    if (isMain() && S.profile) return openSidebar();
   }
   function openOverlay(el, onclose) {
     closeOverlay();
@@ -179,24 +180,62 @@
 
   // ---------- bovenbalk ----------
   var TABS = [['home', 'thuis'], ['live', 'Live tv'], ['films', 'Films'], ['series', 'Series'], ['search', 'Zoeken']];
-  function topbar(active, onfocus) {
-    var bar = h('div', { class: 'top' }), left = h('div', { class: 'left' }), nav = h('div', { class: 'nav' });
-    TABS.forEach(function (t) {
-      var p = F(h('button', { class: 'pill' + (t[0] === 'home' ? ' brand' : '') + (t[0] === active ? ' on' : '') }, t[1]), function () { go(t[0], {}, true); }, { group: 'top', focus: onfocus });
-      if (t[0] === active) p.dataset.active = '1';
-      (t[0] === 'home' ? left : nav).appendChild(p);
-    });
-    var right = h('div', { class: 'right' });
-    var tm = h('span', null, clock(Date.now())); right.appendChild(tm);
-    var gear = F(h('button', { class: 'pill', 'aria-label': 'Instellingen' }, '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>'), function () { go('settings'); }, { group: 'top' });
-    right.appendChild(gear);
-    // Wisselen in twee keer OK: avatar, dan het profiel. Mijn profiel staat in hetzelfde venster.
-    var av = F(h('button', { class: 'avatar-btn', 'aria-label': 'Wie kijkt er' }, '<img class="avatar" alt="" src="' + esc(img(me().avatarUrl)) + '">'), function () { whoDialog(); }, { group: 'top' });
-    right.appendChild(av);
-    bar.appendChild(left); bar.appendChild(nav); bar.appendChild(right);
-    return bar;
+  // Geen balk meer bovenin: het beeld krijgt het hele scherm. Alleen op de andere tabbladen een klein kopje linksboven.
+  // Het menu zit in de zijbalk: Terug, of links tegen de rand, schuift hem open (zoals op de Apple TV).
+  function topbar(active) {
+    var t = TABS.filter(function (x) { return x[0] === active; })[0];
+    S.tab = active;
+    return h('div', { class: 'top' }, active === 'home' ? '' : '<span class="crumb">' + esc(t ? t[1] : '') + '</span>');
   }
-  setInterval(function () { var t = document.querySelector('.top .right span'); if (t) t.textContent = clock(Date.now()); checkReminders(); }, 20000);
+  var SVG = function (d) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>'; };
+  var NAVICON = {
+    search: SVG('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'),
+    home: SVG('<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>'),
+    live: SVG('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 3l4 4 4-4"/>'),
+    films: SVG('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M17 9h4M3 15h4M17 15h4"/>'),
+    series: SVG('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M6 4h12"/>'),
+    list: SVG('<path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/>'),
+    apps: SVG('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>'),
+    settings: SVG('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>')
+  };
+  var MAIN = ['home', 'live', 'films', 'series', 'search'];
+  function isMain() { return current && MAIN.indexOf(current.name) >= 0; }
+  function openSidebar() {
+    if (overlay) return;
+    var nav = h('div', { class: 'snav' }), here = current.name;
+    var close = { move: function (dir) { if (dir === 'right') { closeOverlay(); return true; } } };
+    var item = function (key, label, icon, fn, extra) {
+      var b = F(h('button', { class: 'it' + (key === here ? ' on' : '') }, icon + '<span>' + esc(label) + '</span>' + (extra || '')), fn, close);
+      if (key === here) b.id = 'nav-cur';
+      nav.appendChild(b); return b;
+    };
+    item('who', me().name, '<img class="av" alt="" src="' + esc(img(me().avatarUrl)) + '">', function () { whoDialog(); }, '<span class="clock">' + clock(Date.now()) + '</span>').classList.add('me');
+    nav.appendChild(h('div', { class: 'gap' }));
+    item('search', 'Zoeken', NAVICON.search, function () { go('search', {}, true); });
+    item('home', 'Thuis', NAVICON.home, function () { go('home', {}, true); });
+    item('live', 'Live tv', NAVICON.live, function () { go('live', {}, true); });
+    item('films', 'Films', NAVICON.films, function () { go('films', {}, true); });
+    item('series', 'Series', NAVICON.series, function () { go('series', {}, true); });
+    item('list', 'Mijn lijst', NAVICON.list, function () { go('profile', { tab: 'list' }); });
+    // Diensten die op dit apparaat staan, met hun logo. OK opent de app.
+    var svcBox = h('div', { class: 'svcs' }); nav.appendChild(svcBox);
+    installedServices().then(function (l) {
+      l = l.filter(function (x) { return isStreaming(x.svc) || x.svc.key === 'youtube' || x.svc.key === 'ziggo'; });
+      if (!l.length) return;
+      svcBox.appendChild(h('div', { class: 'hd' }, 'Diensten'));
+      l.forEach(function (x) {
+        var logo = (S.logos && S.logos[x.svc.key]) || x.app.icon || x.app.banner;
+        svcBox.appendChild(F(h('button', { class: 'it' }, '<i class="sv" style="' + bg(logo) + '"></i><span>' + esc(x.svc.name) + '</span>'), function () { closeOverlay(); N && N.launch(x.app.pkg); }, close));
+      });
+    });
+    item('apps', 'Alle apps', NAVICON.apps, function () { go('apps'); });
+    var st = item('settings', 'Instellingen', NAVICON.settings, function () { go('settings'); });
+    st.classList.add('bottom');
+    openOverlay(nav);
+    overlay.classList.add('side-ov');
+    focus(nav.querySelector('#nav-cur') || nav.querySelector('.it'));
+  }
+  setInterval(function () { var t = document.querySelector('.snav .clock'); if (t) t.textContent = clock(Date.now()); checkReminders(); }, 20000);
 
   // ---------- tegels ----------
   function rowSection(title, items, sub) {
@@ -485,7 +524,7 @@
 
   // ---------- thuis ----------
   screens.home = function () {
-    var el = h('div', { class: 'screen' }); el.appendChild(topbar('home', function () { showPhoto(); }));
+    var el = h('div', { class: 'screen' }); el.appendChild(topbar('home'));
     // De foto loopt door tot achter de bovenbalk.
     var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
     var hero = h('div', { class: 'hero first' }, '<div class="bg on"></div><div class="bg"></div><div class="txt uit"><img class="logo" alt=""><h1></h1><div class="meta"></div></div><div class="credit"></div>');
@@ -509,7 +548,7 @@
     (S.photos ? Promise.resolve(S.photos) : get('/api/photos').then(function (l) { S.photos = l; return l; }, function () { return []; }))
       .then(function () { nextPhoto(); showPhoto(); });
     clearInterval(S.photoTimer);
-    S.photoTimer = setInterval(function () { if (!document.body.contains(hero)) return clearInterval(S.photoTimer); if (resting && cur && (cur.closest('.top') || cur.closest('.first'))) { nextPhoto(); showPhoto(); } }, 60000);
+    S.photoTimer = setInterval(function () { if (!document.body.contains(hero)) return clearInterval(S.photoTimer); if (resting && cur && cur.closest('.first')) { nextPhoto(); showPhoto(); } }, 60000);
     // Een tegel met een mooie achtergrond: zacht overfaden, met het titellogo (of de titel). Anders blijft wat er staat.
     function showArt(it) {
       clearTimeout(heroT);
@@ -528,8 +567,8 @@
       }, 350);
     }
     // Thuis: eerst je diensten (daar begin je meestal), dan wat nieuw is en wat populair is. Verder kijken en live staan in Films, Series en Live tv.
-    var slots = {}; ['svc', 'foryou', 'picks', 'later', 'apps'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
-    slots.svc.className = 'first';
+    var slots = {}; ['foryou', 'picks', 'later'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    slots.foryou.className = 'first';
     var svcQ = myServices().then(function (keys) { return 'profile=' + S.profile + '&services=' + keys.join(','); });
     svcQ.then(function (q) { return get('/api/home?' + q); }).then(function (d) {
       var picks = (d.picks && d.picks.picks) || [];
@@ -547,13 +586,6 @@
       if (d.now.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', d.now.map(tile)));
       if (d.later.length) slots.later.appendChild(rowSection('Nog niet te zien', d.later.map(tile)));
     }).catch(function () {});
-    // Streamingdiensten (alleen als de app er staat) en daarna de overige apps.
-    Promise.all([installedServices(), loadApps()]).then(function (r) {
-      var svc = r[0], used = svc.map(function (x) { return x.app.pkg; });
-      if (svc.length) slots.svc.appendChild(rowSection('Streamingdiensten', svc.map(function (x) { return appTile(x.svc.name, x.app); })));
-      var rest = r[1].filter(function (a) { return used.indexOf(a.pkg) < 0; });
-      if (rest.length) slots.apps.appendChild(rowSection('Apps', rest.map(function (a) { return appTile(a.label, a); })));
-    });
     return el;
   };
   function serviceName(k) { var s = S.svcList.filter(function (x) { return x.key === k; })[0]; return s ? s.name : (k || ''); }
