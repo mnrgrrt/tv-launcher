@@ -109,7 +109,7 @@ async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/se
   <select data-dev="${x.id}" data-f="ask">${[['altijd','Altijd vragen'],['samen','Vragen bij Samen'],['nooit','Nooit vragen']].map(([v,t])=>`<option value="${v}" ${v===x.ask?'selected':''}>${t}</option>`).join('')}</select>
   <button class="ghost" data-unpair="${x.id}">Ontkoppelen</button></div></div>`).join('')||'<div class="dim">Nog geen apparaten.</div>';
  drawPhotos();
- $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div class="pl"><img class="av" src="${esc(p.avatarUrl)}" alt="" data-pick="${p.id}">${esc(p.name)} <label class="dim" style="margin-left:10px;display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-admin="${p.id}" ${p.admin?'checked':''}> mag alles</label></div><div class="acts">
+ $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div class="pl"><img class="av" src="${esc(p.avatarUrl)}" alt="" data-pick="${p.id}">${esc(p.name)} <label class="dim" style="margin-left:10px;display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-admin="${p.id}" ${p.admin?'checked':''}> mag alles</label>${p.id>1?`<label class="dim" style="margin-left:10px;display:inline-flex;gap:6px;align-items:center" title="Toont wat het Plex-account van de server aan het kijken is"><input type="checkbox" data-plexdeck="${p.id}" ${p.plex_user==='1'?'checked':''}> Plex verder kijken</label>`:''}</div><div class="acts">
   ${p.id>1?`<button class="ghost" data-move="${p.id}" data-dir="-1" aria-label="Omhoog">↑</button><button class="ghost" data-move="${p.id}" data-dir="1" aria-label="Omlaag">↓</button>`:''}
   <button class="ghost" data-pick="${p.id}">Avatar kiezen</button><button class="ghost" data-upload="${p.id}">Eigen foto</button><button class="ghost" data-hist="${p.id}" title="Kijkactiviteit van Netflix (csv), voor de smaak van dit profiel">Kijkgeschiedenis${p.history?' ('+p.history+')':''}</button>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div></div>`).join('');
  $('settings').innerHTML=Object.keys(F).map(k=>`<div><label>${F[k]}</label><input data-k="${k}" ${SECRET.includes(k)?'type="password" autocomplete="off" placeholder="'+(d.settings[k]?'••••':'')+'"':'value="'+esc(d.settings[k])+'"'}></div>`).join('');
@@ -119,6 +119,7 @@ async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/se
 
 let PROF=[],AV=null,PICK=0;
 document.addEventListener('change',async e=>{const t=e.target.dataset;
+ if(t.plexdeck){try{await api('POST','/api/admin/profiles/'+t.plexdeck+'/plex',{on:e.target.checked});load()}catch(x){alert(x.message)}return}
  if(t.admin){try{await api('POST','/api/admin/profiles/'+t.admin+'/admin',{admin:e.target.checked});load()}catch(x){alert(x.message)}return}
  if(!t.dev)return;const v=e.target.type==='checkbox'?e.target.checked:e.target.value;
  try{await api('POST','/api/admin/devices/'+t.dev,{[t.f]:t.f==='profile'?+v:v});load()}catch(x){alert(x.message)}});
