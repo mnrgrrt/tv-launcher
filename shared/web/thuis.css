@@ -265,3 +265,14 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .svchead .sv { width: 72px; height: 72px; border-radius: 18px; background: var(--card) center/cover no-repeat; flex: none; }
 .svchead h1 { font-size: 56px; margin-right: 20px; }
 .g-day.pill.focus { background: var(--ink); color: #111; }
+/* Gids: wat je kunt terugkijken krijgt een kleurtje, wat voorbij is en niet meer kan is zwart */
+.g-p.past { background: #060607; color: rgba(255,255,255,.4); }
+.g-p.back { background: rgba(70,120,190,.22); color: rgba(220,232,255,.9); }
+.g-p.back.focus { background: var(--ink); color: #111; }
+/* Schermbeveiliging */
+.saver { position: fixed; inset: 0; z-index: 100; background: #000; }
+.saver .bg { position: absolute; inset: 0; background: center/cover no-repeat; opacity: 0; transition: opacity 2.5s ease; animation: drift 60s ease-in-out infinite alternate; }
+.saver .bg.on { opacity: 1; }
+.saver .sclock { position: absolute; left: 80px; bottom: 70px; font-size: 96px; font-weight: 600; letter-spacing: -.03em; text-shadow: 0 2px 30px rgba(0,0,0,.5); line-height: 1; }
+.saver .sclock small { display: block; font-size: 30px; font-weight: 500; letter-spacing: 0; margin-top: 10px; color: rgba(255,255,255,.85); }
+.saver .scredit { position: absolute; right: 80px; bottom: 74px; font-size: 16px; color: rgba(255,255,255,.65); text-shadow: 0 1px 8px rgba(0,0,0,.6); }

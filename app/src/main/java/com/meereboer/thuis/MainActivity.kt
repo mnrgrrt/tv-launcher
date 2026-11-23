@@ -27,6 +27,7 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        registerReceiver(screenOff, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_OFF))
         hideSystemUi()
 
         val loader = WebViewAssetLoader.Builder()
@@ -89,13 +90,26 @@ class MainActivity : Activity() {
             or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
     }
 
+    // Hoe lang het scherm uit stond: daarmee vraagt Thuis na een tijdje "Wie kijkt er?".
+    private var screenOffAt = 0L
+    private val screenOff = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context?, i: android.content.Intent?) { screenOffAt = System.currentTimeMillis() }
+    }
+
     override fun onResume() {
         super.onResume()
         hideSystemUi()
+        val away = if (screenOffAt > 0) System.currentTimeMillis() - screenOffAt else 0L
+        screenOffAt = 0L
         if (::web.isInitialized) {
             web.requestFocus()
-            web.evaluateJavascript("window.__resume && window.__resume()", null)
+            web.evaluateJavascript("window.__resume && window.__resume($away)", null)
         }
+    }
+
+    override fun onDestroy() {
+        try { unregisterReceiver(screenOff) } catch (_: Exception) {}
+        super.onDestroy()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
