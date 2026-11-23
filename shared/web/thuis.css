@@ -85,9 +85,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .badges .plex { background: #C58A0A; } .badges .iptv { background: #3A4A5C; }
 .badge.right { left: auto; right: 10px; }
 /* Nu live: plaatje van het programma, klein logo in een vakje; zonder plaatje het logo groot */
-.chlogo { position: absolute; top: 10px; left: 10px; width: 66px; height: 40px; border-radius: 7px; background: rgba(5,7,10,.78) center/contain no-repeat; background-origin: content-box; padding: 4px 6px; }
-.thumb.logo-only { background-size: 40% auto; background-color: #10161e; }
-.thumb.logo-only .chlogo { display: none; }
 .badge.live { background: var(--live); }
 .bar { position: absolute; left: 14px; right: 14px; bottom: 12px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.25); }
 .bar i { display: block; height: 100%; border-radius: 3px; background: var(--ink); }

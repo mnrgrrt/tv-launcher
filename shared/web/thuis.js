@@ -258,31 +258,6 @@
     items.forEach(function (it) { bt.appendChild(F(h('button', { class: 'btn' }, esc(it[0])), function () { closeOverlay(); it[1](); })); });
     d.appendChild(bt); openOverlay(d);
   }
-  // Nu live: plaatje van het programma met een klein logo; zonder plaatje het logo groot.
-  function liveTile(ch, p, catId) {
-    var el = h('button', { class: 'row-item live-tile' });
-    el._live = { ch: ch, p: p }; paintLive(el);
-    return F(el, function () { playLive(catId, ch); });
-  }
-  function paintLive(el) {
-    var ch = el._live.ch, p = el._live.p, prog = p && p.end ? (Date.now() - p.start) / (p.end - p.start) : 0, pic = p && p.img;
-    el.innerHTML = '<div class="thumb' + (pic ? '' : ' logo-only') + '" style="' + bg(pic || ch.icon) + '"><i class="chlogo" style="' + bg(ch.icon) + '"></i><span class="badge live right">LIVE</span>' +
-      (prog > 0 ? '<div class="bar"><i style="width:' + Math.round(Math.min(1, prog) * 100) + '%"></i></div>' : '') + '</div>' +
-      '<div class="t1">' + esc(p ? p.title : ch.name) + '</div><div class="t2">' + esc(ch.name + (p ? ' · ' + clock(p.start) + '–' + clock(p.end) : '')) + '</div>';
-  }
-  // Nu live bijhouden zolang het scherm open is: balkjes elke minuut, nieuw programma zodra het vorige klaar is.
-  var liveTimer = 0;
-  function keepLiveFresh() {
-    clearInterval(liveTimer);
-    liveTimer = setInterval(function () {
-      var tiles = [].slice.call(document.querySelectorAll('.live-tile')); if (!tiles.length) return clearInterval(liveTimer);
-      var stale = tiles.filter(function (t) { return t._live.p && t._live.p.end < Date.now(); });
-      if (!stale.length) return tiles.forEach(paintLive);
-      get('/api/live/nownext?ids=' + tiles.map(function (t) { return t._live.ch.id; }).join(',')).then(function (nn) {
-        tiles.forEach(function (t) { t._live.p = (nn[t._live.ch.id] || [])[0] || t._live.p; paintLive(t); });
-      }, function () {});
-    }, 60000);
-  }
   function appTile(title, app) {
     var t = wide({ title: title, ok: function () { N.launch(app.pkg); } });
     t.classList.add('app-tile'); t.querySelector('.thumb').style.backgroundImage = "url('" + (app.banner || app.icon) + "')";
@@ -535,32 +510,18 @@
         });
       }, 350);
     }
-    // Wat Verder kijken op de achtergrond mag zetten: films via TMDB, afleveringen met de achtergrond van de serie, geen opnames.
-    function contArt(c) {
-      if (/\bS\d{1,2}E\d{1,3}\b/i.test(c.title || '')) return null;
-      if (c.type === 'episode' && c.art) return { img: c.art, title: c.title, meta: c.sub };
-      if (c.tmdb && c.kind === 'movie') return { tmdb: c.tmdb, type: 'movie', title: c.title, meta: c.sub };
-      return null;
-    }
-    var slots = {}; ['cont', 'live', 'svc', 'foryou', 'picks', 'apps'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
-    slots.cont.className = 'first';
-    slots.cont.appendChild(loading());
-    var again = function () { go('home', {}, true); };
+    // Thuis: eerst je diensten (daar begin je meestal), dan wat nieuw is en wat populair is. Verder kijken en live staan in Films, Series en Live tv.
+    var slots = {}; ['svc', 'foryou', 'picks', 'apps'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    slots.svc.className = 'first';
     var svcQ = myServices().then(function (keys) { return 'profile=' + S.profile + '&services=' + keys.join(','); });
     svcQ.then(function (q) { return get('/api/home?' + q); }).then(function (d) {
       var picks = (d.picks && d.picks.picks) || [];
-      slots.cont.innerHTML = '';
-      var cont = (d.continue || []).map(function (c) {
-        return contTile(c, again, function () { var a = contArt(c); if (a) showArt(a); });
-      });
-      if (cont.length) slots.cont.appendChild(rowSection('Verder kijken', cont, me().name));
       if (picks.length) slots.picks.appendChild(rowSection('Populair bij je diensten', picks.map(function (p) {
         return wide({ title: p.title, sub: p.type + (p.year ? ' · ' + p.year : ''), img: p.thumb, badge: serviceName(p.service),
           ok: function () { go('info', { type: p.id.indexOf('tv') === 0 ? 'tv' : 'movie', tmdb: p.tmdb, title: p.title }); },
           focus: function () { showArt({ tmdb: p.tmdb, type: p.id.indexOf('tv') === 0 ? 'tv' : 'movie', title: p.title, meta: [p.type, p.year, serviceName(p.service)].filter(Boolean).join(' · ') }); } });
       })));
-    }).catch(function (e) { slots.cont.innerHTML = '<div class="empty">Thuis kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
-    liveNow().then(function (tiles) { if (tiles.length) { slots.live.appendChild(rowSection('Nu live', tiles)); keepLiveFresh(); } });
+    }).catch(function (e) { slots.picks.innerHTML = '<div class="empty">Thuis kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
     // Nieuw voor jou: nieuw uit Plex, IPTV en je diensten, en net uit; wat bij jouw smaak past bovenaan.
     svcQ.then(function (q) { return get('/api/foryou?' + q); }).then(function (l) {
       if (l.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', l.map(function (o) {
@@ -577,19 +538,6 @@
     return el;
   };
   function serviceName(k) { var s = S.svcList.filter(function (x) { return x.key === k; })[0]; return s ? s.name : (k || ''); }
-  // Favoriete zenders van dit profiel, anders de eerste categorie; met wat er nu op is.
-  function liveNow() {
-    return Promise.all([liveCats(), get('/api/favorites?profile=' + S.profile).catch(function () { return []; })]).then(function (r) {
-      var cats = r[0], fav = r[1], cat = cats.filter(function (c) { return c.id !== 'alle' && !c.parent && c.channels.length; })[0];
-      var all = (cats.filter(function (c) { return c.id === 'alle'; })[0] || { channels: [] }).channels;
-      var list = fav.length ? fav.map(function (id) { return all.filter(function (c) { return c.id === id; })[0]; }).filter(Boolean) : (cat ? cat.channels.slice(0, 12) : []);
-      var catId = fav.length ? 'alle' : (cat && cat.id);
-      if (!list.length) return [];
-      return get('/api/live/nownext?ids=' + list.map(function (c) { return c.id; }).join(',')).then(function (nn) {
-        return list.map(function (ch) { return liveTile(ch, (nn[ch.id] || [])[0], catId); });
-      });
-    }).catch(function () { return []; });
-  }
   function liveCats(force) {
     if (S.cats && !force && Date.now() - S.catsAt < 30 * 60e3) return Promise.resolve(S.cats);
     return get('/api/live/categories').then(function (c) { S.cats = c; S.catsAt = Date.now(); return c; });
