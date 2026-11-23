@@ -39,7 +39,7 @@ import java.util.concurrent.Executors
 
 /**
  * Speler voor films en afleveringen van de IPTV-server.
- * OK = pauze, links/rechts = 10 s terug / 30 s vooruit, omhoog/omlaag = 5 min,
+ * OK = pauze, links/rechts = 10 s terug / 30 s vooruit,
  * omlaag = opties (ondertitels, geluid), Terug = stoppen (positie wordt onthouden).
  */
 @OptIn(UnstableApi::class)
