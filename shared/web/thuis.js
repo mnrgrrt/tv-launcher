@@ -228,7 +228,7 @@
     var b = (o.services || []).map(function (k) {
       var u = S.logos && S.logos[k];
       return u ? '<i class="ic" title="' + esc(serviceName(k)) + '" style="' + bg(u) + '"></i>' : '<span>' + esc(serviceName(k).slice(0, 7)) + '</span>';
-    }).concat((o.sources || []).map(function (s) { return '<span class="' + s + '">' + (s === 'plex' ? 'Plex' : 'IPTV') + '</span>'; })).slice(0, 3);
+    }).concat((o.sources || []).map(function (s) { return '<i class="ic ' + s + '" title="' + (s === 'plex' ? 'Plex' : 'IPTV') + '"></i>'; })).slice(0, 3);
     // Nergens te zien (nog niet uit, of nergens die je hebt): dat meteen op de tegel.
     if (!b.length) b = ['<span class="nog">Nog niet te zien</span>'];
     return '<div class="badges">' + b.join('') + '</div>';
@@ -783,23 +783,26 @@
       // Waar te zien: eerst de diensten die je hebt, dan Plex en IPTV. Diensten die je niet hebt staan er grijs bij.
       var svc = d.services || [], have = svc.filter(function (x) { return x.key && mine.indexOf(x.key) >= 0; }), other = svc.filter(function (x) { return have.indexOf(x) < 0 && !/channel|with ads|met reclame/i.test(x.name); });
       var chip = function (x, dim) { return '<span class="where' + (dim ? ' dim' : '') + '">' + (x.logo ? '<i style="' + bg(x.logo) + '"></i>' : '') + esc(x.name) + '</span>'; };
-      var where = have.map(function (x) { return chip(x); }).concat(a.plex ? [chip({ name: 'Plex' })] : [], a.vod ? [chip({ name: 'IPTV' })] : []);
+      var canWatch = have.length || a.plex || a.vod;
       txt.innerHTML = '<h1>' + esc(d.title || a.title) + '</h1><div class="meta">' + meta.map(function (m) { return '<span>' + (m.indexOf('<span') === 0 ? m : esc(m)) + '</span>'; }).join('') + '</div>' +
         '<p class="desc">' + esc(d.overview || (show && show.plot) || (a.plex && a.plex.summary) || (a.vod && a.vod.plot) || '') + '</p>' +
-        '<div class="wherebox">' + (where.length ? '<span class="dim">Te zien via</span>' + where.join('') : '<span class="dim">Nog niet te zien</span>') +
-        (other.length ? '<span class="dim" style="margin-left:14px">Ook op</span>' + other.slice(0, 4).map(function (x) { return chip(x, true); }).join('') : '') + '</div>';
+        '<div class="wherebox">' + (canWatch ? '' : '<span class="dim">Nog niet te zien</span>') +
+        (other.length ? '<span class="dim"' + (canWatch ? '' : ' style="margin-left:14px"') + '>Ook op</span>' + other.slice(0, 4).map(function (x) { return chip(x, true); }).join('') : '') + '</div>';
       if (d.tmdb) (S.art[a.type + d.tmdb] ? Promise.resolve(S.art[a.type + d.tmdb]) : get('/api/art/' + a.type + '/' + d.tmdb).then(function (x) { S.art[a.type + d.tmdb] = x; return x; }, function () { return {}; })).then(function (x) {
         if (!x.logo) return; var lg = new Image(); lg.className = 'ilogo'; lg.alt = d.title || ''; lg.onload = function () { var t = txt.querySelector('h1'); if (t) t.replaceWith(lg); }; lg.src = img(x.logo);
       });
       var bt = h('div', { class: 'ibtns' });
-      var openSvc = have[0] && F(h('button', { class: 'btn' }, 'Openen in ' + esc(have[0].name)), function () { openApp(serviceMatch(have[0].key)); });
+      // Kijken: één knop per bron, met het logo. Eerst je eigen diensten (dan hoef je niet via IPTV), dan Plex, dan IPTV.
+      var srcBtn = function (logoHtml, label, fn) { return F(h('button', { class: 'btn src' }, logoHtml + '<span>' + esc(label) + '</span>'), fn); };
+      have.forEach(function (x) { bt.appendChild(srcBtn(x.logo ? '<i class="ic" style="' + bg(x.logo) + '"></i>' : '', x.name.replace(/^Amazon /, ''), function () { openApp(serviceMatch(x.key)); })); });
       if (series && show) {
         var nx = nextUp(show);
-        if (nx) bt.appendChild(F(h('button', { class: 'btn' }, '▶&nbsp; ' + esc(nx.label + ': S' + nx.s.season + ' afl. ' + nx.e.num)), function () { playEp(nx.s, nx.e); }));
-      } else if (a.plex && !series) bt.appendChild(F(h('button', { class: 'btn' }, '▶&nbsp; Afspelen'), function () { playPlex(a.plex.key, a.plex); }));
-      else if (a.vod && !series) bt.appendChild(F(h('button', { class: 'btn' }, '▶&nbsp; Afspelen'), function () { playMovie(a.vod); }));
-      // Staat het op een dienst die je hebt, dan die knop vooraan: dan hoef je niet via IPTV.
-      if (openSvc) bt.insertBefore(openSvc, bt.firstChild);
+        if (nx) bt.appendChild(srcBtn('<i class="ic ' + (a.plex ? 'plex' : 'iptv') + '"></i>', (a.plex ? 'Plex' : 'IPTV') + ' · ' + nx.label + ' S' + nx.s.season + ' afl. ' + nx.e.num, function () { playEp(nx.s, nx.e); }));
+      } else if (!series) {
+        if (a.plex) bt.appendChild(srcBtn('<i class="ic plex"></i>', 'Plex', function () { playPlex(a.plex.key, a.plex); }));
+        if (a.vod) bt.appendChild(srcBtn('<i class="ic iptv"></i>', 'IPTV', function () { playMovie(a.vod); }));
+      }
+      if (bt.firstChild) bt.appendChild(h('span', { class: 'sep' }));
       if (!series && src) bt.appendChild(F(h('button', { class: 'btn' }, seen ? '✓ Bekeken' : 'Markeer als bekeken'), function () {
         var b = this; seen = !seen;
         setWatched([{ key: src, kind: 'movie', meta: { title: d.title || a.title, img: d.backdrop || '', tmdb: a.tmdb, type: 'movie' } }], seen).then(function () { b.innerHTML = seen ? '✓ Bekeken' : 'Markeer als bekeken'; });
@@ -848,8 +851,8 @@
         };
         paint();
       }
-      // Onder het beeld: meer zoals dit, cast, extra's, trailers, beelden en alles over de titel. Scrollen mag.
-      var slot = {}; ['rel', 'cast', 'extras', 'vid', 'img', 'over'].forEach(function (k) { slot[k] = h('div'); lower.appendChild(slot[k]); });
+      // Onder het beeld: cast, extra's en trailers, meer zoals dit, beelden en alles over de titel. Scrollen mag.
+      var slot = {}; ['cast', 'extras', 'vid', 'rel', 'img', 'over'].forEach(function (k) { slot[k] = h('div'); lower.appendChild(slot[k]); });
       if ((d.related || []).length) slot.rel.appendChild(rowSection('Meer zoals dit', d.related.map(function (x) {
         var type = x.id.indexOf('tv') === 0 ? 'tv' : 'movie';
         return poster({ title: x.title, sub: x.year, img: x.poster, badges: x.sources ? srcBadges(x) : '', ok: function () { go('info', { type: type, tmdb: x.tmdb, title: x.title, plex: x.plex || null, vod: x.vod || null, vodKind: type === 'tv' ? 'series' : 'movie' }); } });
