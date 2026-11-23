@@ -90,6 +90,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete test --yes --cleanup-tag || true
-          gh release create test thuis.apk --target "$GITHUB_SHA" --prerelease \
+          gh release create test "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk --target "$GITHUB_SHA" --prerelease \
             --title "Thuis $VERSIE (test)" \
             --notes "Testversie uit tak ${GITHUB_REF_NAME}, ${GITHUB_SHA::7}. Niet voor gewoon gebruik."

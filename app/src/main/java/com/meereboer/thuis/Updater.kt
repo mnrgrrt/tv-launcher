@@ -10,10 +10,14 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 
-/** Zelf bijwerken vanaf de GitHub-release "laatste". */
+/** Zelf bijwerken: een testversie kijkt naar de release "test", een gewone versie naar "laatste". */
 object Updater {
-    private const val API = "https://api.github.com/repos/mnrgrrt/tv-launcher/releases/tags/laatste"
-    private const val APK = "https://github.com/mnrgrrt/tv-launcher/releases/download/laatste/thuis.apk"
+    private fun tag(ctx: Context): String {
+        val name = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
+        return if (name.contains("test")) "test" else "laatste"
+    }
+    private fun api(ctx: Context) = "https://api.github.com/repos/mnrgrrt/tv-launcher/releases/tags/${tag(ctx)}"
+    private fun apk(ctx: Context) = "https://github.com/mnrgrrt/tv-launcher/releases/download/${tag(ctx)}/thuis.apk"
 
     fun installedVersion(ctx: Context): Int {
         val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
@@ -22,8 +26,8 @@ object Updater {
     }
 
     /** Nieuwste build: intern nummer uit de bestandsnaam thuis-<nummer>.apk, zichtbare naam uit de release ("Thuis 1.03"). */
-    private fun latest(): Pair<Int, String> {
-        val req = Request.Builder().url(API).header("Accept", "application/vnd.github+json").build()
+    private fun latest(ctx: Context): Pair<Int, String> {
+        val req = Request.Builder().url(api(ctx)).header("Accept", "application/vnd.github+json").build()
         Server.http.newCall(req).execute().use { r ->
             if (!r.isSuccessful) throw RuntimeException("GitHub gaf fout ${r.code}")
             val o = JSONObject(r.body?.string() ?: "{}")
@@ -34,7 +38,7 @@ object Updater {
     }
 
     fun check(ctx: Context): JSONObject {
-        val (code, name) = latest()
+        val (code, name) = latest(ctx)
         val cur = installedVersion(ctx)
         val curName = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
         return JSONObject().put("current", curName).put("latest", name).put("newer", code > cur)
@@ -50,7 +54,7 @@ object Updater {
         }
         val dir = File(ctx.cacheDir, "updates").apply { mkdirs() }
         val file = File(dir, "thuis.apk")
-        Server.http.newCall(Request.Builder().url(APK).build()).execute().use { r ->
+        Server.http.newCall(Request.Builder().url(apk(ctx)).build()).execute().use { r ->
             if (!r.isSuccessful) throw RuntimeException("Download mislukt (${r.code})")
             file.outputStream().use { out -> r.body!!.byteStream().copyTo(out) }
         }
