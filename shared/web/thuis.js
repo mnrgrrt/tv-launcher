@@ -9,8 +9,10 @@
   var SCALE = 1, W = 1920, H = 1080, VIEWS = { normaal: 1, compact: 1.15, ruim: 0.9 };
   function fit() {
     var f = VIEWS[(S && S.view) || 'normaal'] || 1; W = Math.round(1920 * f); H = Math.round(1080 * f);
+    // Alleen de body wordt groter getekend en daarna verkleind; html blijft schermvullend (1920 breed),
+    // anders zoomt de WebView zelf ook nog uit en vult Thuis het scherm niet meer.
     var de = document.documentElement, b = document.body;
-    de.style.width = b.style.width = W + 'px'; de.style.height = b.style.height = H + 'px';
+    b.style.width = W + 'px'; b.style.height = H + 'px';
     b.classList.toggle('view-compact', f > 1);
     var w = window.innerWidth || de.clientWidth || 1920, hh = window.innerHeight || de.clientHeight || 1080;
     SCALE = Math.min(w / W, hh / H); b.style.transformOrigin = '0 0'; b.style.transform = SCALE === 1 ? '' : 'scale(' + SCALE + ')'; }
@@ -934,7 +936,13 @@
     }).then(function (r) {
       var d = r[0] || {}, seen = !!r[2].on, show = r[3];
       var inList = r[1].some(function (x) { return x.key === (src || 'tmdb:' + a.type + a.tmdb); });
-      bgEl.style.backgroundImage = "url('" + img(d.backdrop || (show && show.backdrop) || (a.plex && a.plex.art) || (a.vod && a.vod.backdrop)) + "')";
+      var bgMain = d.backdrop || (show && show.backdrop) || (a.plex && a.plex.art) || (a.vod && a.vod.backdrop), bgNow = '';
+      // Achtergrond wisselen met zacht overvloeien (per seizoen fanart van fanart.tv, anders de gewone).
+      var setInfoBg = function (u) {
+        if (!u || u === bgNow) return; bgNow = u;
+        var pic = new Image(); pic.onload = function () { if (bgNow !== u) return; bgEl.style.backgroundImage = "url('" + pic.src.replace(/'/g, '%27') + "')"; }; pic.src = img(u);
+      };
+      setInfoBg(bgMain);
       if (d.cast && d.cast.length) castLine.innerHTML = '<span class="dim">Met </span>' + esc(d.cast.slice(0, 3).map(function (c) { return c.name; }).join(', '));
       var nSeasons = show ? show.seasons.length : (d.seasons || []).length;
       var imdb = (d.ratings && d.ratings.imdb ? 'IMDb ' + String(d.ratings.imdb).replace('.', ',') : d.rating ? '★ ' + d.rating.toFixed(1).replace('.', ',') : '') +
@@ -1004,6 +1012,7 @@
         var paint = function () {
           [].forEach.call(pills.querySelectorAll('.pill'), function (p, i) { p.classList.toggle('on', i === st.season); });
           var s = show.seasons[st.season], keep = cur && row.contains(cur) ? [].indexOf.call(cur.parentNode.children, cur) : -1;
+          setInfoBg((d.seasonArt || {})[s.season] || bgMain);
           row.innerHTML = '';
           row.appendChild(rowSection('', s.episodes.map(function (e) {
             // Aflevering als kaart: beeld met de tekst erop, zoals in een goede videotheek.

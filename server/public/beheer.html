@@ -76,8 +76,8 @@ const $=id=>document.getElementById(id);
 const F={server:'Dispatcharr-adres',user:'Dispatcharr-gebruiker',pass:'Dispatcharr-wachtwoord (XC)',format:'Streamformaat (ts/m3u8)',tmdbToken:'TMDB-sleutel',
 plexUrl:'Plex-adres',plexToken:'Plex-token',osKey:'OpenSubtitles-sleutel',osUser:'OpenSubtitles-gebruiker',osPass:'OpenSubtitles-wachtwoord',
 radarrUrl:'Radarr-adres',radarrKey:'Radarr-sleutel',sonarrUrl:'Sonarr-adres',sonarrKey:'Sonarr-sleutel',categories:'Zenderregels (url)',haWebhook:'HA-webhook',
-omdbKey:'OMDb-sleutel (IMDb-cijfers)',youtubeKey:'YouTube-sleutel (live zoeken)',weatherPlace:'Plaats voor het weer (schermbeveiliging)'};
-const SECRET=['pass','tmdbToken','plexToken','osKey','osPass','radarrKey','sonarrKey','omdbKey','youtubeKey'];
+omdbKey:'OMDb-sleutel (IMDb-cijfers)',youtubeKey:'YouTube-sleutel (live zoeken)',weatherPlace:'Plaats voor het weer (schermbeveiliging)',fanartKey:'fanart.tv: projectsleutel (API key)',fanartClient:'fanart.tv: persoonlijke sleutel (mag leeg)'};
+const SECRET=['pass','tmdbToken','plexToken','osKey','osPass','radarrKey','sonarrKey','omdbKey','youtubeKey','fanartKey','fanartClient'];
 const NAMES={dispatcharr:'Dispatcharr (live tv, films, series)',plex:'Plex',radarr:'Radarr',sonarr:'Sonarr',tmdb:'TMDB (voorstellen, info)'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const when=t=>t?new Date(t).toLocaleString('nl-NL',{dateStyle:'short',timeStyle:'short'}):'nooit';

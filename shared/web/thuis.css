@@ -95,11 +95,11 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .hero { position: relative; height: 780px; margin-bottom: -200px; padding: 0 80px; }
 .hero-bg { position: absolute; inset: 0; transition: opacity .6s var(--ease); }
 .screen.down .hero-bg { opacity: .32; }
-.hero-bg .bg { position: absolute; left: 0; right: 0; top: 0; height: 1080px; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.2s var(--ease); animation: drift 40s ease-in-out infinite alternate; }
+.hero-bg .bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.2s var(--ease); animation: drift 40s ease-in-out infinite alternate; }
 .hero-bg .bg.on { opacity: 1; }
 /* Onderkant van de foto zelf laten wegvloeien: ook bij inzoomen en scrollen geen harde rand */
 .hero-bg .bg { -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 98%); mask-image: linear-gradient(180deg, #000 55%, transparent 98%); }
-.hero-bg::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1080px; pointer-events: none; background: linear-gradient(0deg, var(--bg) 0%, rgba(14,14,16,.6) 22%, rgba(14,14,16,0) 50%), linear-gradient(90deg, rgba(14,14,16,.55) 0%, rgba(14,14,16,0) 45%), linear-gradient(180deg, rgba(14,14,16,.45) 0%, rgba(14,14,16,0) 18%); }
+.hero-bg::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg, var(--bg) 0%, rgba(14,14,16,.6) 22%, rgba(14,14,16,0) 50%), linear-gradient(90deg, rgba(14,14,16,.55) 0%, rgba(14,14,16,0) 45%), linear-gradient(180deg, rgba(14,14,16,.45) 0%, rgba(14,14,16,0) 18%); }
 /* Eerste blok vult het scherm; een zacht pijltje onderin wijst naar wat eronder staat */
 .fold { position: relative; }
 .lsearch { position: absolute; right: 80px; top: 40px; z-index: 5; display: flex; align-items: center; gap: 10px; font-size: 20px; background: rgba(20,20,24,.45); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
