@@ -50,13 +50,13 @@ export function trending(type) {
 
 /** Mooiste achtergrond (zonder tekst erin) en het titellogo, voor de grote afbeelding op Thuis. Een week bewaard. */
 export function art(type, id) {
-  return cached(`tmdb:art:${type}:${id}`, 7 * 86400e3, async () => {
+  return cached(`tmdb:art2:${type}:${id}`, 7 * 86400e3, async () => {
     const r = await tmdb(`/${type}/${id}/images?include_image_language=nl,en,null`);
     const bds = (r.backdrops || []).filter(b => b.width >= 1920);
     const bd = bds.filter(b => !b.iso_639_1).sort((a, b) => b.vote_average - a.vote_average)[0] || bds[0];
     const logos = r.logos || [];
     const logo = logos.find(l => l.iso_639_1 === 'nl') || logos.find(l => l.iso_639_1 === 'en') || logos[0];
-    return { backdrop: bd ? TIMG + 'original' + bd.file_path : '', logo: logo ? TIMG + 'w500' + logo.file_path : '' };
+    return { backdrop: bd ? TIMG + 'w1280' + bd.file_path : '', logo: logo ? TIMG + 'w500' + logo.file_path : '' };
   });
 }
 
@@ -102,7 +102,7 @@ const streamingServices = () => services().filter(s => s.provider > 0 && s.key !
 
 /** Alles voor de informatiepagina: details, acteurs, trailer, vergelijkbaar, diensten. */
 export function details(type, id) {
-  return cached(`tmdb:d3:${type}:${id}`, 24 * 3600e3, async () => {
+  return cached(`tmdb:d4:${type}:${id}`, 24 * 3600e3, async () => {
     const d = await tmdb(`/${type}/${id}?language=nl-NL&append_to_response=credits,videos,similar,recommendations,release_dates,content_ratings,external_ids,watch/providers&include_video_language=nl,en`);
     const tv = type === 'tv', mine = new Map(streamingServices().map(s => [s.provider, s.key]));
     const yt = (d.videos?.results || []).filter(v => v.site === 'YouTube');
@@ -120,7 +120,7 @@ export function details(type, id) {
       year: (tv ? d.first_air_date : d.release_date || '').slice(0, 4), overview: d.overview || '', tagline: d.tagline || '',
       runtime: tv ? (d.episode_run_time || [])[0] || 0 : d.runtime || 0, rating: d.vote_average || 0, age,
       genres: (d.genres || []).map(g => g.name),
-      backdrop: d.backdrop_path ? TIMG + 'original' + d.backdrop_path : '', poster: d.poster_path ? TIMG + 'w500' + d.poster_path : '',
+      backdrop: d.backdrop_path ? TIMG + 'w1280' + d.backdrop_path : '', poster: d.poster_path ? TIMG + 'w500' + d.poster_path : '',
       director: tv ? (d.created_by || []).map(c => c.name).join(', ') : (d.credits?.crew || []).filter(c => c.job === 'Director').map(c => c.name).join(', '),
       cast: (d.credits?.cast || []).slice(0, 15).map(c => ({ id: c.id, name: c.name, role: c.character, photo: c.profile_path ? TIMG + 'w185' + c.profile_path : '' }))
         .concat((d.credits?.crew || []).filter(c => c.job === 'Director').slice(0, 2).map(c => ({ id: c.id, name: c.name, role: 'Regie', photo: c.profile_path ? TIMG + 'w185' + c.profile_path : '' }))),

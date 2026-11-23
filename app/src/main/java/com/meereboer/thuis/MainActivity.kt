@@ -77,6 +77,14 @@ class MainActivity : Activity() {
                 return loader.shouldInterceptRequest(u)
             }
         }
+        // Fouten in de pagina naar het logboek van Android (tag ThuisWeb), zodat we ze op de tv kunnen terugvinden.
+        web.webChromeClient = object : android.webkit.WebChromeClient() {
+            override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR || m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.WARNING)
+                    android.util.Log.w("ThuisWeb", "${m.message()} (${m.sourceId()?.substringAfterLast('/')}:${m.lineNumber()})")
+                return true
+            }
+        }
         web.addJavascriptInterface(Bridge(this, web), "Native")
         setContentView(web)
         Prefs(this).wipeOldSecrets()
