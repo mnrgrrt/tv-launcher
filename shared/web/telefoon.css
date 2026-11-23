@@ -41,8 +41,8 @@ h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
 .t2 { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .poster { width: 118px; }
 .poster .th { position: relative; aspect-ratio: 2/3; border-radius: 10px; background: var(--card) center/cover no-repeat; }
-.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 10px; padding: 4px 18px; }
-.grid .poster { width: auto; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; padding: 4px 18px; }
+.grid .poster { width: auto; min-width: 0; }
 .badges { position: absolute; top: 6px; left: 6px; display: flex; gap: 4px; }
 .badges i { width: 18px; height: 18px; border-radius: 5px; background: center/contain no-repeat; }
 .ic.plex { background: #1f1f1f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e5a00d' d='M8 4h4.5l5 8-5 8H8l5-8z'/%3E%3C/svg%3E") center/80% no-repeat; }
@@ -130,7 +130,7 @@ h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
 .sheet h3 { font-size: 17px; padding: 4px 20px 10px; }
 .sheet .it { display: block; width: 100%; padding: 14px 20px; font-size: 16px; font-weight: 500; }
 .sheet .it:active { background: rgba(255,255,255,.06); }
-.who { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px 10px; padding: 10px 20px; }
+.who { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 10px; padding: 10px 20px; }
 .who button { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
 .who img { width: 76px; height: 76px; border-radius: 50%; object-fit: cover; background: var(--card2); }
 .who .cur img { outline: 3px solid #fff; outline-offset: 3px; }
