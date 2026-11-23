@@ -126,6 +126,15 @@ on('GET', '/api/live/guide', 'device', async ({ q }) => {
   const g = epg.grid([...new Set(chs.map(c => c.epgId).filter(Boolean))], from, to);
   return chs.map(c => ({ id: c.id, archive: c.archive, programmes: g[c.epgId] || [] }));
 });
+// Terugkijken: begintijd in Nederlandse tijd, zoals de aanbieder hem verwacht.
+on('GET', '/api/live/catchup/:id', 'device', ({ p, q }) => {
+  const start = +q.get('start'), end = +q.get('end') || start + 3600e3;
+  if (!start || start > Date.now()) throw Object.assign(new Error('Dit programma is nog niet geweest'), { status: 400 });
+  const f = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(start));
+  const stamp = f.replace(' ', ':').replace(/:(\d{2})$/, '-$1');      // 2026-11-22:20-00
+  const minutes = Math.min(Math.ceil((end - start) / 60000) + 10, 600);  // 10 minuten marge voor uitloop
+  return { url: auth.sign(`/stream/timeshift/${+p.id}/${stamp}/${minutes}`) };
+});
 on('GET', '/api/live/url/:id', 'device', ({ p }) => ({ url: auth.sign(`/stream/live/${+p.id}`) }));
 
 on('GET', '/api/home', 'device', async ({ q }) => {

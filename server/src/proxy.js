@@ -26,6 +26,8 @@ export async function pipe(req, res, url, extraHeaders = {}) {
 export function target(path, q) {
   let m;
   if ((m = /^\/stream\/live\/(\d+)$/.exec(path))) return { url: streamUrl(m[1]) };
+  if ((m = /^\/stream\/timeshift\/(\d+)\/(\d{4}-\d{2}-\d{2}:\d{2}-\d{2})\/(\d{1,4})$/.exec(path)))
+    return { url: `${S('server')}/timeshift/${enc(S('user'))}/${enc(S('pass'))}/${m[3]}/${m[2]}/${m[1]}.ts` };
   if ((m = /^\/stream\/(movie|series)\/(\d+)\.(\w{2,5})$/.exec(path)))
     return { url: `${S('server')}/${m[1]}/${enc(S('user'))}/${enc(S('pass'))}/${m[2]}.${m[3]}` };
   if (path === '/stream/plex') {
