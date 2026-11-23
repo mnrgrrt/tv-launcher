@@ -220,7 +220,7 @@
     // Diensten die op dit apparaat staan, met hun logo. OK opent de app.
     var svcBox = h('div', { class: 'svcs' }); nav.appendChild(svcBox);
     installedServices().then(function (l) {
-      l = l.filter(function (x) { return isStreaming(x.svc) || x.svc.key === 'youtube' || x.svc.key === 'ziggo'; });
+      l = sortServices(l.filter(function (x) { return x.svc.key !== 'plex'; }));
       if (!l.length) return;
       svcBox.appendChild(h('div', { class: 'hd' }, 'Diensten'));
       l.forEach(function (x) {
@@ -422,6 +422,9 @@
     return installedServices().then(function (l) { return l.filter(function (x) { return isStreaming(x.svc); }).map(function (x) { return x.svc.key; }); });
   }
   // Diensten met eigen aanbod bij TMDB (Plex is van onszelf en telt hier niet mee).
+  // Vaste volgorde: eerst tv kijken (Ziggo, Odido), dan WithLove, dan de rest zoals in services.json.
+  var FIRST = ['ziggo', 'odido', 'withlove'];
+  function sortServices(l) { return l.slice().sort(function (a, b) { var x = FIRST.indexOf(a.svc.key), y = FIRST.indexOf(b.svc.key); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y); }); }
   function isStreaming(s) { return s.provider && s.key !== 'plex'; }
 
   // ---------- herinneringen ----------
@@ -567,8 +570,8 @@
       }, 350);
     }
     // Thuis: eerst je diensten (daar begin je meestal), dan wat nieuw is en wat populair is. Verder kijken en live staan in Films, Series en Live tv.
-    var slots = {}; ['foryou', 'picks', 'later'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
-    slots.foryou.className = 'first';
+    var slots = {}; ['svc', 'foryou', 'picks', 'later'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    slots.svc.className = 'first';
     var svcQ = myServices().then(function (keys) { return 'profile=' + S.profile + '&services=' + keys.join(','); });
     svcQ.then(function (q) { return get('/api/home?' + q); }).then(function (d) {
       var picks = (d.picks && d.picks.picks) || [];
@@ -586,6 +589,11 @@
       if (d.now.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', d.now.map(tile)));
       if (d.later.length) slots.later.appendChild(rowSection('Nog niet te zien', d.later.map(tile)));
     }).catch(function () {});
+    // Bovenaan de apps waar je meteen naartoe wilt: tv (Ziggo of Odido) en WithLove eerst, dan de andere diensten.
+    installedServices().then(function (l) {
+      l = sortServices(l.filter(function (x) { return x.svc.key !== 'plex'; }));
+      if (l.length) slots.svc.appendChild(rowSection('Kijken', l.map(function (x) { return appTile(x.svc.name, x.app); })));
+    });
     return el;
   };
   function serviceName(k) { var s = S.svcList.filter(function (x) { return x.key === k; })[0]; return s ? s.name : (k || ''); }
