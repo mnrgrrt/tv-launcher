@@ -51,6 +51,10 @@ select{padding:7px 8px;border-radius:8px;border:1px solid var(--line);background
  <div class="card"><h2>Tv koppelen</h2><p class="dim">Vraag een code aan en typ die op de tv in. De code is 10 minuten geldig.</p>
   <div class="code" id="code"></div><button id="newcode">Nieuwe code</button></div>
  <div class="card"><h2>Gekoppelde apparaten</h2><p class="dim">Standaardprofiel: daarmee start het apparaat meteen. Vast: op dat apparaat kan niet van profiel gewisseld worden. Vragen: of bij het starten van iets gevraagd wordt wie er kijkt.</p><div id="devices"></div></div>
+ <div class="card"><h2>Foto's voor Thuis</h2><p class="dim">Bovenaan Thuis wisselt een van deze foto's. Liggende foto's werken het best; de pagina verkleint ze zelf.</p>
+  <div id="photos" style="display:flex;flex-wrap:wrap;gap:10px;margin:10px 0"></div>
+  <div class="row"><input id="phby" placeholder="Fotograaf (mag leeg)"><button class="ghost" id="phadd">Foto's toevoegen</button></div>
+  <input type="file" id="phfile" accept="image/*" multiple hidden></div>
  <div class="card"><h2>Profielen</h2><div id="profiles"></div>
   <div class="grid"><div><label>Naam</label><input id="pname"></div><div><label>Kleur</label><input id="pcolor" value="#3DDBB0"></div></div>
   <label><input type="checkbox" id="padmin"> Mag alles verwijderen en goedkeuren</label><button id="padd">Profiel toevoegen</button></div>
@@ -104,6 +108,7 @@ async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/se
   <label style="margin:0;display:flex;align-items:center;gap:4px"><input type="checkbox" data-dev="${x.id}" data-f="locked" ${x.locked?'checked':''} ${x.profile?'':'disabled'}> Vast</label>
   <select data-dev="${x.id}" data-f="ask">${[['altijd','Altijd vragen'],['samen','Vragen bij Samen'],['nooit','Nooit vragen']].map(([v,t])=>`<option value="${v}" ${v===x.ask?'selected':''}>${t}</option>`).join('')}</select>
   <button class="ghost" data-unpair="${x.id}">Ontkoppelen</button></div></div>`).join('')||'<div class="dim">Nog geen apparaten.</div>';
+ drawPhotos();
  $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div class="pl"><img class="av" src="${esc(p.avatarUrl)}" alt="" data-pick="${p.id}">${esc(p.name)} <label class="dim" style="margin-left:10px;display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-admin="${p.id}" ${p.admin?'checked':''}> mag alles</label></div><div class="acts">
   ${p.id>1?`<button class="ghost" data-move="${p.id}" data-dir="-1" aria-label="Omhoog">↑</button><button class="ghost" data-move="${p.id}" data-dir="1" aria-label="Omlaag">↓</button>`:''}
   <button class="ghost" data-pick="${p.id}">Avatar kiezen</button><button class="ghost" data-upload="${p.id}">Eigen foto</button><button class="ghost" data-hist="${p.id}" title="Kijkactiviteit van Netflix (csv), voor de smaak van dit profiel">Kijkgeschiedenis${p.history?' ('+p.history+')':''}</button>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div></div>`).join('');
@@ -136,6 +141,13 @@ document.addEventListener('click',async e=>{const t=e.target.dataset;
  if(t.unpair&&confirm('Deze tv ontkoppelen?')){await api('DELETE','/api/admin/devices/'+t.unpair);load()}
  if(t.delprofile&&confirm('Profiel en kijkstand verwijderen?')){await api('DELETE','/api/admin/profiles/'+t.delprofile);load()}
  if(t.deluser&&confirm('Deze beheerder verwijderen?')){try{await api('DELETE','/api/admin/users/'+t.deluser);load()}catch(x){alert(x.message)}}});
+// Foto's voor Thuis: in de browser verkleinen tot 2560x1440 (bijsnijden tot 16:9), dan pas versturen.
+async function drawPhotos(l){l=l||await api('GET','/api/admin/photos');$('photos').innerHTML=l.map(p=>`<div style="position:relative"><img src="${esc(p.url)}" alt="" style="width:160px;height:90px;object-fit:cover;border-radius:6px"><button class="ghost" data-delphoto="${esc(p.file)}" style="position:absolute;right:4px;top:4px;padding:2px 8px">×</button><div class="dim" style="font-size:12px">${esc(p.by||'')}</div></div>`).join('')}
+function shrink(f){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const W=2560,H=1440,c=document.createElement('canvas');c.width=W;c.height=H;const r=Math.max(W/i.width,H/i.height),w=i.width*r,h=i.height*r;
+ c.getContext('2d').drawImage(i,(W-w)/2,(H-h)/2,w,h);URL.revokeObjectURL(i.src);ok(c.toDataURL('image/jpeg',.85))};i.onerror=no;i.src=URL.createObjectURL(f)})}
+$('phadd').onclick=()=>$('phfile').click();
+$('phfile').onchange=async()=>{for(const f of $('phfile').files){try{await drawPhotos(await api('POST','/api/admin/photos',{data:await shrink(f),by:$('phby').value}))}catch(x){alert(x.message)}}$('phfile').value=''};
+document.addEventListener('click',async e=>{const d=e.target.dataset.delphoto;if(d&&confirm('Deze foto weghalen?')){try{await drawPhotos(await api('DELETE','/api/admin/photos/'+encodeURIComponent(d)))}catch(x){alert(x.message)}}});
 $('newcode').onclick=async()=>{$('code').textContent=(await api('POST','/api/admin/code')).code;load()};
 $('padd').onclick=async()=>{if(!$('pname').value.trim())return;await api('POST','/api/admin/profiles',{name:$('pname').value.trim(),color:$('pcolor').value,admin:$('padmin').checked});$('pname').value='';load()};
 $('save').onclick=async()=>{const o={};document.querySelectorAll('#settings input').forEach(i=>{if(SECRET.includes(i.dataset.k)){if(i.value)o[i.dataset.k]=i.value}else o[i.dataset.k]=i.value});

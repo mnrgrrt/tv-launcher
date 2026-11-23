@@ -1,5 +1,5 @@
 {
- "_uitleg": "Foto's bovenaan Thuis (Unsplash-licentie). Naam van de fotograaf staat klein in beeld.",
+ "_uitleg": "Startset foto's voor bovenaan Thuis (Unsplash-licentie). De server kopieert ze bij de eerste start naar /data/achtergrond; daarna beheer je ze op de beheerpagina.",
  "photos": [
   {
    "file": "stefan-stefancik.jpg",
@@ -28,6 +28,18 @@
   {
    "file": "anders-jilden.jpg",
    "by": "Anders Jildén"
+  },
+  {
+   "file": "jared-rice.jpg",
+   "by": "Jared Rice"
+  },
+  {
+   "file": "christoffer-engstrom.jpg",
+   "by": "Christoffer Engström"
+  },
+  {
+   "file": "cristina-gottardi.jpg",
+   "by": "Cristina Gottardi"
   }
  ]
 }
