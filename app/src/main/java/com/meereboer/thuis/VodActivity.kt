@@ -183,7 +183,7 @@ class VodActivity : Activity() {
         openMenu("Weergave ondertitels", listOf(
             opt("Grootte: " + SubStyle.sizes[SubStyle.get(this, "size")].first, "size", 0),
             opt("Dikte: " + SubStyle.weights[SubStyle.get(this, "weight")].first, "weight", 1),
-            opt("Achtergrond: " + SubStyle.backs[SubStyle.get(this, "bg")].first, "bg", 2),
+            opt("Achtergrond: " + SubStyle.backs[SubStyle.get(this, "bg")], "bg", 2),
             opt("Hoogte: " + SubStyle.places[SubStyle.get(this, "place")].first, "place", 3),
             Opt("Klaar")), sel)
     }

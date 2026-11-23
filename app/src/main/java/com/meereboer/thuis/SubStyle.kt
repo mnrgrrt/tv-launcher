@@ -21,7 +21,7 @@ object SubStyle {
     fun get(c: Context, key: String) = sp(c).getInt(key, defaults[key] ?: 0).coerceIn(0, (counts[key] ?: 1) - 1)
     fun cycle(c: Context, key: String) { sp(c).edit().putInt(key, (get(c, key) + 1) % (counts[key] ?: 1)).apply() }
 
-    fun summary(c: Context) = listOf(sizes[get(c, "size")].first, weights[get(c, "weight")].first, backs[get(c, "bg")].first).joinToString(" · ")
+    fun summary(c: Context) = listOf(sizes[get(c, "size")].first, weights[get(c, "weight")].first, backs[get(c, "bg")]).joinToString(" · ")
 
     /** Toepassen. lift = extra ruimte onderin (deel van de schermhoogte), bijvoorbeeld als de balk in beeld is. */
     fun apply(c: Context, v: SubtitleView?, lift: Float = 0f) {
