@@ -20,14 +20,16 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .pill.focus { background: var(--ink); color: var(--bg); transform: scale(1.06); }
 .btn { display: inline-flex; align-items: center; gap: 12px; padding: 16px 32px; border-radius: 999px; font-size: 24px; font-weight: 700; border: 2px solid rgba(255,255,255,.4); white-space: nowrap; }
 .btn.focus { background: var(--ink); color: var(--bg); border-color: var(--ink); transform: scale(1.06); }
-.row-item.focus .thumb, .tile.focus .thumb, .poster.focus .pimg { outline: 4px solid var(--ink); outline-offset: 4px; transform: scale(1.06); box-shadow: 0 24px 60px rgba(0,0,0,.6); }
+/* Groeit naar boven en opzij, zodat de titel eronder leesbaar blijft */
+.row-item.focus .thumb, .tile.focus .thumb, .poster.focus .pimg { outline: 3px solid var(--ink); outline-offset: 3px; transform: scale(1.04); transform-origin: 50% 100%; box-shadow: 0 20px 50px rgba(0,0,0,.6); }
 .listrow { display: flex; justify-content: space-between; align-items: center; padding: 20px 28px; border-radius: 12px; background: var(--panel); font-size: 24px; }
 .listrow.focus { background: var(--ink); color: var(--bg); }
 .listrow.focus .dim { color: rgba(5,7,10,.7); }
 /* Zoekresultaten als lijst */
 .hit { display: flex; align-items: center; gap: 20px; height: 66px; padding: 0 20px; border-radius: 12px; background: var(--panel); font-size: 20px; width: 100%; text-align: left; }
-.hit .st { width: 110px; flex: none; font-weight: 700; white-space: nowrap; }
+.hit .st { width: 165px; flex: none; font-weight: 700; white-space: nowrap; }
 .hit .st.live { color: #FF6B6B; }
+.hit .st.yt { color: #FF4E45; }
 .hit .ti { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hit .ch { width: 250px; flex: none; display: flex; align-items: center; gap: 10px; white-space: nowrap; overflow: hidden; }
 .hit .ch i { width: 46px; height: 30px; flex: none; border-radius: 5px; background: #232c37 center/contain no-repeat; }
@@ -66,10 +68,10 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .section { padding: 16px 0 4px; }
 .section h2 { font-size: 24px; font-weight: 600; padding: 0 80px 12px; }
 .section h2 small { font-size: 17px; font-weight: 500; color: var(--ink-3); }
-.row { display: flex; gap: 20px; padding: 0 80px; transition: transform .25s var(--ease); }
-.row-clip { overflow: hidden; padding: 10px 0 12px; }
+.row { display: flex; gap: 30px; padding: 0 80px; transition: transform .25s var(--ease); }
+.row-clip { overflow: hidden; padding: 18px 0 12px; }
 .row-item, .poster, .listrow { text-align: left; }
-.row-item { width: 320px; flex: none; display: flex; flex-direction: column; gap: 8px; }
+.row-item { width: 320px; flex: none; display: flex; flex-direction: column; gap: 12px; }
 .thumb { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 14px; background: var(--card) center/cover no-repeat; transition: transform .15s var(--ease), box-shadow .15s; }
 .thumb .badge { position: absolute; top: 10px; left: 10px; padding: 3px 9px; border-radius: 6px; background: rgba(0,0,0,.6); font-size: 14px; font-weight: 700; }
 .badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; }
@@ -85,7 +87,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .bar i { display: block; height: 100%; border-radius: 3px; background: var(--ink); }
 .t1 { font-size: 19px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .t2 { font-size: 16px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -4px; }
-.poster { width: 170px; flex: none; display: flex; flex-direction: column; gap: 7px; }
+.poster { width: 170px; flex: none; display: flex; flex-direction: column; gap: 11px; }
 .pimg { width: 170px; height: 255px; border-radius: 10px; background: var(--card) center/cover no-repeat; transition: transform .15s var(--ease), box-shadow .15s; position: relative; }
 .app-tile .thumb { background-size: contain; background-color: #0e1218; }
 .app-tile { width: 240px; }
@@ -94,7 +96,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .mosaic i { flex: 1; border-radius: 6px; background: var(--card) center/cover no-repeat; }
 
 /* Raster (bladeren) */
-.grid { display: grid; grid-template-columns: repeat(9, 170px); gap: 24px 22px; padding: 10px 80px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, 170px); gap: 30px 26px; padding: 18px 80px 10px; }
 .filters { position: absolute; left: 80px; right: 80px; top: 130px; display: flex; gap: 10px; align-items: center; }
 .filters .count { margin-left: auto; font-size: 20px; color: var(--ink-3); }
 
@@ -138,6 +140,21 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .who-item.focus img { outline: 6px solid var(--ink); outline-offset: 8px; transform: scale(1.08); }
 .who-item.focus span { color: var(--ink); font-weight: 700; }
 #toast { position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); padding: 18px 30px; border-radius: 14px; background: rgba(15,20,26,.96); font-size: 24px; z-index: 30; box-shadow: 0 24px 60px rgba(0,0,0,.6); }
+
+/* Zoekknoppen onder het toetsenbord */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 9px 16px; border-radius: 999px; background: var(--card); font-size: 18px; font-weight: 600; }
+.chip.topic { background: #1b2a33; }
+.chip.focus { background: var(--ink); color: var(--bg); }
+/* Inspreken */
+.listen { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); min-width: 700px; padding: 40px 56px; border-radius: 24px; background: var(--panel); display: flex; flex-direction: column; align-items: center; gap: 18px; box-shadow: 0 40px 120px rgba(0,0,0,.6); z-index: 25; }
+.listen .dot { width: 26px; height: 26px; border-radius: 50%; background: var(--live); animation: puls 1s ease-in-out infinite; }
+.listen .said { font-size: 34px; font-weight: 600; min-height: 44px; }
+@keyframes puls { 50% { transform: scale(1.4); opacity: .6; } }
+
+/* Weergave per apparaat: compact = meer op het scherm, tekst iets minder kleiner dan de tegels */
+.view-compact .t1 { font-size: 21px; } .view-compact .t2 { font-size: 17px; }
+.view-compact .section h2 { font-size: 26px; } .view-compact .hit { font-size: 21px; }
 
 /* Toetsenbord */
 .kb { display: grid; grid-template-columns: repeat(6, 56px); gap: 8px; }

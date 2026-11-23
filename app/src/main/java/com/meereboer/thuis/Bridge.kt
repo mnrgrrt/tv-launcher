@@ -72,8 +72,9 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         }
     }
 
-    /** Inspreken; geeft de tekst terug (of een lege tekst als het niet lukt). */
-    @JavascriptInterface fun voice(id: Int) { act.runOnUiThread { act.startVoice { t -> reply(id, t != null, t ?: "") } } }
+    /** Inspreken; geeft de verstane tekst terug, of een foutmelding. */
+    @JavascriptInterface fun voice(id: Int) { act.runOnUiThread { act.startVoice { ok, t -> reply(id, ok, t) } } }
+    @JavascriptInterface fun voiceStop() { act.runOnUiThread { act.stopVoice() } }
 
     /** Een https-link openen in de bijbehorende app (bijvoorbeeld een trailer in YouTube). */
     @JavascriptInterface fun openUrl(url: String) {

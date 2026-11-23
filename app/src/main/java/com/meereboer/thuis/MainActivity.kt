@@ -1,10 +1,15 @@
 package com.meereboer.thuis
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.view.KeyEvent
 import android.view.View
 import android.webkit.WebResourceRequest
@@ -13,6 +18,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
+import org.json.JSONObject
 
 /** Het startscherm: een volledig scherm WebView met de HTML uit assets/web. */
 class MainActivity : Activity() {
@@ -103,23 +109,62 @@ class MainActivity : Activity() {
         return super.dispatchKeyEvent(event)
     }
 
-    // Spraak: Android vraagt de tekst op (Google-spraakherkenning) en geeft hem terug aan het startscherm.
-    private var voiceCb: ((String?) -> Unit)? = null
-    fun startVoice(cb: (String?) -> Unit) {
-        val i = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "nl-NL")
-            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Wat zoek je?")
+    // Spraak: Thuis luistert zelf (geen los Google-scherm) en stopt vanzelf als je klaar bent met praten.
+    // Wat er al verstaan is, gaat meteen naar de pagina (window.__voicePartial). Alleen na een druk op Inspreken.
+    private var voiceCb: ((Boolean, String) -> Unit)? = null
+    private var recognizer: SpeechRecognizer? = null
+
+    fun startVoice(cb: (Boolean, String) -> Unit) {
         voiceCb = cb
-        try { @Suppress("DEPRECATION") startActivityForResult(i, 77) } catch (_: Exception) { voiceCb = null; cb(null) }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 78); return
+        }
+        listenNow()
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 77) {
-            val t = data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            voiceCb?.invoke(if (resultCode == RESULT_OK) t else null); voiceCb = null
-        }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 78) return
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) listenNow() else voiceDone(false, "Thuis mag de microfoon niet gebruiken")
+    }
+
+    private fun listenNow() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) { voiceDone(false, "Inspreken kan niet op dit apparaat"); return }
+        recognizer?.destroy()
+        val r = SpeechRecognizer.createSpeechRecognizer(this); recognizer = r
+        r.setRecognitionListener(object : RecognitionListener {
+            override fun onPartialResults(b: Bundle?) {
+                val t = b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: return
+                web.evaluateJavascript("window.__voicePartial && window.__voicePartial(${JSONObject.quote(t)})", null)
+            }
+            override fun onResults(b: Bundle?) { voiceDone(true, b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: "") }
+            override fun onError(error: Int) {
+                voiceDone(false, when (error) {
+                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Geen geluid gehoord"
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Thuis mag de microfoon niet gebruiken"
+                    SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Geen verbinding met de spraakherkenning"
+                    else -> "Inspreken lukt niet ($error)"
+                })
+            }
+            override fun onReadyForSpeech(p: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(v: Float) {}
+            override fun onBufferReceived(b: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onEvent(t: Int, p: Bundle?) {}
+        })
+        r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "nl-NL")
+            .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true))
+    }
+
+    /** Stoppen (Terug op het luisterscherm). */
+    fun stopVoice() { recognizer?.cancel(); voiceDone(true, "") }
+
+    private fun voiceDone(ok: Boolean, text: String) {
+        recognizer?.destroy(); recognizer = null
+        val cb = voiceCb; voiceCb = null
+        cb?.invoke(ok, text)
     }
 }

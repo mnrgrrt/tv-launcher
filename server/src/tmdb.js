@@ -2,6 +2,8 @@
 import fs from 'node:fs';
 import { S, cached } from './db.js';
 import { json, enc, pool } from './http.js';
+import { genreName } from './plex.js';
+import { ratings } from './omdb.js';
 
 const API = 'https://api.themoviedb.org/3';
 export const TIMG = 'https://image.tmdb.org/t/p/';
@@ -20,6 +22,59 @@ export function item(o, key) {
     year: (date || '').slice(0, 4), rating: o.vote_average || 0,
     backdrop: o.backdrop_path ? TIMG + 'w1280' + o.backdrop_path : '', thumb: o.backdrop_path ? TIMG + 'w780' + o.backdrop_path : '',
     poster: o.poster_path ? TIMG + 'w342' + o.poster_path : '', service: key };
+}
+
+// TMDB-genres (Engelse namen); genreName in plex.js maakt er de Nederlandse namen van.
+const GENRES = { 28: 'Action', 12: 'Adventure', 16: 'Animation', 35: 'Comedy', 80: 'Crime', 99: 'Documentary', 18: 'Drama', 10751: 'Family',
+  14: 'Fantasy', 36: 'History', 27: 'Horror', 10402: 'Music', 9648: 'Mystery', 10749: 'Romance', 878: 'Science Fiction', 10770: 'TV Movie',
+  53: 'Thriller', 10752: 'War', 37: 'Western', 10759: 'Action & Adventure', 10762: 'Kids', 10763: 'News', 10764: 'Reality',
+  10765: 'Sci-Fi & Fantasy', 10766: 'Soap', 10767: 'Talk', 10768: 'War & Politics' };
+export const genresFromIds = ids => [...new Set((ids || []).map(i => genreName(GENRES[i] || '')).filter(Boolean))];
+
+/** Een titel als catalogus-item: met genres, cijfer en aantal stemmen. */
+export function catItem(x, type) {
+  const tv = type === 'tv';
+  return { title: tv ? x.name : x.title, year: ((tv ? x.first_air_date : x.release_date) || '').slice(0, 4), tmdb: x.id,
+    poster: x.poster_path ? TIMG + 'w342' + x.poster_path : '', genres: genresFromIds(x.genre_ids), vote: x.vote_average || 0, votes: x.vote_count || 0,
+    pop: x.popularity || 0, added: Date.parse((tv ? x.first_air_date : x.release_date) || '') || 0, sources: [], services: [] };
+}
+
+/** Wat een dienst heeft (NL, abonnement): populair en best beoordeeld, een paar pagina's. Een halve dag bewaard. */
+export function serviceCatalog(type, provider) {
+  return cached(`tmdb:cat:${type}:${provider}`, 12 * 3600e3, async () => {
+    const base = `/discover/${type}?watch_region=NL&with_watch_providers=${provider}&with_watch_monetization_types=flatrate&language=nl-NL&include_adult=false`;
+    const pages = [...[1, 2, 3, 4].map(p => `${base}&sort_by=popularity.desc&page=${p}`), ...[1, 2, 3].map(p => `${base}&sort_by=vote_average.desc&vote_count.gte=300&page=${p}`)];
+    const seen = new Set(), out = [];
+    for (const r of await pool(pages, 3, u => tmdb(u).catch(() => ({ results: [] }))))
+      for (const x of (r && r.results) || []) if (!seen.has(x.id) && x.poster_path) { seen.add(x.id); out.push(catItem(x, type)); }
+    return out;
+  });
+}
+
+/** Net uit (films en series), ook als we ze nog nergens hebben. */
+export function trending(type) {
+  return cached(`tmdb:trend:${type}`, 6 * 3600e3, async () => {
+    const r = await Promise.all([1, 2].map(p => tmdb(`/trending/${type}/week?language=nl-NL&page=${p}`).catch(() => ({ results: [] }))));
+    return r.flatMap(x => x.results || []).filter(x => x.poster_path).map(x => catItem(x, type));
+  });
+}
+
+/** Genres, cijfer, stemmen en IMDb-nummer van één titel. */
+export async function info(type, id) {
+  const d = await tmdb(`/${type}/${id}?language=en-US&append_to_response=external_ids`);
+  return { genres: [...new Set((d.genres || []).map(g => genreName(g.name)).filter(Boolean))], vote: d.vote_average || 0, votes: d.vote_count || 0,
+    pop: d.popularity || 0, imdb: d.external_ids?.imdb_id || d.imdb_id || '' };
+}
+/** Een titel op naam (en jaar) zoeken; 0 als er niets is. */
+export async function findId(type, name, year) {
+  const r = await tmdb(`/search/${type}?query=${enc(name)}${year ? (type === 'tv' ? '&first_air_date_year=' : '&year=') + year : ''}&include_adult=false`);
+  return (r.results || [])[0]?.id || 0;
+}
+/** Zoeken over films en series heen (voor de kijkgeschiedenis van Netflix). */
+export async function findAny(name) {
+  const r = await tmdb(`/search/multi?query=${enc(name)}&include_adult=false`);
+  const h = (r.results || []).find(x => x.media_type === 'tv' || x.media_type === 'movie');
+  return h ? { type: h.media_type, id: h.id, genres: genresFromIds(h.genre_ids) } : null;
 }
 
 /** Populair bij één dienst (NL, in het abonnement), zonder kinderprogramma's. type = 'tv' of 'movie'. */
@@ -52,20 +107,6 @@ export async function serviceRows(type, keys) {
     .filter(r => r && r.items.length);
 }
 
-/** Genres van één titel (Engelse namen, die vertalen we zelf). Voor IPTV-titels zonder genre. */
-export async function genresOf(type, id) {
-  const d = await tmdb(`/${type}/${id}?language=en-US`);
-  return (d.genres || []).map(g => g.name);
-}
-
-/** Bij welke van jouw diensten (NL, abonnement) staat dit? */
-export async function providers(type, id) {
-  const byProvider = new Map(streamingServices().map(s => [s.provider, s.key]));
-  const r = await tmdb(`/${type}/${id}/watch/providers`).catch(() => null);
-  const flat = r?.results?.NL?.flatrate || [];
-  return flat.map(p => byProvider.get(p.provider_id)).filter(Boolean);
-}
-
 export async function search(q) {
   const res = await tmdb(`/search/multi?query=${enc(q)}&language=nl-NL&include_adult=false`);
   return (res.results || []).filter(h => h.media_type === 'tv' || h.media_type === 'movie').slice(0, 14);
@@ -92,7 +133,8 @@ export function details(type, id) {
       seasons: tv ? (d.seasons || []).filter(s => s.season_number > 0).map(s => ({ n: s.season_number, episodes: s.episode_count, year: (s.air_date || '').slice(0, 4) })) : [],
       tvdb: d.external_ids?.tvdb_id || 0, imdb: d.external_ids?.imdb_id || '',
       similar: (d.similar?.results || []).slice(0, 12).map(x => item({ ...x, _type: type }, '')),
-      services: await providers(type, id)
+      services: await providers(type, id),
+      ratings: await ratings(d.external_ids?.imdb_id || '').catch(() => null)
     };
   });
 }
