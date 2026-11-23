@@ -81,6 +81,7 @@ on('POST', '/api/admin/profiles/:id/photo', 'admin', ({ p, b, me }) => { profile
 on('POST', '/api/admin/profiles/:id/history', 'admin', ({ p, b, me }) => {
   const n = taste.importCsv(p.id, b.csv); auth.audit(me.name, `kijkgeschiedenis toegevoegd voor profiel #${p.id} (${n} titels)`); return { titles: n };
 });
+on('GET', '/api/admin/fanart-test', 'admin', () => fanart.test());
 on('GET', '/api/admin/photos', 'admin', ({ q }) => photos.list(q.get('album') || 1));
 on('POST', '/api/admin/photos', 'admin', ({ b, me }) => { const l = photos.add(b.album || 1, b.data); auth.audit(me.name, `foto toegevoegd aan album ${+b.album || 1}`); return l; });
 on('DELETE', '/api/admin/photos/:album/:file', 'admin', ({ p, me }) => { const l = photos.remove(p.album, p.file); auth.audit(me.name, `foto weggehaald uit album ${p.album}: ${p.file}`); return l; });

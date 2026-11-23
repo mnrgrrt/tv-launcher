@@ -21,13 +21,18 @@ export function all(kind) {
   });
 }
 
+/** "The Sopranos - S03E01 - Mr. Ruggerio's Neighborhood" wordt "Mr. Ruggerio's Neighborhood". Seizoen en nummer staan al in beeld. */
+export function epTitle(t) {
+  const s = String(t || '').trim(), m = /^.*?\bS\d{1,2}\s*E\d{1,3}\b\s*[-–:.|]*\s*/i.exec(s);
+  return m && s.length > m[0].length ? s.slice(m[0].length).trim() : s;
+}
 export async function info(kind, id) {
   if (kind === 'series') {
     const o = await api('get_series_info', `&series_id=${encodeURIComponent(id)}`);
     const i = o.info || {}, eps = o.episodes || {};
     return { plot: i.plot || '', backdrop: bd(i.backdrop_path), genre: i.genre || '', year: String(i.releaseDate || '').slice(0, 4), tmdb: +(i.tmdb || i.tmdb_id || 0),
       seasons: Object.keys(eps).sort((a, b) => a - b).map(s => ({ season: s, episodes: eps[s].map(e => {
-        const ei = e.info || {}; return { id: String(e.id), num: +e.episode_num, title: e.title, ext: e.container_extension || 'mkv', img: ei.movie_image || '', plot: ei.plot || '', dur: +ei.duration_secs || 0 }; }) })) };
+        const ei = e.info || {}; return { id: String(e.id), num: +e.episode_num, title: epTitle(e.title), ext: e.container_extension || 'mkv', img: ei.movie_image || '', plot: ei.plot || '', dur: +ei.duration_secs || 0 }; }) })) };
   }
   const o = await api('get_vod_info', `&vod_id=${encodeURIComponent(id)}`);
   const i = o.info || {};

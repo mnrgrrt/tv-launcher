@@ -60,7 +60,8 @@ select{padding:7px 8px;border-radius:8px;border:1px solid var(--line);background
   <div class="grid"><div><label>Naam</label><input id="pname"></div><div><label>Kleur</label><input id="pcolor" value="#3DDBB0"></div></div>
   <label><input type="checkbox" id="padmin"> Mag alles verwijderen en goedkeuren</label><button id="padd">Profiel toevoegen</button></div>
  <div class="card"><h2>Koppelingen</h2><p class="dim">Velden met •••• zijn ingesteld. Laat leeg om niets te veranderen.</p><div class="grid" id="settings"></div>
-  <button id="save">Opslaan</button> <span class="dim" id="saved"></span></div>
+  <button id="save">Opslaan</button> <span class="dim" id="saved"></span>
+  <button class="ghost" id="fanarttest" style="margin-left:12px">fanart.tv-sleutel testen</button> <span class="dim" id="fanartmsg"></span></div>
  <div class="card"><h2>Gids</h2><div class="dim" id="epg"></div></div>
  <div class="card"><h2>Beheerders</h2><div id="users"></div>
   <div class="grid"><div><label>Naam</label><input id="uname" autocomplete="off"></div><div><label>Wachtwoord</label><input id="upw" type="password" autocomplete="new-password"></div></div>
@@ -152,6 +153,8 @@ $('phadd').onclick=()=>$('phfile').click();
 $('phfile').onchange=async()=>{for(const f of $('phfile').files){try{await drawPhotos(await api('POST','/api/admin/photos',{album:ALBUM,data:await shrink(f)}))}catch(x){alert(x.message)}}$('phfile').value=''};
 document.addEventListener('click',async e=>{const a=e.target.dataset.album;if(a){ALBUM=+a;drawPhotos();return}
  const d=e.target.dataset.delphoto;if(d&&confirm('Deze foto weghalen?')){try{await drawPhotos(await api('DELETE','/api/admin/photos/'+ALBUM+'/'+encodeURIComponent(d)))}catch(x){alert(x.message)}}});
+$('fanarttest').onclick=async()=>{$('fanartmsg').textContent='Even kijken…';try{const r=await api('GET','/api/admin/fanart-test');
+ $('fanartmsg').textContent=r.ok?`Werkt. Proef (Breaking Bad): ${r.backgrounds} achtergronden, waarvan ${r.perSeason} per seizoen.`:'Werkt niet: '+r.error}catch(x){$('fanartmsg').textContent=x.message}};
 $('newcode').onclick=async()=>{$('code').textContent=(await api('POST','/api/admin/code')).code;load()};
 $('padd').onclick=async()=>{if(!$('pname').value.trim())return;await api('POST','/api/admin/profiles',{name:$('pname').value.trim(),color:$('pcolor').value,admin:$('padmin').checked});$('pname').value='';load()};
 $('save').onclick=async()=>{const o={};document.querySelectorAll('#settings input').forEach(i=>{if(SECRET.includes(i.dataset.k)){if(i.value)o[i.dataset.k]=i.value}else o[i.dataset.k]=i.value});
