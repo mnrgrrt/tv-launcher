@@ -226,7 +226,9 @@
   function srcBadges(o) {
     var b = (o.sources || []).map(function (s) { return '<span class="' + s + '">' + (s === 'plex' ? 'Plex' : 'IPTV') + '</span>'; })
       .concat((o.services || []).slice(0, 2).map(function (k) { return '<span>' + esc(serviceName(k)) + '</span>'; }));
-    return b.length ? '<div class="badges">' + b.join('') + '</div>' : '';
+    // Nergens te zien (nog niet uit, of nergens die je hebt): dat meteen op de tegel.
+    if (!b.length) b = ['<span class="nog">Nog niet te zien</span>'];
+    return '<div class="badges">' + b.join('') + '</div>';
   }
   // Eén titel uit de catalogus (Plex en IPTV samen) of van een streamingdienst.
   function rating(o) { var r = o.imdbRating || o.vote || 0; return r ? '★ ' + r.toFixed(1).replace('.', ',') : ''; }
@@ -511,7 +513,7 @@
       }, 350);
     }
     // Thuis: eerst je diensten (daar begin je meestal), dan wat nieuw is en wat populair is. Verder kijken en live staan in Films, Series en Live tv.
-    var slots = {}; ['svc', 'foryou', 'picks', 'apps'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    var slots = {}; ['svc', 'foryou', 'picks', 'later', 'apps'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.svc.className = 'first';
     var svcQ = myServices().then(function (keys) { return 'profile=' + S.profile + '&services=' + keys.join(','); });
     svcQ.then(function (q) { return get('/api/home?' + q); }).then(function (d) {
@@ -523,10 +525,12 @@
       })));
     }).catch(function (e) { slots.picks.innerHTML = '<div class="empty">Thuis kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
     // Nieuw voor jou: nieuw uit Plex, IPTV en je diensten, en net uit; wat bij jouw smaak past bovenaan.
-    svcQ.then(function (q) { return get('/api/foryou?' + q); }).then(function (l) {
-      if (l.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', l.map(function (o) {
-        return titleTile(o, o.kind, function () { if (o.tmdb) showArt({ tmdb: o.tmdb, type: o.kind === 'series' ? 'tv' : 'movie', title: o.title, meta: [o.year, rating(o), whereFrom(o)].filter(Boolean).join(' · ') }); });
-      })));
+    svcQ.then(function (q) { return get('/api/foryou?' + q); }).then(function (d) {
+      var tile = function (o) {
+        return titleTile(o, o.kind, function () { if (o.tmdb) showArt({ tmdb: o.tmdb, type: o.kind === 'series' ? 'tv' : 'movie', title: o.title, meta: [o.year, rating(o), whereFrom(o) || 'Nog niet te zien'].filter(Boolean).join(' · ') }); });
+      };
+      if (d.now.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', d.now.map(tile)));
+      if (d.later.length) slots.later.appendChild(rowSection('Nog niet te zien', d.later.map(tile)));
     }).catch(function () {});
     // Streamingdiensten (alleen als de app er staat) en daarna de overige apps.
     Promise.all([installedServices(), loadApps()]).then(function (r) {

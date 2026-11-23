@@ -168,9 +168,12 @@ export async function forYou(services, prefs, taste) {
     for (const t of await tmdb.trending(typeOf(kind)).catch(() => [])) put(c.byTmdb.get(t.tmdb) || t, kind);
   }
   const fresh = o => Math.max(0, 1 - (now - (o.added || 0)) / (180 * 86400e3));
-  return [...out.values()].filter(o => allowed(o, prefs.skip) && good(o, prefs.min) && o.poster)
+  const l = [...out.values()].filter(o => allowed(o, prefs.skip) && good(o, prefs.min) && o.poster)
     .map(o => ({ o, s: (taste(o.genres) * 4) + score(o) / 2 + fresh(o) * 2 }))
-    .sort((a, b) => b.s - a.s).slice(0, 40).map(x => x.o);
+    .sort((a, b) => b.s - a.s).map(x => x.o);
+  // Wat nergens te zien is (niet in Plex, IPTV of je diensten) apart, zodat je niet denkt dat je het kunt kijken.
+  const can = o => o.sources.length || o.services.length;
+  return { now: l.filter(can).slice(0, 40), later: l.filter(o => !can(o)).slice(0, 20) };
 }
 
 // ---------- aanvullen op de achtergrond ----------
