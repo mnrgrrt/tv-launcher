@@ -360,7 +360,7 @@
     var items = [[c.next ? '▶ ' + c.sub : '▶ Verder kijken' + (c.left > 0 ? ' (nog ' + c.left + ' min)' : ''), function () { resume(c); }]];
     if (!c.next) items.push(['Vanaf het begin', function () { S.fromStart = true; resume(c); }]);
     items.push(['Markeer als bekeken', function () {
-      setWatched([{ key: c.key, seriesKey: c.seriesId ? 'series:' + c.seriesId : '', kind: c.kind === 'movie' ? 'movie' : 'series', meta: { title: c.title, sub: c.sub, img: c.img || c.art || '', tmdb: c.tmdb } }], true)
+      setWatched([{ key: c.key, seriesKey: c.seriesId ? 'series:' + c.seriesId : '', kind: c.kind === 'movie' ? 'movie' : 'series', tmdb: c.tmdb || 0, season: c.season || 0, episode: c.episode || 0, meta: { title: c.title, sub: c.sub, img: c.img || c.art || '', tmdb: c.tmdb } }], true)
         .then(function () { toast('Op bekeken gezet'); after && after(); });
     }]);
     var isMovie = c.kind === 'movie', plexKey = String(c.key || '').indexOf('plex:') === 0 ? String(c.key).slice(5) : '';
@@ -384,7 +384,12 @@
   function loading(text) { return h('div', { class: 'spinner' }, esc(text || 'Laden…')); }
 
   // ---------- afspelen ----------
-  function position(key) { if (S.fromStart) { S.fromStart = false; return Promise.resolve(0); } return get('/api/position?profile=' + S.profile + '&key=' + encodeURIComponent(key)).then(function (r) { return r.pos || 0; }, function () { return 0; }); }
+  // Waar was je? Ook als je dezelfde titel via de andere bron (Plex of IPTV) aan het kijken was.
+  function position(key, tmdb, season, episode) {
+    if (S.fromStart) { S.fromStart = false; return Promise.resolve({ pos: 0, via: '', fresh: true }); }
+    return get('/api/position?profile=' + S.profile + '&key=' + encodeURIComponent(key) + '&tmdb=' + (tmdb || 0) + '&s=' + (season || 0) + '&e=' + (episode || 0))
+      .then(function (r) { return { pos: r.pos || 0, via: r.via || '' }; }, function () { return { pos: 0, via: '' }; });
+  }
   function start(item) {
     item.server = true; item.profile = S.profile;
     if (N) N.playItem(JSON.stringify(item)); else toast('Afspelen kan alleen op de tv');
@@ -424,25 +429,28 @@
   }
   function playPlex(key, meta) {
     var k = 'plex:' + key;
-    return askWho(k).then(function () { return Promise.all([get('/api/plex/play/' + key), position(k)]); }).then(function (r) {
-      var it = r[0]; if (r[1] > 0) it.offsetMs = r[1];
-      it.meta = Object.assign({ title: it.title, sub: it.sub, img: it.img, plexKey: key }, meta || {});
-      start(it);
+    return askWho(k).then(function () { return get('/api/plex/play/' + key); }).then(function (it) {
+      return position(k, it.tmdb, it.season, it.episode).then(function (p) {
+        if (p.fresh) it.offsetMs = 0; else if (p.pos > 0) it.offsetMs = p.pos;
+        it.resumeVia = p.via;
+        it.meta = Object.assign({ title: it.title, sub: it.sub, img: it.img, plexKey: key }, meta || {});
+        start(it);
+      });
     }).catch(function (e) { toast('Afspelen lukt niet: ' + e.message); });
   }
   function playMovie(m) {   // IPTV-film uit de catalogus
     var k = 'movie:' + m.id;
-    return askWho(k).then(function () { return Promise.all([m.url ? Promise.resolve({ url: m.url }) : get('/api/vod/movie/url/' + m.id + '?ext=' + (m.ext || 'mp4')), position(k)]); }).then(function (r) {
-      start({ kind: 'movie', key: k, url: r[0].url, title: m.name || m.title, sub: m.year || '', tmdb: m.tmdb || 0, offsetMs: r[1],
+    return askWho(k).then(function () { return Promise.all([m.url ? Promise.resolve({ url: m.url }) : get('/api/vod/movie/url/' + m.id + '?ext=' + (m.ext || 'mp4')), position(k, m.tmdb)]); }).then(function (r) {
+      start({ kind: 'movie', key: k, url: r[0].url, title: m.name || m.title, sub: m.year || '', tmdb: m.tmdb || 0, offsetMs: r[1].pos, resumeVia: r[1].via,
         meta: { title: m.name || m.title, sub: 'Film', img: m.backdrop || m.icon || m.img || '', id: m.id, ext: m.ext, tmdb: m.tmdb || 0 } });
     }).catch(function (e) { toast('Afspelen lukt niet: ' + e.message); });
   }
   function playEpisode(series, season, ep) {   // IPTV-aflevering
     var k = 'series:' + ep.id, sk = 'series:' + series.id;
-    return askWho(sk).then(function () { return position(k); }).then(function (pos) {
+    return askWho(sk).then(function () { return position(k, series.tmdb, season, ep.num); }).then(function (p) {
       start({ kind: 'series', key: k, seriesKey: sk, url: ep.url, title: series.name, sub: 'S' + season + ' · afl. ' + ep.num + (ep.title ? ' · ' + ep.title : ''),
-        season: +season, episode: ep.num, tmdb: series.tmdb || 0, offsetMs: pos,
-        meta: { title: series.name, sub: 'S' + season + ' · afl. ' + ep.num, img: ep.img || series.backdrop || series.icon || '', id: ep.id, ext: ep.ext, seriesId: series.id } });
+        season: +season, episode: ep.num, tmdb: series.tmdb || 0, offsetMs: p.pos, resumeVia: p.via,
+        meta: { title: series.name, sub: 'S' + season + ' · afl. ' + ep.num, img: ep.img || series.backdrop || series.icon || '', id: ep.id, ext: ep.ext, seriesId: series.id, tmdb: series.tmdb || 0 } });
     }).catch(function (e) { toast('Afspelen lukt niet: ' + e.message); });
   }
   function resume(c) {      // tegel uit Verder kijken
@@ -451,8 +459,8 @@
     if (key.indexOf('movie:') === 0) return playMovie({ id: c.id || key.slice(6), ext: c.ext, name: c.title, img: c.img, tmdb: c.tmdb });
     if (key.indexOf('series:') === 0) {
       var id = c.id || key.slice(7);
-      return Promise.all([get('/api/vod/series/url/' + id + '?ext=' + (c.ext || 'mkv')), position(key)]).then(function (r) {
-        start({ kind: 'series', key: key, seriesKey: 'series:' + c.seriesId, url: r[0].url, title: c.title, sub: c.sub, season: c.season, episode: c.episode, offsetMs: r[1], meta: c });
+      return Promise.all([get('/api/vod/series/url/' + id + '?ext=' + (c.ext || 'mkv')), position(key, c.tmdb, c.season, c.episode)]).then(function (r) {
+        start({ kind: 'series', key: key, seriesKey: 'series:' + c.seriesId, url: r[0].url, title: c.title, sub: c.sub, season: c.season, episode: c.episode, tmdb: c.tmdb || 0, offsetMs: r[1].pos, resumeVia: r[1].via, meta: c });
       });
     }
   }
@@ -954,7 +962,7 @@
         if (nx) bt.appendChild(srcBtn('<i class="ic ' + (a.plex ? 'plex' : 'iptv') + '"></i>', (a.plex ? 'Plex' : 'IPTV') + ' · ' + nx.label + ' S' + nx.s.season + ' afl. ' + nx.e.num, function () { playEp(nx.s, nx.e); }));
       } else if (!series) {
         if (a.plex) bt.appendChild(srcBtn('<i class="ic plex"></i>', 'Plex', function () { playPlex(a.plex.key, a.plex); }));
-        if (a.vod) bt.appendChild(srcBtn('<i class="ic iptv"></i>', 'IPTV', function () { playMovie(a.vod); }));
+        if (a.vod) bt.appendChild(srcBtn('<i class="ic iptv"></i>', 'IPTV', function () { playMovie(Object.assign({}, a.vod, { tmdb: a.vod.tmdb || a.tmdb || 0 })); }));
       }
       if (bt.firstChild) bt.appendChild(h('span', { class: 'sep' }));
       if (!series && src) bt.appendChild(F(h('button', { class: 'btn' }, seen ? '✓ Bekeken' : 'Markeer als bekeken'), function () {
@@ -982,7 +990,7 @@
         if (a.plex) playPlex(e.key, { title: d.title || a.title, sub: 'S' + s.season + ' · afl. ' + e.num, img: e.img });
         else playEpisode({ id: a.vod.id, name: d.title || a.title, tmdb: a.tmdb, backdrop: show.backdrop, icon: a.vod.icon }, s.season, e);
       }
-      function epItem(s, e) { return { key: e.skey, seriesKey: a.vod ? 'series:' + a.vod.id : '', kind: 'series', meta: { title: d.title || a.title, sub: 'S' + s.season + ' · afl. ' + e.num, img: e.img || '', tmdb: a.tmdb } }; }
+      function epItem(s, e) { return { key: e.skey, seriesKey: a.vod ? 'series:' + a.vod.id : '', kind: 'series', tmdb: a.tmdb || (show && show.tmdb) || 0, season: +s.season, episode: e.num, meta: { title: d.title || a.title, sub: 'S' + s.season + ' · afl. ' + e.num, img: e.img || '', tmdb: a.tmdb } }; }
       if (series && show && show.seasons.length) {
         var st = a.st || (a.st = { season: Math.max(0, show.seasons.indexOf((nextUp(show) || {}).s)) });
         var pills = h('div', { class: 'seasons' }, '<span class="dim">Seizoen</span>'), row = h('div');

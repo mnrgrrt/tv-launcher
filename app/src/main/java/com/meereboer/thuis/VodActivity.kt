@@ -402,7 +402,7 @@ class VodActivity : Activity() {
                             resumed = true
                             val pos = item.optLong("offsetMs")
                             if (pos > 60_000 && (p.duration <= 0 || pos < p.duration * 0.95)) {
-                                p.seekTo(pos); flash("Verder vanaf ${fmt(pos)}")
+                                p.seekTo(pos); flash("Verder vanaf ${fmt(pos)}" + item.optString("resumeVia").let { if (it.isNotEmpty()) " (gekeken via $it)" else "" })
                             }
                         }
                     }
@@ -463,7 +463,9 @@ class VodActivity : Activity() {
         // Kijkstand per profiel naar tv-serverr; de server meldt het zelf aan Plex.
         val body = JSONObject().put("profile", item.optInt("profile", 1)).put("key", item.optString("key"))
             .put("seriesKey", item.optString("seriesKey")).put("kind", item.optString("kind")).put("plexKey", item.optString("plexKey"))
-            .put("pos", pos).put("dur", dur).put("state", state).put("meta", item.optJSONObject("meta") ?: JSONObject()).toString()
+            .put("pos", pos).put("dur", dur).put("state", state).put("meta", item.optJSONObject("meta") ?: JSONObject())
+            // Zodat de server dezelfde titel in Plex en IPTV herkent (verder kijken over beide heen).
+            .put("tmdb", item.optInt("tmdb")).put("season", item.optInt("season")).put("episode", item.optInt("episode")).toString()
         // Eigen thread: bij het stoppen wordt de achtergrondpool meteen afgesloten.
         Thread { try { Server.call(this, "POST", "/api/progress", body) } catch (_: Exception) {} }.start()
     }
