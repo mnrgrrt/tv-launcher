@@ -71,6 +71,15 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         }
     }
 
+    /** Inspreken; geeft de tekst terug (of een lege tekst als het niet lukt). */
+    @JavascriptInterface fun voice(id: Int) { act.runOnUiThread { act.startVoice { t -> reply(id, t != null, t ?: "") } } }
+
+    /** Een https-link openen in de bijbehorende app (bijvoorbeeld een trailer in YouTube). */
+    @JavascriptInterface fun openUrl(url: String) {
+        if (!url.startsWith("https://")) return
+        act.runOnUiThread { try { act.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {} }
+    }
+
     // ---------- bijwerken ----------
     @JavascriptInterface fun checkUpdate(id: Int) = async(id) { Updater.check(act).toString() }
     @JavascriptInterface fun installUpdate(id: Int) = async(id) { Updater.downloadAndInstall(act) }

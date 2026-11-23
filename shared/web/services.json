@@ -7,9 +7,7 @@
       "provider": 8,
       "color": "#E50914",
       "logo": "/rK1KljqmbvO9HQa1PBFLILWah72.png",
-      "match": "netflix",
-      "jbl": "com.netflix.ninja",
-      "forceJbl": true
+      "match": "netflix"
     },
     {
       "key": "prime",
@@ -25,8 +23,7 @@
       "provider": 72,
       "color": "#E6007E",
       "logo": "/3IdfSLRjSoDoo9lrpvX4oxZmnVi.png",
-      "match": "videoland",
-      "jbl": "nl.rtl.videoland.v2"
+      "match": "videoland"
     },
     {
       "key": "skyshowtime",
@@ -34,15 +31,13 @@
       "provider": 1773,
       "color": "#6E3CF5",
       "logo": "/ube1pVpP3FklRkeyQjlDkkC3tL2.png",
-      "match": "skyshowtime",
-      "jbl": "com.skyshowtime.skyshowtime.google"
+      "match": "skyshowtime"
     },
     {
       "key": "withlove",
       "name": "WithLove",
       "color": "#C2185B",
-      "match": "withlove",
-      "jbl": "nl.withlove.app"
+      "match": "withlove"
     },
     {
       "key": "youtube",

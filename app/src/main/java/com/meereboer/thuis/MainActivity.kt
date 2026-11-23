@@ -99,4 +99,24 @@ class MainActivity : Activity() {
         }
         return super.dispatchKeyEvent(event)
     }
+
+    // Spraak: Android vraagt de tekst op (Google-spraakherkenning) en geeft hem terug aan het startscherm.
+    private var voiceCb: ((String?) -> Unit)? = null
+    fun startVoice(cb: (String?) -> Unit) {
+        val i = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "nl-NL")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Wat zoek je?")
+        voiceCb = cb
+        try { @Suppress("DEPRECATION") startActivityForResult(i, 77) } catch (_: Exception) { voiceCb = null; cb(null) }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 77) {
+            val t = data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            voiceCb?.invoke(if (resultCode == RESULT_OK) t else null); voiceCb = null
+        }
+    }
 }
