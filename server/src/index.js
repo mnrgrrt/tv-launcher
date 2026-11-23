@@ -13,6 +13,7 @@ import * as vod from './vod.js';
 import * as arr from './arr.js';
 import * as subs from './subs.js';
 import * as profiles from './profiles.js';
+import * as catalog from './catalog.js';
 import { pipe, target } from './proxy.js';
 import { pool } from './http.js';
 import { status } from './status.js';
@@ -110,14 +111,6 @@ on('GET', '/api/live/nownext', 'device', async ({ q }) => {
   return xtream.nowNext(channels.filter(c => ids.has(c.id)).slice(0, 60), epg.nowNextFor);
 });
 on('GET', '/api/status', 'device', async () => { const st = await status(); return Object.fromEntries(Object.entries(st.sources).map(([k, v]) => [k, v.ok])); });
-on('GET', '/api/live/grid', 'device', async ({ q }) => {
-  const ids = new Set((q.get('ids') || '').split(',').map(Number));
-  const from = +q.get('from') || Date.now() - 3600e3, to = +q.get('to') || from + 4 * 3600e3;
-  const { channels } = await xtream.channels();
-  const list = channels.filter(c => ids.has(c.id) && c.epgId);
-  const byEpg = epg.grid([...new Set(list.map(c => c.epgId))], from, Math.min(to, from + 26 * 3600e3));
-  return Object.fromEntries(list.map(c => [c.id, byEpg[c.epgId] || []]));
-});
 on('GET', '/api/live/guide', 'device', async ({ q }) => {
   const ids = new Set((q.get('ids') || '').split(',').map(Number));
   const { channels } = await xtream.channels();
@@ -137,17 +130,26 @@ on('GET', '/api/live/catchup/:id', 'device', ({ p, q }) => {
 });
 on('GET', '/api/live/url/:id', 'device', ({ p }) => ({ url: auth.sign(`/stream/live/${+p.id}`) }));
 
+// services = de diensten van dit profiel (de tv weet welke er op het apparaat staan); leeg = alle diensten.
 on('GET', '/api/home', 'device', async ({ q }) => {
   const prof = +q.get('profile') || 1;
   const [picks, cont, films, series] = await Promise.all([
-    tmdb.home().catch(() => ({})), profiles.continueWatching(prof).catch(() => []),
+    tmdb.home((q.get('services') || '').split(',').filter(Boolean)).catch(() => ({})), profiles.continueWatching(prof).catch(() => []),
     arr.upcoming('movie').catch(() => []), arr.upcoming('series').catch(() => [])]);
   return { picks, continue: cont.map(withUrl), upcoming: [...films, ...series].sort((a, b) => a.when - b.when).slice(0, 30) };
 });
 on('GET', '/api/info/:type/:id', 'device', ({ p }) => tmdb.details(p.type === 'tv' ? 'tv' : 'movie', +p.id));
 
-on('GET', '/api/vod/:kind/overview', 'device', ({ p }) => vod.overview(kindOf(p.kind)).then(o => ({ ...o, newest: o.newest.map(i => withVod(p.kind, i)) })));
-on('GET', '/api/vod/:kind/browse', 'device', ({ p, q }) => vod.browse(kindOf(p.kind), q.get('by'), q.get('value')).then(o => ({ ...o, items: o.items.map(i => withVod(p.kind, i)) })));
+// Films en series: Plex en IPTV samen (richting C: slimme rijen, genres, collecties en een raster met filters).
+const withSources = kind => o => ({ ...o, vod: o.vod ? withVod(kind, o.vod) : null });
+on('GET', '/api/catalog/:kind/overview', 'device', async ({ p }) => {
+  const o = await catalog.overview(kindOf(p.kind)); return { ...o, newest: o.newest.map(withSources(p.kind)) };
+});
+on('GET', '/api/catalog/:kind/browse', 'device', async ({ p, q }) => {
+  const o = await catalog.browse(kindOf(p.kind), { genre: q.get('genre'), src: q.get('src'), cat: q.get('cat'), sort: q.get('sort'), offset: q.get('offset') });
+  return { ...o, items: o.items.map(withSources(p.kind)) };
+});
+on('GET', '/api/streaming/:kind', 'device', ({ p, q }) => tmdb.serviceRows(kindOf(p.kind) === 'series' ? 'tv' : 'movie', (q.get('services') || '').split(',').filter(Boolean)));
 on('GET', '/api/vod/:kind/info/:id', 'device', async ({ p }) => {
   const kind = kindOf(p.kind), o = await vod.info(kind, p.id);
   if (kind === 'series') o.seasons.forEach(s => s.episodes.forEach(e => { e.url = auth.sign(`/stream/series/${+e.id}.${safeExt(e.ext)}`); }));
@@ -155,20 +157,23 @@ on('GET', '/api/vod/:kind/info/:id', 'device', async ({ p }) => {
 });
 on('GET', '/api/vod/:kind/url/:id', 'device', ({ p, q }) => ({ url: auth.sign(`/stream/${kindOf(p.kind)}/${+p.id}.${safeExt(q.get('ext'))}`) }));
 
-on('GET', '/api/plex/sections', 'device', () => plex.sections());
-on('GET', '/api/plex/library/:section', 'device', ({ p }) => plex.library(+p.section));
 on('GET', '/api/plex/show/:key', 'device', ({ p }) => plex.show(+p.key));
 on('GET', '/api/plex/play/:key', 'device', ({ p }) => plex.playItem(+p.key));
-on('GET', '/api/upcoming/:kind', 'device', ({ p }) => arr.upcoming(kindOf(p.kind)));
 
+// Zoeken: de gids (zenders, nu, straks, terug) en films en series. Dezelfde titel uit Plex, IPTV en
+// streamingdiensten wordt één regel met alle plekken waar hij staat.
 on('GET', '/api/search', 'device', async ({ q }) => {
   const s = (q.get('q') || '').trim(); if (s.length < 2) return {};
-  const [px, films, series, guide, web] = await Promise.all([
-    plex.search(s).catch(() => []), vod.search('movie', s).catch(() => []), vod.search('series', s).catch(() => []),
-    epg.searchGuide(s).catch(() => ({})), tmdb.search(s).catch(() => [])]);
+  const [own, guide, web] = await Promise.all([catalog.search(s).catch(() => []), epg.searchGuide(s).catch(() => ({})), tmdb.search(s).catch(() => [])]);
+  const titles = own.map(o => ({ ...withSources(o.kind)(o), services: [] }));
+  const byTmdb = new Map(titles.filter(t => t.tmdb).map(t => [(t.kind === 'series' ? 'tv' : 'movie') + t.tmdb, t]));
   // Bij welke dienst staat het? Alleen voor de bovenste treffers, anders wordt het traag.
-  const streaming = (await pool(web.slice(0, 10), 5, async h => ({ ...tmdb.item(h, ''), services: await tmdb.providers(h.media_type, h.id) }))).filter(Boolean);
-  return { plex: px, films: films.map(i => withVod('movie', i)), series: series.map(i => withVod('series', i)), guide, streaming };
+  await pool(web.slice(0, 10), 5, async h => {
+    const services = await tmdb.providers(h.media_type, h.id), have = byTmdb.get(h.media_type + h.id);
+    if (have) { have.services = services; if (!have.poster) have.poster = tmdb.item(h, '').poster; return; }
+    if (services.length) titles.push({ ...tmdb.item(h, ''), kind: h.media_type === 'tv' ? 'series' : 'movie', sources: [], services });
+  });
+  return { guide, titles };
 });
 
 on('GET', '/api/subs/search', 'device', ({ q }) => subs.search(Object.fromEntries(q)));
@@ -176,9 +181,8 @@ on('GET', '/api/subs/file/:id', 'device', async ({ res, p }) => { send(res, 200,
 
 on('POST', '/api/progress', 'device', ({ b }) => { profiles.progress(+b.profile || 1, b); return { ok: true }; });
 on('GET', '/api/position', 'device', ({ q }) => ({ pos: profiles.position(+q.get('profile') || 1, q.get('key') || '') }));
-on('POST', '/api/watched', 'device', ({ b }) => { profiles.setWatched(+b.profile || 1, b.key, !!b.watched); return { ok: true }; });
 on('GET', '/api/continue', 'device', async ({ q }) => (await profiles.continueWatching(+q.get('profile') || 1)).map(withUrl));
-on('GET', '/api/series-state', 'device', ({ q }) => profiles.seriesState(+q.get('profile') || 1, q.get('series') || ''));
+on('POST', '/api/continue/hide', 'device', ({ b }) => { profiles.hide(+b.profile || 1, String(b.key || '')); return { ok: true }; });
 on('GET', '/api/mylist', 'device', ({ q }) => profiles.mylist(+q.get('profile') || 1));
 on('POST', '/api/mylist', 'device', ({ b }) => ({ inList: profiles.toggleList(+b.profile || 1, b.key, b.meta) }));
 on('GET', '/api/favorites', 'device', ({ q }) => profiles.favorites(+q.get('profile') || 1));
@@ -234,4 +238,7 @@ server.listen(PORT, () => console.log(`tv-serverr ${VERSION} luistert op poort $
 // Gids bij start en elke 6 uur verversen.
 setTimeout(() => epg.refresh(), 5000);
 setInterval(() => epg.refresh(), 6 * 3600e3);
+// Genres voor IPTV-titels zonder genre: rustig op de achtergrond.
+setTimeout(() => catalog.enrich().catch(() => {}), 120e3);
+setInterval(() => catalog.enrich().catch(() => {}), 6 * 3600e3);
 process.on('SIGTERM', () => { server.close(); db.close(); process.exit(0); });

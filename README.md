@@ -1,18 +1,19 @@
-# Thuis: eigen TV-startscherm
+# Thuis: eigen tv-startscherm
 
-Eén gedeeld startscherm (HTML in `shared/web`) met per apparaat een eigen laag:
+Eén gedeeld startscherm (HTML in `shared/web`) met per apparaat een eigen laag. Alle gegevens komen van **tv-serverr** (`server/`); de tv kent geen wachtwoorden of sleutels.
 
 | Platform | Map | Status |
 |---|---|---|
-| Formuler Z11 Pro Max (Android TV) | `app/` | eerste versie |
-| Samsung The Frame (Tizen) | `tizen/` | volgt |
+| Android TV (JBL, Google TV) | `app/` | in gebruik, testkanaal |
+| Samsung The Frame (Tizen) | `tizen/` | voorbereid |
 
-## Wat de Android-versie doet
-- Draait als startscherm (Home-knop) en als gewone app.
-- Rijen: Verder kijken (voorbeeld, Plex volgt), Nu live, Aanbevolen (voorbeeld), Apps.
-- Live tv via Dispatcharr met een Xtream Codes-login. Je vult server, gebruikersnaam en wachtwoord in via Instellingen op de tv. Die gegevens staan alleen op het apparaat.
-- Speler: omhoog/omlaag zappen, OK = zenderlijst, links/rechts of Info = infobalk met nu/straks, cijfers = zendernummer, Terug = startscherm.
-- De korte gids (nu/straks) wordt bij elke zap en elke 5 minuten opnieuw opgehaald.
+## Wat Thuis doet
+- Startscherm met Verder kijken (per profiel, zelf weg te halen), Nu live, Streamingdiensten, Voor jou, Binnenkort en Apps.
+- Live tv met gids (een week terug), terugkijken, pauzeren en spoelen. In de speler: omhoog/omlaag zappen, OK = balk met knoppen.
+- Films en Series uit Plex en IPTV samen: één tegel per titel, genres, collecties, rijen per dienst en een raster met filters.
+- Zoeken als lijst met filters: zenders, nu live, straks, terugkijken, films en series.
+- Profielen met eigen avatar, lijst, diensten en voorkeuren.
 
 ## Bouwen
-Elke push naar `main` bouwt via GitHub Actions een APK. De nieuwste staat onder Releases als `laatste`.
+- Thuis: eerst op de testtak (release "test"), daarna `main` (release "laatste"). Zie `CLAUDE.md`.
+- tv-serverr: push naar `main` bouwt het image; docker-media haalt het zelf op.

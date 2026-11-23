@@ -36,10 +36,11 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         async(id) { Server.call(act, method, path, body.ifEmpty { null }) }
 
     // ---------- afspelen ----------
-    /** Live tv: zappen binnen de categorie waaruit je startte. */
-    @JavascriptInterface fun playLive(catId: String, streamId: Int) {
+    /** Live tv: zappen binnen de categorie waaruit je startte. start > 0 = terugkijken vanaf dat moment. */
+    @JavascriptInterface fun playLive(catId: String, streamId: Int, start: Double, end: Double, title: String) {
         act.runOnUiThread {
-            act.startActivity(Intent(act, PlayerActivity::class.java).putExtra("categoryId", catId).putExtra("streamId", streamId))
+            act.startActivity(Intent(act, PlayerActivity::class.java).putExtra("categoryId", catId).putExtra("streamId", streamId)
+                .putExtra("replayStart", start.toLong()).putExtra("replayEnd", end.toLong()).putExtra("replayTitle", title))
         }
     }
 

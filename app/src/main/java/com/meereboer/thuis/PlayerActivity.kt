@@ -1,6 +1,7 @@
 package com.meereboer.thuis
 
 import android.app.Activity
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -41,8 +42,9 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Live tv. Omhoog/omlaag = zappen, OK = zenderlijst, links/rechts of Info = infobalk,
- * cijfers = zendernummer, Terug = terug naar het startscherm.
+ * Live tv en terugkijken. Omhoog/omlaag = zappen, OK = balk met knoppen (pauze, vanaf begin, zenders, gids,
+ * geluid, ondertitels, terug naar live). Bij terugkijken: links/rechts = spoelen (vasthouden = grotere stappen).
+ * Cijfers = zendernummer, Terug = balk weg, terug naar live of terug naar het startscherm.
  */
 @OptIn(UnstableApi::class)
 class PlayerActivity : Activity() {
@@ -50,13 +52,18 @@ class PlayerActivity : Activity() {
     private var player: ExoPlayer? = null
     private lateinit var playerView: PlayerView
 
-    private lateinit var infoBar: LinearLayout
-    private lateinit var tvNum: TextView
-    private lateinit var tvName: TextView
+    // Balk onderin: zender, programma, tijdlijn en (na OK) knoppen.
+    private lateinit var bar: LinearLayout
+    private lateinit var tvChan: TextView
     private lateinit var tvNow: TextView
-    private lateinit var tvTime: TextView
     private lateinit var tvNext: TextView
+    private lateinit var tvStart: TextView
+    private lateinit var tvEnd: TextView
     private lateinit var progress: ProgressBar
+    private lateinit var btnRow: LinearLayout
+    private var buttons: List<Pair<String, () -> Unit>> = emptyList()
+    private var btnSel = 0
+    private var menuOpen = false
 
     private lateinit var listPanel: LinearLayout
     private lateinit var listView: ListView
@@ -67,8 +74,14 @@ class PlayerActivity : Activity() {
     private lateinit var guide: GuideView
     private val epgCache = HashMap<Int, Pair<Long, List<Programme>>>()
     private val epgPool = Executors.newFixedThreadPool(6)
-    /** Programma dat we nu terugkijken (null = live). */
+    /** Programma dat we nu terugkijken (null = live), en vanaf welk moment de stream loopt. */
     private var replay: Programme? = null
+    private var replayFrom = 0L
+    /** Spoelen: waar we heen willen (klok-tijd) en hoe vaak er al gedrukt is (voor grotere stappen). */
+    private var seekTarget = 0L
+    private var seekPresses = 0
+    /** Live gepauzeerd: vanaf dit moment verder kijken (alleen bij zenders met terugkijken). */
+    private var pausedAt = 0L
     /** Programma dat nu op de huidige zender loopt (uit de korte gids). */
     private var nowProg: Programme? = null
     /** Keuze "Live / Vanaf begin" uit de gids. */
@@ -89,7 +102,9 @@ class PlayerActivity : Activity() {
     private val bg = Executors.newSingleThreadExecutor()
     private val clock = SimpleDateFormat("HH:mm", Locale("nl", "NL"))
 
-    private val hideInfo = Runnable { infoBar.animate().alpha(0f).setDuration(250).withEndAction { infoBar.visibility = View.GONE } }
+    private val hideBar = Runnable { hideBarNow() }
+    private val commitSeek = Runnable { doSeek() }
+    private val tick = object : Runnable { override fun run() { if (bar.visibility == View.VISIBLE) { updateTime(); ui.postDelayed(this, 1000) } } }
     private val commitNumber = Runnable { jumpToNumber() }
 
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
@@ -119,32 +134,31 @@ class PlayerActivity : Activity() {
         }
         root.addView(playerView, FrameLayout.LayoutParams(-1, -1))
 
-        // Infobalk onderin
-        infoBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
-            setPadding(dp(48), dp(80), dp(48), dp(32))
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0xE6000000.toInt()))
+        // Balk onderin, in de stijl van Thuis. Ruime marges: sommige tv's snijden de randen af.
+        bar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(72), dp(120), dp(72), dp(40))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0xC005070A.toInt(), 0xF505070A.toInt()))
             visibility = View.GONE
         }
-        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        tvNum = text(40f, true)
-        tvName = text(18f, false, 0xCCFFFFFF.toInt())
-        left.addView(tvNum); left.addView(tvName)
-        infoBar.addView(left, LinearLayout.LayoutParams(dp(180), -2))
-        val mid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        tvNow = text(26f, true)
-        tvTime = text(16f, false, 0xCCFFFFFF.toInt())
-        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000 }
-        tvNext = text(16f, false, 0x99FFFFFF.toInt())
-        mid.addView(tvNow)
+        tvChan = text(17f, false, 0xB3FFFFFF.toInt())
+        tvNow = text(30f, true)
+        tvNext = text(16f, false, 0xB3FFFFFF.toInt())
+        bar.addView(tvChan); bar.addView(tvNow); bar.addView(tvNext)
         val timeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        timeRow.addView(tvTime, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(16) })
-        timeRow.addView(progress, LinearLayout.LayoutParams(dp(260), dp(6)))
-        mid.addView(timeRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6); bottomMargin = dp(6) })
-        mid.addView(tvNext)
-        infoBar.addView(mid, LinearLayout.LayoutParams(0, -2, 1f))
-        root.addView(infoBar, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        tvStart = text(16f); tvEnd = text(16f)
+        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 1000
+            progressTintList = ColorStateList.valueOf(Color.WHITE)
+            progressBackgroundTintList = ColorStateList.valueOf(0x40FFFFFF)
+        }
+        timeRow.addView(tvStart, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(14) })
+        timeRow.addView(progress, LinearLayout.LayoutParams(0, dp(6), 1f))
+        timeRow.addView(tvEnd, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(14) })
+        bar.addView(timeRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+        btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; visibility = View.GONE }
+        bar.addView(btnRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
+        root.addView(bar, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
 
         // Zenderlijst links
         listPanel = LinearLayout(this).apply {
@@ -228,7 +242,7 @@ class PlayerActivity : Activity() {
                 if (!retried) {
                     retried = true
                     showCenter("Opnieuw proberen…")
-                    ui.postDelayed({ if (index >= 0) { val r = replay; if (r != null) startReplay(channels[index], r) else startStream(channels[index]) } }, 1500)
+                    ui.postDelayed({ if (index >= 0) { val r = replay; if (r != null) startReplay(channels[index], r, replayFrom) else startStream(channels[index]) } }, 1500)
                 } else {
                     showCenter(if (replay != null) "Terugkijken lukt niet voor dit programma" else "Deze zender speelt niet\n${error.errorCodeName}")
                 }
@@ -283,7 +297,12 @@ class PlayerActivity : Activity() {
                     listTitle.text = "$title   ·   rechts = gids"
                     val wanted = intent.getIntExtra("streamId", prefs.lastChannel)
                     val i = list.indexOfFirst { it.id == wanted }
-                    play(if (i >= 0) i else 0)
+                    // Gestart vanuit de gids of zoeken om terug te kijken?
+                    val rs = intent.getLongExtra("replayStart", 0L)
+                    if (i >= 0 && rs > 0) {
+                        play(i, quiet = true)
+                        playReplay(i, Programme(intent.getStringExtra("replayTitle") ?: "", "", rs, intent.getLongExtra("replayEnd", rs + 3600_000L), true), rs)
+                    } else play(if (i >= 0) i else 0)
                 }
             } catch (e: Exception) {
                 ui.post { showCenter("Live tv is nu niet bereikbaar\n${e.message}") }
@@ -291,26 +310,29 @@ class PlayerActivity : Activity() {
         }
     }
 
-    private fun play(i: Int) {
+    private fun play(i: Int, quiet: Boolean = false) {
         if (channels.isEmpty()) return
         val n = ((i % channels.size) + channels.size) % channels.size
         if (n != index) prevIndex = index
         index = n
         retried = false
         replay = null
+        pausedAt = 0L
+        ui.removeCallbacks(commitSeek); seekPresses = 0
         val ch = channels[n]
         prefs.lastChannel = ch.id
+        if (quiet) return
         startStream(ch)
-        showInfo(ch)
         loadEpg(ch)
+        showBar(menuOpen)
     }
 
     private fun startStream(ch: Channel) = startUrl(LiveSrv.streamUrl(this, ch))
 
-    /** Terugkijken starten; de link komt van de server, dus op de achtergrond. */
-    private fun startReplay(ch: Channel, prog: Programme) {
+    /** Terugkijken vanaf een moment; de link komt van de server, dus op de achtergrond. */
+    private fun startReplay(ch: Channel, prog: Programme, from: Long) {
         bg.execute {
-            val u = try { LiveSrv.catchupUrl(this, ch, prog) } catch (e: Exception) { ui.post { flash("Terugkijken lukt niet: ${e.message}") }; null }
+            val u = try { LiveSrv.catchupUrl(this, ch, from, prog.end) } catch (e: Exception) { ui.post { flash("Terugkijken lukt niet: ${e.message}") }; null }
             if (u != null) ui.post { startUrl(u) }
         }
     }
@@ -358,7 +380,7 @@ class PlayerActivity : Activity() {
         guide.loading = guide.epg.size < channels.size
         guide.visibility = View.VISIBLE
         guide.start(index)
-        infoBar.visibility = View.GONE
+        bar.visibility = View.GONE
         root.post {
             val r = guide.previewRect(root.width, root.height)
             playerView.layoutParams = FrameLayout.LayoutParams(r.width().toInt(), r.height().toInt()).apply {
@@ -385,7 +407,7 @@ class PlayerActivity : Activity() {
         guide.visibility = View.GONE
         playerView.layoutParams = FrameLayout.LayoutParams(-1, -1)
         guide.bringToFront()
-        listPanel.bringToFront(); infoBar.bringToFront(); center.bringToFront()
+        listPanel.bringToFront(); bar.bringToFront(); center.bringToFront()
     }
 
     private fun guideOk() {
@@ -397,7 +419,7 @@ class PlayerActivity : Activity() {
         when {
             p != null && now in p.start until p.end && p.archive && (channels.getOrNull(row)?.archiveDays ?: 0) > 0 -> showChoice(row, p)
             p == null || now in p.start until p.end -> play(row)
-            p.start < now && p.archive -> playReplay(row, p)
+            p.start < now && p.archive -> playReplay(row, p, p.start)
             p.start < now -> { play(row); showCenter("Dit programma is niet terug te kijken"); ui.postDelayed({ hideCenter() }, 2500) }
             else -> { play(row); showCenter("Begint om ${clock.format(Date(p.start))}"); ui.postDelayed({ hideCenter() }, 2500) }
         }
@@ -424,64 +446,192 @@ class PlayerActivity : Activity() {
         choiceStart.setTextColor(if (choiceSel == 1) 0xFF05070A.toInt() else Color.WHITE)
     }
 
-    private fun playReplay(i: Int, prog: Programme) {
+    /** Terugkijken vanaf from (klok-tijd). De aanbieder werkt per minuut, dus we ronden af. */
+    private fun playReplay(i: Int, prog: Programme, from: Long) {
         if (i != index) prevIndex = index
         index = i
         retried = false
         replay = prog
-        val ch = channels[i]
-        startReplay(ch, prog)
-        tvNum.text = ch.num.toString()
-        tvName.text = ch.name
-        tvNow.text = "↺ " + prog.title
-        tvTime.text = "Terugkijken · ${clock.format(Date(prog.start))} tot ${clock.format(Date(prog.end))}  ·  ◄► 30 sec  ·  OK pauze  ·  Terug = live"
-        tvNext.text = ""
-        progress.visibility = View.INVISIBLE
-        infoBar.alpha = 1f
-        infoBar.visibility = View.VISIBLE
-        ui.removeCallbacks(hideInfo)
-        ui.postDelayed(hideInfo, 6000)
+        replayFrom = from - from % 60_000L
+        pausedAt = 0L
+        startReplay(channels[i], prog, replayFrom)
+        showBar(menuOpen)
     }
 
-    private fun showInfo(ch: Channel) {
-        tvNum.text = ch.num.toString()
-        tvName.text = ch.name
-        if (infoBar.visibility != View.VISIBLE) {
-            infoBar.alpha = 0f
-            infoBar.visibility = View.VISIBLE
-            infoBar.animate().alpha(1f).setDuration(200)
-        } else infoBar.alpha = 1f
-        ui.removeCallbacks(hideInfo)
-        ui.postDelayed(hideInfo, 5000)
+    /** Waar we nu zijn, als klok-tijd. */
+    private fun position(): Long {
+        if (replay == null) return if (pausedAt > 0) pausedAt else System.currentTimeMillis()
+        return replayFrom + (player?.currentPosition ?: 0L)
+    }
+
+    // ---------- balk ----------
+
+    private fun showBar(menu: Boolean) {
+        val ch = channels.getOrNull(index) ?: return
+        val r = replay
+        tvChan.text = "${ch.num}  ·  ${ch.name}  ·  " + when {
+            r != null -> "terugkijken"
+            pausedAt > 0 -> "gepauzeerd"
+            else -> "live"
+        }
+        if (r != null) {
+            tvNow.text = "↺  " + r.title.ifEmpty { ch.name }
+            tvNext.text = ""
+        }
+        menuOpen = menu
+        if (menu) {
+            buttons = menuItems()
+            btnSel = btnSel.coerceIn(0, (buttons.size - 1).coerceAtLeast(0))
+            renderButtons()
+            btnRow.visibility = View.VISIBLE
+        } else btnRow.visibility = View.GONE
+        updateTime()
+        bar.animate().cancel()
+        if (bar.visibility != View.VISIBLE) {
+            bar.alpha = 0f
+            bar.visibility = View.VISIBLE
+            bar.animate().alpha(1f).setDuration(180)
+        } else bar.alpha = 1f
+        bar.bringToFront()
+        center.bringToFront()
+        ui.removeCallbacks(hideBar)
+        ui.postDelayed(hideBar, if (menu) 10_000L else 5_000L)
+        ui.removeCallbacks(tick); ui.postDelayed(tick, 1000)
+    }
+
+    private fun hideBarNow() {
+        menuOpen = false
+        ui.removeCallbacks(hideBar)
+        bar.animate().alpha(0f).setDuration(220).withEndAction { bar.visibility = View.GONE }
+    }
+
+    /** Tijdlijn: begin en eind van het programma, en waar we nu zijn. */
+    private fun updateTime() {
+        val p = replay ?: nowProg
+        if (p == null || p.start <= 0 || p.end <= p.start) {
+            tvStart.text = ""; tvEnd.text = ""; progress.visibility = View.INVISIBLE; return
+        }
+        val pos = if (seekPresses > 0) seekTarget else position()
+        tvStart.text = clock.format(Date(p.start))
+        tvEnd.text = clock.format(Date(p.end))
+        progress.progress = (((pos - p.start).toFloat() / (p.end - p.start)).coerceIn(0f, 1f) * 1000).toInt()
+        progress.visibility = View.VISIBLE
+    }
+
+    private fun menuItems(): List<Pair<String, () -> Unit>> {
+        val ch = channels.getOrNull(index) ?: return emptyList()
+        val paused = player?.playWhenReady == false || pausedAt > 0
+        val l = mutableListOf<Pair<String, () -> Unit>>()
+        l += (if (paused) "▶  Verder" else "❚❚  Pauze") to { togglePause() }
+        if (replay == null && canRestart(ch)) l += "↺  Vanaf begin" to { nowProg?.let { playReplay(index, it, it.start) }; Unit }
+        if (replay != null) l += "●  Terug naar live" to { play(index) }
+        l += "Zenders" to { hideBarNow(); showList() }
+        l += "Gids" to { hideBarNow(); openGuide() }
+        l += "Geluid" to { nextAudio() }
+        l += "Ondertitels" to { nextSubs() }
+        return l
+    }
+
+    private fun renderButtons() {
+        btnRow.removeAllViews()
+        buttons.forEachIndexed { i, b ->
+            val on = i == btnSel
+            btnRow.addView(text(19f, true, if (on) 0xFF05070A.toInt() else Color.WHITE).apply {
+                text = b.first
+                setPadding(dp(24), dp(11), dp(24), dp(11))
+                background = GradientDrawable().apply { setColor(if (on) Color.WHITE else 0x26FFFFFF); cornerRadius = dp(999).toFloat() }
+            }, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(12) })
+        }
+        btnRow.addView(text(16f, false, 0x99FFFFFF.toInt()).apply {
+            text = if (replay != null) "↑ ↓ zappen   ·   ← → spoelen (vasthouden = sneller)" else "↑ ↓ zappen   ·   terug = balk weg"
+            gravity = Gravity.END
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+    }
+
+    /** Pauze. Bij live met terugkijken gaat het daarna verder waar je was; anders weer live. */
+    private fun togglePause() {
+        val p = player ?: return
+        val ch = channels.getOrNull(index) ?: return
+        when {
+            replay != null -> p.playWhenReady = !p.playWhenReady
+            pausedAt > 0 -> {
+                val from = pausedAt
+                val prog = nowProg?.takeIf { it.start <= from } ?: Programme(ch.name, "", from, System.currentTimeMillis() + 3600_000L)
+                playReplay(index, prog, from)
+                return
+            }
+            ch.archiveDays > 0 -> { pausedAt = System.currentTimeMillis(); p.playWhenReady = false }
+            else -> {
+                p.playWhenReady = !p.playWhenReady
+                if (p.playWhenReady) p.seekToDefaultPosition()
+            }
+        }
+        showBar(true)
+    }
+
+    /** Spoelen bij terugkijken: stappen van 1 minuut, vasthouden = 5 en daarna 10 minuten. Pas na loslaten laden. */
+    private fun seek(dir: Int, repeat: Int) {
+        val r = replay ?: return
+        if (seekPresses == 0) seekTarget = position()
+        seekPresses++
+        val step = when { repeat > 12 -> 10; repeat > 3 -> 5; else -> 1 } * 60_000L
+        val now = System.currentTimeMillis()
+        seekTarget = (seekTarget + dir * step).coerceIn(r.start, now)
+        val diff = (seekTarget - position()) / 60_000L
+        showCenter((if (dir < 0) "◄◄  " else "►►  ") + clock.format(Date(seekTarget)) + "   (" + (if (diff >= 0) "+" else "") + diff + " min)")
+        showBar(false)
+        ui.removeCallbacks(commitSeek)
+        ui.postDelayed(commitSeek, 900)
+    }
+
+    private fun doSeek() {
+        val r = replay ?: return
+        seekPresses = 0
+        hideCenter()
+        // Bijna bij nu: dan gewoon live.
+        if (seekTarget >= System.currentTimeMillis() - 90_000L) { play(index); return }
+        playReplay(index, r, seekTarget)
+    }
+
+    /** Ondertitels: uit, of het volgende spoor. */
+    private fun nextSubs() {
+        val p = player ?: return
+        val text = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+        if (text.isEmpty()) { flash("Geen ondertitels bij deze uitzending"); return }
+        val cur = if (p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) -1 else text.indexOfFirst { it.isSelected }
+        val next = cur + 1
+        val b = p.trackSelectionParameters.buildUpon()
+        if (next >= text.size) {
+            p.trackSelectionParameters = b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+            flash("Ondertitels uit")
+        } else {
+            p.trackSelectionParameters = b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setOverrideForType(TrackSelectionOverride(text[next].mediaTrackGroup, 0)).build()
+            flash("Ondertitels: " + (text[next].getTrackFormat(0).language ?: "spoor ${next + 1}"))
+        }
     }
 
     private fun loadEpg(ch: Channel) {
         tvNow.text = ch.name
-        tvTime.text = ""
         tvNext.text = ""
         nowProg = null
-        progress.visibility = View.INVISIBLE
+        updateTime()
         bg.execute {
             val epg = try { LiveSrv.shortEpg(this, ch.id) } catch (_: Exception) { emptyList() }
             ui.post {
-                if (index < 0 || channels[index].id != ch.id) return@post
+                if (index < 0 || channels[index].id != ch.id || replay != null) return@post
                 val now = epg.getOrNull(0)
                 nowProg = now
-                if (now != null) {
-                    tvNow.text = now.title
-                    if (now.start > 0 && now.end > now.start) {
-                        tvTime.text = "${clock.format(Date(now.start))} tot ${clock.format(Date(now.end))}"
-                        val p = (System.currentTimeMillis() - now.start).toFloat() / (now.end - now.start)
-                        progress.progress = (p.coerceIn(0f, 1f) * 1000).toInt()
-                        progress.visibility = View.VISIBLE
-                    }
-                } else {
-                    tvTime.text = "Geen gids beschikbaar"
+                tvNow.text = now?.title ?: ch.name
+                val next = epg.getOrNull(1)
+                tvNext.text = when {
+                    next != null && next.start > 0 -> "Daarna ${clock.format(Date(next.start))}  ·  ${next.title}"
+                    next != null -> "Daarna: ${next.title}"
+                    now == null -> "Geen gids voor deze zender"
+                    else -> ""
                 }
-                epg.getOrNull(1)?.let {
-                    tvNext.text = if (it.start > 0) "Daarna ${clock.format(Date(it.start))}  ${it.title}" else "Daarna: ${it.title}"
-                }
-                if (canRestart(ch)) tvNext.text = "◄ vanaf begin" + (if (tvNext.text.isNotEmpty()) "     " + tvNext.text else "")
+                updateTime()
+                if (menuOpen) { buttons = menuItems(); renderButtons() }
             }
         }
     }
@@ -522,7 +672,7 @@ class PlayerActivity : Activity() {
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                     choice.visibility = View.GONE
                     val prog = choiceProg
-                    if (choiceSel == 1 && prog != null) playReplay(choiceRow, prog) else play(choiceRow)
+                    if (choiceSel == 1 && prog != null) playReplay(choiceRow, prog, prog.start) else play(choiceRow)
                 }
                 KeyEvent.KEYCODE_BACK -> choice.visibility = View.GONE
                 else -> return super.onKeyDown(keyCode, event)
@@ -541,18 +691,6 @@ class PlayerActivity : Activity() {
             }
             return true
         }
-        if (replay != null) {
-            val p = player
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> { p?.seekTo((p.currentPosition - 30_000).coerceAtLeast(0)); return true }
-                KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { p?.seekTo(p.currentPosition + 30_000); return true }
-                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                    p?.let { it.playWhenReady = !it.playWhenReady; showCenter(if (it.playWhenReady) "▶" else "❚❚"); ui.postDelayed({ hideCenter() }, 800) }
-                    return true
-                }
-                KeyEvent.KEYCODE_BACK -> { play(index); return true }
-            }
-        }
         if (keyCode == KeyEvent.KEYCODE_GUIDE || keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_G) {
             openGuide(); return true
         }
@@ -570,24 +708,29 @@ class PlayerActivity : Activity() {
                 else -> super.onKeyDown(keyCode, event)
             }
         }
+        // Balk met knoppen open: links/rechts kiest een knop, OK voert hem uit.
+        if (menuOpen && bar.visibility == View.VISIBLE) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> { btnSel = (btnSel - 1).coerceAtLeast(0); renderButtons(); showBar(true); return true }
+                KeyEvent.KEYCODE_DPAD_RIGHT -> { btnSel = (btnSel + 1).coerceAtMost(buttons.size - 1); renderButtons(); showBar(true); return true }
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> { if (event.repeatCount == 0) buttons.getOrNull(btnSel)?.second?.invoke(); return true }
+                KeyEvent.KEYCODE_BACK -> { hideBarNow(); return true }
+            }
+        }
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_CHANNEL_UP -> { play(index + 1); return true }
             KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_CHANNEL_DOWN -> { play(index - 1); return true }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> { showList(); return true }
-            KeyEvent.KEYCODE_DPAD_LEFT -> {
-                val ch = channels.getOrNull(index)
-                val n = nowProg
-                if (ch != null && n != null && canRestart(ch)) playReplay(index, n)
-                else if (ch != null) { showInfo(ch); loadEpg(ch) }
-                return true
-            }
-            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_INFO -> {
-                if (index >= 0) { showInfo(channels[index]); loadEpg(channels[index]) }
-                return true
-            }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> { btnSel = 0; showBar(true); return true }
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> { if (replay != null) seek(-1, event.repeatCount) else showBar(false); return true }
+            KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { if (replay != null) seek(1, event.repeatCount) else showBar(false); return true }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY -> { togglePause(); return true }
+            KeyEvent.KEYCODE_INFO -> { showBar(false); return true }
             KeyEvent.KEYCODE_LAST_CHANNEL -> { if (prevIndex >= 0) play(prevIndex); return true }
             KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK, KeyEvent.KEYCODE_PROG_GREEN, KeyEvent.KEYCODE_A -> { nextAudio(); return true }
-            KeyEvent.KEYCODE_BACK -> { finish(); return true }
+            KeyEvent.KEYCODE_BACK -> {
+                if (replay != null || pausedAt > 0) play(index) else finish()
+                return true
+            }
         }
         val digit = when (keyCode) {
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> keyCode - KeyEvent.KEYCODE_0
@@ -606,7 +749,7 @@ class PlayerActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        if (player == null && index >= 0) startStream(channels[index])
+        if (player == null && index >= 0) { val r = replay; if (r != null) startReplay(channels[index], r, replayFrom) else startStream(channels[index]) }
     }
 
     override fun onStop() {

@@ -8,6 +8,10 @@ import { sign } from './auth.js';
 
 // Avatar per profiel: een nummer uit de vaste set (public/avatars) of een eigen foto.
 try { db.exec("ALTER TABLE profiles ADD COLUMN avatar TEXT DEFAULT ''"); } catch {}
+// Verder kijken: zelf weggehaalde titels komen pas terug als je ze opnieuw kijkt.
+try { db.exec('ALTER TABLE progress ADD COLUMN hidden INTEGER DEFAULT 0'); } catch {}
+// Terugkijken loopt via de live-speler en heeft geen kijkstand meer.
+db.prepare("DELETE FROM progress WHERE key LIKE 'catchup:%'").run();
 const PHOTOS = path.join(process.env.THUIS_DATA || '/data', 'photos');
 fs.mkdirSync(PHOTOS, { recursive: true });
 const photoFile = id => fs.readdirSync(PHOTOS).find(f => f.startsWith(`p${+id}.`));
@@ -65,7 +69,7 @@ export function setPrefs(id, prefs) {
 export function progress(profile, p) {
   const watched = p.dur > 0 && p.pos >= p.dur * 0.95 ? 1 : 0;
   db.prepare(`INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(profile, key) DO UPDATE SET pos = excluded.pos, dur = excluded.dur, watched = MAX(progress.watched, excluded.watched), meta = excluded.meta, updated = excluded.updated, series_key = excluded.series_key`)
+    ON CONFLICT(profile, key) DO UPDATE SET pos = excluded.pos, dur = excluded.dur, watched = MAX(progress.watched, excluded.watched), meta = excluded.meta, updated = excluded.updated, series_key = excluded.series_key, hidden = 0`)
     .run(+profile, p.key, p.seriesKey || '', p.kind || '', Math.round(p.pos || 0), Math.round(p.dur || 0), watched, JSON.stringify(p.meta || {}), Date.now());
   if (p.plexKey) plex.timeline(p.plexKey, p.state || (watched ? 'stopped' : 'playing'), p.pos, p.dur);
 }
@@ -74,27 +78,36 @@ export function position(profile, key) {
   return r && !r.watched ? r.pos : 0;
 }
 export const seriesState = (profile, seriesKey) => db.prepare('SELECT key, pos, dur, watched, updated FROM progress WHERE profile = ? AND series_key = ?').all(+profile, seriesKey);
-export function setWatched(profile, key, watched) {
-  db.prepare(`INSERT INTO progress (profile, key, watched, updated, pos, dur) VALUES (?, ?, ?, ?, 0, 0) ON CONFLICT(profile, key) DO UPDATE SET watched = excluded.watched, pos = 0, updated = excluded.updated`)
-    .run(+profile, key, watched ? 1 : 0, Date.now());
-}
-
 /** Verder kijken voor dit profiel: één tegel per serie of film; afgeronde aflevering = volgende. */
 export async function continueWatching(profile) {
   const rows = db.prepare('SELECT * FROM progress WHERE profile = ? AND updated > ? ORDER BY updated DESC LIMIT 200').all(+profile, Date.now() - 60 * 86400e3);
   const seen = new Set(), out = [];
   for (const r of rows) {
-    const group = r.series_key || r.key; if (seen.has(group)) continue; seen.add(group);
-    const meta = JSON.parse(r.meta || '{}');
-    if (!r.watched && r.pos > 30000) { out.push({ ...meta, key: r.key, progress: r.dur ? r.pos / r.dur : 0, left: r.dur ? Math.round((r.dur - r.pos) / 60000) : -1, when: r.updated, resume: true }); continue; }
+    const group = r.series_key || r.key; if (seen.has(group)) continue; seen.add(group); seen.add(r.key);
+    if (r.hidden) continue;
+    const meta = JSON.parse(r.meta || '{}'), kind = r.kind === 'movie' ? 'movie' : 'series';
+    if (!r.watched && r.pos > 30000) { out.push({ ...meta, kind, key: r.key, progress: r.dur ? r.pos / r.dur : 0, left: r.dur ? Math.round((r.dur - r.pos) / 60000) : -1, when: r.updated, resume: true }); continue; }
     if (r.watched && r.series_key && r.series_key.startsWith('series:')) {
       const next = await nextEpisode(profile, r.series_key).catch(() => null);
       if (next) out.push({ ...meta, ...next, when: r.updated, next: true });
     }
   }
-  // Plex-tegels (eigen kijkstand van Plex) voor het profiel Samen of als er geen eigen Plex-gebruiker is
-  try { (await plex.deck()).slice(0, 6).forEach(p => { if (!seen.has('plex:' + p.key)) out.push({ ...p, key: 'plex:' + p.key, when: p.added, resume: true }); }); } catch {}
+  // Wat Plex zelf als "verder kijken" heeft, als het niet al via Thuis in de lijst staat.
+  try {
+    (await plex.deck()).slice(0, 8).forEach(p => {
+      if (seen.has('plex:' + p.key) || (p.show && seen.has('plex:' + p.show))) return;
+      out.push({ ...p, kind: p.type === 'movie' ? 'movie' : 'series', key: 'plex:' + p.key, when: p.added, resume: true });
+    });
+  } catch {}
   return out.sort((a, b) => (b.when || 0) - (a.when || 0)).slice(0, 20);
+}
+
+/** Uit Verder kijken halen (de hele serie). Bij Plex ook uit "Verder kijken" van Plex zelf. */
+export function hide(profile, key) {
+  const row = db.prepare('SELECT series_key FROM progress WHERE profile = ? AND key = ?').get(+profile, key);
+  if (row) db.prepare("UPDATE progress SET hidden = 1 WHERE profile = ? AND (key = ? OR (series_key != '' AND series_key = ?))").run(+profile, key, row.series_key || key);
+  else db.prepare('INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated, hidden) VALUES (?, ?, \'\', \'\', 0, 0, 0, \'{}\', ?, 1)').run(+profile, key, Date.now());
+  if (key.startsWith('plex:')) plex.removeFromDeck(key.slice(5));
 }
 
 /** Eerstvolgende niet-geziene aflevering van een IPTV-serie. */

@@ -48,7 +48,8 @@ object LiveSrv {
     fun shortEpg(ctx: Context, id: Int): List<Programme> =
         progs(JSONObject(Server.call(ctx, "GET", "/api/live/nownext?ids=$id")).optJSONArray(id.toString()), false)
 
-    /** Terugkijken: vraagt de server om een (ondertekende) link. Netwerk, dus niet op de UI-thread aanroepen. */
-    fun catchupUrl(ctx: Context, ch: Channel, p: Programme): String =
-        Server.abs(ctx, JSONObject(Server.call(ctx, "GET", "/api/live/catchup/${ch.id}?start=${p.start}&end=${p.end}")).getString("url"))
+    /** Terugkijken vanaf een moment tot het eind van het programma: vraagt de server om een (ondertekende) link.
+     *  Netwerk, dus niet op de UI-thread aanroepen. */
+    fun catchupUrl(ctx: Context, ch: Channel, from: Long, end: Long): String =
+        Server.abs(ctx, JSONObject(Server.call(ctx, "GET", "/api/live/catchup/${ch.id}?start=$from&end=$end")).getString("url"))
 }

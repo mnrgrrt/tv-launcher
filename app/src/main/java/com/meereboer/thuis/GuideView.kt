@@ -53,7 +53,6 @@ class GuideView(context: Context) : View(context) {
         row = index.coerceIn(0, (channels.size - 1).coerceAtLeast(0))
         focusTime = System.currentTimeMillis()
         winStart = focusTime - (focusTime % (30 * 60_000L))
-        topRow = (row - 2).coerceAtLeast(0)
         prog = 0
         snapProg()
         invalidate()
@@ -145,8 +144,8 @@ class GuideView(context: Context) : View(context) {
 
         // Rijen
         val visible = ((h - gridTop) / rowH).toInt().coerceAtLeast(1)
-        if (row < topRow) topRow = row
-        if (row >= topRow + visible) topRow = row - visible + 1
+        // De gekozen rij blijft net onder het midden staan; de lijst schuift eronder door.
+        topRow = (row - visible / 2).coerceIn(0, (channels.size - visible).coerceAtLeast(0))
         txt.textSize = h * 0.027f
         for (i in 0 until visible) {
             val r = topRow + i
