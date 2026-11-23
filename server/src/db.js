@@ -26,6 +26,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS programmes_channel ON programmes(channel, start);
   CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT, at INTEGER);
 `);
+// Nieuwe versie? Eerst een kopie van de database (de laatste 5 blijven bewaard).
+{
+  const ver = process.env.THUIS_VERSION || 'dev';
+  db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)');
+  const prev = db.prepare("SELECT value FROM settings WHERE key = '_version'").get()?.value;
+  if (prev && prev !== ver) {
+    const bdir = path.join(DIR, 'backup'); fs.mkdirSync(bdir, { recursive: true });
+    const f = path.join(bdir, `thuis-${new Date().toISOString().slice(0, 10)}-v${prev}.db`);
+    try { if (!fs.existsSync(f)) db.exec(`VACUUM INTO '${f.replace(/'/g, "''")}'`); } catch (e) { console.error('backup mislukt:', e.message); }
+    fs.readdirSync(bdir).filter(n => n.endsWith('.db')).sort().reverse().slice(5).forEach(n => fs.rmSync(path.join(bdir, n)));
+  }
+  db.prepare("INSERT INTO settings (key, value) VALUES ('_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(ver);
+}
 if (!db.prepare('SELECT COUNT(*) n FROM profiles').get().n) {
   db.prepare("INSERT INTO profiles (name, color, admin, sort) VALUES ('Samen', '#3DDBB0', 1, 0)").run();
 }

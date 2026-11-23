@@ -1,0 +1,8 @@
+[Unit]
+Description=tv-serverr bijwerken als er een nieuwe versie is
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tv-serverr-update.sh

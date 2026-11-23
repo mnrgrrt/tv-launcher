@@ -1,0 +1,9 @@
+[Unit]
+Description=Elk kwartier kijken of er een nieuwe tv-serverr is
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target
