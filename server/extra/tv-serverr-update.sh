@@ -2,6 +2,7 @@
 # Haalt de nieuwste tv-serverr op (gebouwd door GitHub) en start die, alleen als er echt iets nieuws is.
 # De server maakt bij een nieuwe versie zelf eerst een kopie van zijn database.
 IMG=ghcr.io/mnrgrrt/tv-serverr:latest
+rm -f /opt/tv-serverr/data/update-now     # seintje van de knop "Nu bijwerken" opruimen
 old=$(docker inspect -f '{{.Image}}' tv-serverr 2>/dev/null)
 docker pull -q "$IMG" >/dev/null 2>&1 || exit 0
 new=$(docker image inspect -f '{{.Id}}' "$IMG")

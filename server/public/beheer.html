@@ -36,6 +36,8 @@ button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line
  <button id="sgo">Account aanmaken</button><div class="err" id="serr"></div></div>
 
 <div id="app" hidden>
+ <div class="card"><h2>Versie</h2><div class="dim" id="upd"></div>
+  <button class="ghost" id="updgo" style="margin-top:12px">Nu bijwerken</button> <span class="dim" id="updmsg"></span></div>
  <div class="card"><h2>Bronnen</h2><div id="status"></div>
   <button class="ghost" id="chan" style="margin-top:12px">Zenders en gids nu verversen</button> <span class="dim" id="chanmsg"></span>
   <p class="dim">Nieuwe zenders in Dispatcharr komen vanzelf binnen 6 uur op alle tv's. Met deze knop meteen.</p></div>
@@ -81,9 +83,11 @@ async function start(){fetch('/api/health').then(r=>r.json()).then(h=>$('ver').t
 $('lgo').onclick=err('lerr',async()=>{await api('POST','/api/login',{name:$('lname').value,password:$('lpw').value});$('lpw').value='';load()});
 $('lpw').onkeydown=e=>{if(e.key==='Enter')$('lgo').click()};
 $('sgo').onclick=err('serr',async()=>{await api('POST','/api/setup',{pin:$('spin').value,name:$('sname').value,password:$('spw').value});load()});
+async function upd(){const u=await api('GET','/api/admin/update');$('upd').textContent=`Je draait versie ${u.version}.`+(u.requested?' Bijwerken is aangevraagd, de server herstart zo.':' Nieuwe versies worden elk kwartier vanzelf opgehaald.')}
+$('updgo').onclick=err('updmsg',async()=>{await api('POST','/api/admin/update');$('updmsg').textContent='Aangevraagd. Over een minuut deze pagina verversen.';upd()});
 $('out').onclick=async()=>{await api('POST','/api/logout');show('login')};
 
-async function load(){const d=await api('GET','/api/admin/settings');show('app');
+async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/settings');show('app');
  $('status').innerHTML=Object.entries(d.status.sources).map(([k,v])=>`<div class="row"><div><span class="dot ${v.ok?'ok':'bad'}"></span>${esc(NAMES[k]||k)}</div><div class="dim">${v.ok?'bereikbaar':esc(v.error)}</div></div>`).join('');
  $('devices').innerHTML=d.devices.map(x=>`<div class="row"><div>${esc(x.name)}<div class="dim">laatst ${when(x.last_seen)} · ${esc(x.last_ip)}</div></div><button class="ghost" data-unpair="${x.id}">Ontkoppelen</button></div>`).join('')||'<div class="dim">Nog geen tv\'s.</div>';
  $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div><span class="dot" style="background:${esc(p.color)}"></span>${esc(p.name)} ${p.admin?'<span class="dim">· mag alles</span>':''}</div>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div>`).join('');

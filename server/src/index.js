@@ -77,6 +77,10 @@ on('POST', '/api/admin/channels', 'admin', async ({ me }) => {
   const { channels } = await xtream.channels(true); uncache('vod:'); epg.refresh(); status(true);
   auth.audit(me.name, 'zenders ververst'); return { channels: channels.length };
 });
+// Bijwerken: de server zet alleen een seintje neer; het updatescript buiten de container doet de rest.
+const FLAG = path.join(process.env.THUIS_DATA || '/data', 'update-now');
+on('GET', '/api/admin/update', 'admin', () => ({ version: VERSION, requested: fs.existsSync(FLAG) }));
+on('POST', '/api/admin/update', 'admin', ({ me }) => { fs.writeFileSync(FLAG, String(Date.now())); auth.audit(me.name, 'bijwerken aangevraagd'); return { ok: true }; });
 on('GET', '/api/admin/status', 'admin', () => status(true));
 
 // Gekoppelde tv's
