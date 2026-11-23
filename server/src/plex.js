@@ -48,7 +48,7 @@ export async function sections() {
 export async function all(section) { return (await get(`/library/sections/${section}/all?sort=addedAt:desc&includeGuids=1`)).Metadata || []; }
 
 export async function show(key) {
-  const [meta, leaves] = await Promise.all([get(`/library/metadata/${key}`), get(`/library/metadata/${key}/allLeaves`)]);
+  const [meta, leaves] = await Promise.all([get(`/library/metadata/${key}?includeGuids=1`), get(`/library/metadata/${key}/allLeaves`)]);
   const m = (meta.Metadata || [])[0] || {}, seasons = {};
   for (const e of leaves.Metadata || []) {
     const d = e.duration || 0, o = e.viewOffset || 0;
@@ -61,7 +61,7 @@ export async function show(key) {
 
 /** Wat de speler nodig heeft. De bestandslink bevat het Plex-token; die blijft in het thuisnetwerk. */
 export async function playItem(key) {
-  const c = await get(`/library/metadata/${key}`);
+  const c = await get(`/library/metadata/${key}?includeGuids=1`);
   const m = (c.Metadata || [])[0]; if (!m) throw new Error('Niet gevonden in Plex');
   const part = (((m.Media || [])[0] || {}).Part || [])[0]; if (!part) throw new Error('Geen bestand');
   const ep = m.type === 'episode';
@@ -69,7 +69,7 @@ export async function playItem(key) {
   const subs = (part.Stream || []).filter(s => s.streamType === 3 && s.key)
     .map(s => ({ url: sign(`/stream/plex?p=${enc(s.key)}`), lang: s.languageCode || '', label: s.displayTitle || '', codec: s.codec || '' }));
   let tmdb = tmdbOf(m);
-  if (ep) tmdb = tmdbOf((await get(`/library/metadata/${m.grandparentRatingKey}`).catch(() => ({}))).Metadata?.[0]) || 0;
+  if (ep) tmdb = tmdbOf((await get(`/library/metadata/${m.grandparentRatingKey}?includeGuids=1`).catch(() => ({}))).Metadata?.[0]) || 0;
   return { kind: m.type === 'clip' ? 'clip' : ep ? 'series' : 'movie', key: 'plex:' + key, plexKey: key, url: sign(`/stream/plex?p=${enc(part.key)}`),
     title: ep ? m.grandparentTitle : m.title, sub: ep ? `S${m.parentIndex} · afl. ${m.index} · ${m.title}` : String(m.year || ''),
     seriesKey: ep ? 'plex:' + m.grandparentRatingKey : '', season: ep ? m.parentIndex : 0, episode: ep ? m.index : 0,
@@ -80,6 +80,14 @@ export async function playItem(key) {
 export async function extras(key) {
   const c = await get(`/library/metadata/${key}/extras`).catch(() => ({}));
   return (c.Metadata || []).slice(0, 20).map(m => ({ key: String(m.ratingKey), title: m.title, sub: m.subtype || 'extra', img: img(m.thumb, 640, 360), minutes: Math.round((m.duration || 0) / 60000) }));
+}
+
+/** TMDB-nummer (bij een aflevering dat van de serie) met seizoen en aflevering, voor het koppelen aan IPTV. */
+export async function ident(key) {
+  const m = ((await get(`/library/metadata/${key}?includeGuids=1`)).Metadata || [])[0]; if (!m) return null;
+  if (m.type !== 'episode') return { tmdb: tmdbOf(m), season: 0, episode: 0 };
+  const show = ((await get(`/library/metadata/${m.grandparentRatingKey}?includeGuids=1`).catch(() => ({}))).Metadata || [])[0];
+  return { tmdb: tmdbOf(show), season: m.parentIndex || 0, episode: m.index || 0 };
 }
 
 export function timeline(key, state, pos, dur) {

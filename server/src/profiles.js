@@ -92,13 +92,20 @@ export function progress(profile, p) {
 /** Waar ben je gebleven? Eerst bij deze bron; anders bij dezelfde titel via de andere bron (Plex of IPTV), 10 seconden eerder. */
 export function position(profile, key, tmdb = 0, season = 0, episode = 0) {
   const r = db.prepare('SELECT pos, dur, watched, updated FROM progress WHERE profile = ? AND key = ?').get(+profile, key);
-  if (r && (r.watched || r.pos > 30000)) return { pos: r.watched ? 0 : r.pos, via: '' };
-  if (+tmdb > 0) {
-    const o = db.prepare(`SELECT key, pos, updated FROM progress WHERE profile = ? AND key != ? AND tmdb = ? AND season = ? AND episode = ? AND watched = 0 AND pos > 30000
-      ORDER BY updated DESC LIMIT 1`).get(+profile, key, +tmdb, +season, +episode);
-    if (o && (!r || o.updated > r.updated)) return { pos: Math.max(0, o.pos - 10000), via: srcName(o.key) };
-  }
+  // De andere bron telt als die later is gekeken dan deze (ook als je deze bron eerder al eens had gezien).
+  const o = +tmdb > 0 ? db.prepare(`SELECT key, pos, watched, updated FROM progress WHERE profile = ? AND key != ? AND tmdb = ? AND season = ? AND episode = ?
+      ORDER BY updated DESC LIMIT 1`).get(+profile, key, +tmdb, +season, +episode) : null;
+  if (o && (!r || o.updated > r.updated)) return o.watched || o.pos <= 30000 ? { pos: 0, via: '' } : { pos: Math.max(0, o.pos - 10000), via: srcName(o.key) };
   return { pos: r && !r.watched ? r.pos : 0, via: '' };
+}
+/** Oudere Plex-kijkstanden zonder TMDB-nummer alsnog aanvullen (eenmalig per rij, de laatste 30). */
+export async function fillPlexIdent(profile) {
+  const rows = db.prepare("SELECT key FROM progress WHERE profile = ? AND key LIKE 'plex:%' AND tmdb = 0 AND updated > ? ORDER BY updated DESC LIMIT 30").all(+profile, Date.now() - 60 * 86400e3);
+  const put = db.prepare('UPDATE progress SET tmdb = ?, season = ?, episode = ? WHERE profile = ? AND key = ?');
+  for (const r of rows) {
+    const id = await plex.ident(r.key.slice(5)).catch(() => null);
+    put.run(id?.tmdb || -1, id?.season || 0, id?.episode || 0, +profile, r.key);   // -1 = geprobeerd, niet gevonden
+  }
 }
 /** Afleveringen die je via welke bron dan ook gezien hebt: "seizoen:aflevering" voor een serie (TMDB-nummer). */
 export const watchedEps = (profile, tmdb) => +tmdb > 0 ? new Set(db.prepare('SELECT season, episode FROM progress WHERE profile = ? AND tmdb = ? AND watched = 1 AND season > 0')
