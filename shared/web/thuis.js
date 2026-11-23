@@ -834,7 +834,7 @@
           row.innerHTML = '';
           row.appendChild(rowSection('', s.episodes.map(function (e) {
             // Aflevering als kaart: beeld met de tekst erop, zoals in een goede videotheek.
-            var b = h('button', { class: 'row-item ep' }, '<div class="thumb" style="' + bg(e.img || show.backdrop) + '"><div class="cap"><span class="k">Aflevering ' + e.num + '</span><b>' + esc(e.title || 'Aflevering ' + e.num) + '</b>' +
+            var b = h('button', { class: 'row-item ep' }, '<div class="thumb" style="' + bg(e.img || show.backdrop) + '"><div class="cap"><span class="k">Aflevering ' + e.num + '</span>' + (e.title && !/^(aflevering|episode)\s*\d+$/i.test(e.title) ? '<b>' + esc(e.title) + '</b>' : '') +
               (e.plot ? '<p>' + esc(e.plot) + '</p>' : '') + '<span class="f2">' + [e.dur ? Math.round(e.dur / 60) + ' min' : '', e.watched ? '✓ Bekeken' : ''].filter(Boolean).join(' · ') + '</span></div>' +
               (!e.watched && e.progress > 0.03 ? '<div class="bar"><i style="width:' + Math.round(e.progress * 100) + '%"></i></div>' : '') + '</div>');
             return F(b, function () { playEp(s, e); }, { long: function () { epMenu(s, e); } });
