@@ -145,7 +145,7 @@ export async function search(q) {
 
 /** Alles voor de informatiepagina: details, acteurs, trailer, vergelijkbaar, diensten. */
 export function details(type, id) {
-  return cached(`tmdb:d:${type}:${id}`, 24 * 3600e3, async () => {
+  return cached(`tmdb:d2:${type}:${id}`, 24 * 3600e3, async () => {
     const d = await tmdb(`/${type}/${id}?language=nl-NL&append_to_response=credits,videos,similar,recommendations,release_dates,content_ratings,external_ids,watch/providers,images&include_image_language=nl,en,null&include_video_language=nl,en`);
     const tv = type === 'tv', mine = new Map(streamingServices().map(s => [s.provider, s.key]));
     const yt = (d.videos?.results || []).filter(v => v.site === 'YouTube');
