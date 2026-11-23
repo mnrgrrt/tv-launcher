@@ -21,7 +21,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .pill.focus { background: var(--ink); color: var(--bg); transform: scale(1.06); box-shadow: 0 10px 30px rgba(0,0,0,.4); }
 .btn { display: inline-flex; align-items: center; gap: 12px; padding: 16px 34px; border-radius: 999px; font-size: 24px; font-weight: 600; background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); white-space: nowrap; }
 .btn.focus { background: var(--ink); color: var(--bg); transform: scale(1.07); box-shadow: 0 14px 40px rgba(0,0,0,.5); }
-.row-item.focus .thumb, .tile.focus .thumb, .poster.focus .pimg { transform: scale(1.08); transform-origin: 50% 60%; box-shadow: 0 34px 60px rgba(0,0,0,.75); }
+.row-item.focus .thumb, .tile.focus .thumb, .poster.focus .pimg { transform: scale(1.08); transform-origin: 50% 60%; box-shadow: 0 26px 44px rgba(0,0,0,.7); }
 .thumb::after, .pimg::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .3s;
   background: linear-gradient(125deg, rgba(255,255,255,.26) 0%, rgba(255,255,255,.06) 32%, rgba(255,255,255,0) 50%); }
 .focus .thumb::after, .focus .pimg::after { opacity: 1; }
@@ -87,7 +87,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .section h2 { font-size: 24px; font-weight: 600; padding: 0 80px 12px; }
 .section h2 small { font-size: 17px; font-weight: 500; color: var(--ink-3); }
 .row { display: flex; gap: 36px; padding: 0 80px; transition: transform .25s var(--ease); }
-.row-clip { overflow: hidden; padding: 18px 0 12px; }
+.row-clip { overflow: hidden; padding: 24px 0 64px; margin-bottom: -52px; }  /* ruimte onder voor de schaduw, zonder dat de rij hoger wordt */
 .row-item, .poster, .listrow { text-align: left; }
 .row-item { width: 280px; flex: none; display: flex; flex-direction: column; gap: 12px; }
 .thumb { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 14px; background: var(--card) center/cover no-repeat; transition: transform .15s var(--ease), box-shadow .15s; }
