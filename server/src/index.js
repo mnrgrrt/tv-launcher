@@ -154,7 +154,15 @@ on('GET', '/api/foryou', 'device', async ({ q }) => {
 });
 on('GET', '/api/services/logos', 'device', () => tmdb.logos().catch(() => ({})));
 on('GET', '/api/art/:type/:id', 'device', ({ p }) => tmdb.art(p.type === 'tv' ? 'tv' : 'movie', +p.id).catch(() => ({})));
-on('GET', '/api/info/:type/:id', 'device', ({ p }) => tmdb.details(p.type === 'tv' ? 'tv' : 'movie', +p.id));
+// Info van een titel. Bij Gerelateerd zetten we erbij of we het zelf hebben (Plex of IPTV), zodat de tegel dat laat zien.
+on('GET', '/api/info/:type/:id', 'device', async ({ p }) => {
+  const type = p.type === 'tv' ? 'tv' : 'movie', kind = type === 'tv' ? 'series' : 'movie';
+  const d = await tmdb.details(type, +p.id), c = await catalog.items(kind).catch(() => null);
+  const related = d.related.map(x => { const o = c && c.byTmdb.get(x.tmdb); return o ? { ...x, sources: o.sources, plex: o.plex || null, vod: o.vod ? withVod(kind, o.vod) : null } : x; });
+  return { ...d, related };
+});
+on('GET', '/api/person/:id', 'device', ({ p }) => tmdb.person(+p.id));
+on('GET', '/api/plex/extras/:key', 'device', ({ p }) => plex.extras(+p.key));
 
 // Films en series: Plex en IPTV samen (richting C: slimme rijen, genres, collecties en een raster met filters).
 const withSources = kind => o => ({ ...o, vod: o.vod ? withVod(kind, o.vod) : null });

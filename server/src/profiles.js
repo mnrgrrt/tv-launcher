@@ -76,6 +76,7 @@ export function setPrefs(id, prefs) {
 
 /** Kijkstand opslaan. Bij 95% telt hij als gezien. */
 export function progress(profile, p) {
+  if (p.kind === 'clip') return;   // extra's (trailers e.d.) komen niet in Verder kijken
   const watched = p.dur > 0 && p.pos >= p.dur * 0.95 ? 1 : 0;
   db.prepare(`INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(profile, key) DO UPDATE SET pos = excluded.pos, dur = excluded.dur, watched = MAX(progress.watched, excluded.watched), meta = excluded.meta, updated = excluded.updated, series_key = excluded.series_key, hidden = 0`)
