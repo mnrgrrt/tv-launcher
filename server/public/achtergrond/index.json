@@ -1,0 +1,33 @@
+{
+ "_uitleg": "Foto's bovenaan Thuis (Unsplash-licentie). Naam van de fotograaf staat klein in beeld.",
+ "photos": [
+  {
+   "file": "stefan-stefancik.jpg",
+   "by": "Stefan Štefančík"
+  },
+  {
+   "file": "nattu-adnan.jpg",
+   "by": "Nattu Adnan"
+  },
+  {
+   "file": "garrett-parker.jpg",
+   "by": "Garrett Parker"
+  },
+  {
+   "file": "wade-meng.jpg",
+   "by": "Wade Meng"
+  },
+  {
+   "file": "buzz-andersen.jpg",
+   "by": "Buzz Andersen"
+  },
+  {
+   "file": "johannes-plenio.jpg",
+   "by": "Johannes Plenio"
+  },
+  {
+   "file": "anders-jilden.jpg",
+   "by": "Anders Jildén"
+  }
+ ]
+}
