@@ -4,6 +4,10 @@
   'use strict';
   var N = window.Native || null;               // Android-brug; null in een gewone browser
   var $app = document.getElementById('app');
+  // Alles is ontworpen op 1920x1080; op een tv met een ander aantal css-pixels schalen we het geheel.
+  var SCALE = 1;
+  function fit() { SCALE = Math.min(window.innerWidth / 1920, window.innerHeight / 1080) || 1; document.body.style.transformOrigin = '0 0'; document.body.style.transform = SCALE === 1 ? '' : 'scale(' + SCALE + ')'; }
+  fit(); window.addEventListener('resize', fit);
 
   // ---------- hulpjes ----------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -68,14 +72,14 @@
   function reveal(el) {
     var row = el.closest('.row');
     if (row) {
-      var r = el.getBoundingClientRect(), shift = parseFloat(row.dataset.x || 0);
-      if (r.right > 1840) shift -= r.right - 1840; else if (r.left < 80) shift += 80 - r.left;
+      var r = el.getBoundingClientRect(), shift = parseFloat(row.dataset.x || 0), L = r.left / SCALE, R = r.right / SCALE;
+      if (R > 1840) shift -= R - 1840; else if (L < 80) shift += 80 - L;
       shift = Math.min(0, shift); row.dataset.x = shift; row.style.transform = 'translateX(' + shift + 'px)';
     }
     var inner = el.closest('.scroll-inner');
     if (inner) {
-      var box = (el.closest('.section') || el).getBoundingClientRect(), y = parseFloat(inner.dataset.y || 0);
-      if (box.bottom > 1060) y -= box.bottom - 1060; else if (box.top < 130) y += 130 - box.top;
+      var box = (el.closest('.section') || el).getBoundingClientRect(), y = parseFloat(inner.dataset.y || 0), T = box.top / SCALE, B = box.bottom / SCALE;
+      if (B > 1060) y -= B - 1060; else if (T < 130) y += 130 - T;
       if (el.closest('.first')) y = 0;
       y = Math.min(0, y); inner.dataset.y = y; inner.style.transform = 'translateY(' + y + 'px)';
     }
@@ -89,8 +93,8 @@
     all.forEach(function (el) {
       if (el === cur) return;
       var b = el.getBoundingClientRect(), bx = b.left + b.width / 2, by = b.top + b.height / 2, main, side;
-      if (dir === 'right') { if (b.left < a.right - 4 && bx <= ax) return; main = b.left - a.right; side = Math.abs(by - ay); if (!(b.top < a.bottom && b.bottom > a.top)) side += 2000; }
-      else if (dir === 'left') { if (b.right > a.left + 4 && bx >= ax) return; main = a.left - b.right; side = Math.abs(by - ay); if (!(b.top < a.bottom && b.bottom > a.top)) side += 2000; }
+      if (dir === 'right') { if (b.left < a.right - 4 && bx <= ax) return; main = b.left - a.right; side = Math.abs(by - ay); if (!(b.top < a.bottom && b.bottom > a.top)) return; }
+      else if (dir === 'left') { if (b.right > a.left + 4 && bx >= ax) return; main = a.left - b.right; side = Math.abs(by - ay); if (!(b.top < a.bottom && b.bottom > a.top)) return; }
       else if (dir === 'down') { if (b.top < a.bottom - 4 && by <= ay) return; main = b.top - a.bottom; side = Math.abs(bx - ax); }
       else { if (b.bottom > a.top + 4 && by >= ay) return; main = a.top - b.bottom; side = Math.abs(bx - ax); }
       if ((dir === 'left' || dir === 'right') && group && el.dataset.group !== group) side += 4000;
@@ -100,8 +104,11 @@
     if (best) focus(best);
   }
   var okDown = 0, longFired = false;
+  // Sommige tv's geven geen e.key mee maar alleen een code (23 = OK op Android).
+  var CODES = { 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown', 13: 'Enter', 23: 'Enter', 66: 'Enter', 160: 'Enter', 27: 'Escape', 8: 'Backspace', 4: 'GoBack', 461: 'GoBack' };
+  function keyOf(e) { return (e.key && e.key !== 'Unidentified' && e.key !== 'Process') ? e.key : (CODES[e.keyCode] || ''); }
   document.addEventListener('keydown', function (e) {
-    var k = e.key;
+    var k = keyOf(e);
     if (k === 'ArrowRight' || k === 'ArrowLeft' || k === 'ArrowUp' || k === 'ArrowDown') { e.preventDefault(); move(k.slice(5).toLowerCase()); return; }
     if (k === 'Enter') {
       e.preventDefault();
@@ -112,7 +119,7 @@
     if (k === 'Escape' || k === 'Backspace' || k === 'GoBack') { if (!(e.target && e.target.tagName === 'INPUT')) { e.preventDefault(); back(); } }
   });
   document.addEventListener('keyup', function (e) {
-    if (e.key !== 'Enter') return;
+    if (keyOf(e) !== 'Enter') return;
     e.preventDefault();
     if (!longFired && cur && cur._ok) cur._ok();
     longFired = false;
