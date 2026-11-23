@@ -158,7 +158,7 @@ on('GET', '/api/art/:type/:id', 'device', ({ p }) => tmdb.art(p.type === 'tv' ? 
 on('GET', '/api/info/:type/:id', 'device', async ({ p }) => {
   const type = p.type === 'tv' ? 'tv' : 'movie', kind = type === 'tv' ? 'series' : 'movie';
   const d = await tmdb.details(type, +p.id), c = await catalog.items(kind).catch(() => null);
-  const related = d.related.map(x => { const o = c && c.byTmdb.get(x.tmdb); return o ? { ...x, sources: o.sources, plex: o.plex || null, vod: o.vod ? withVod(kind, o.vod) : null } : x; });
+  const related = (d.related || []).map(x => { const o = c && c.byTmdb.get(x.tmdb); return o ? { ...x, sources: o.sources, plex: o.plex || null, vod: o.vod ? withVod(kind, o.vod) : null } : x; });
   return { ...d, related };
 });
 // Titel zonder TMDB-nummer (sommige Plex- en IPTV-titels): op naam en jaar opzoeken, een week bewaard.
