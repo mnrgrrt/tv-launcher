@@ -151,7 +151,7 @@ on('GET', '/api/home', 'device', async ({ q }) => ({ picks: await tmdb.home(svcO
 on('GET', '/api/foryou', 'device', async ({ q }) => {
   const prof = +q.get('profile') || 1;
   const l = await catalog.forYou(svcOf(q), catalog.prefsOf(profileOf(prof)), taste.forProfile(prof, taste.lookup));
-  return l.map(o => withSources(o.kind)(o));
+  return { now: l.now.map(o => withSources(o.kind)(o)), later: l.later };
 });
 on('GET', '/api/art/:type/:id', 'device', ({ p }) => tmdb.art(p.type === 'tv' ? 'tv' : 'movie', +p.id).catch(() => ({})));
 on('GET', '/api/info/:type/:id', 'device', ({ p }) => tmdb.details(p.type === 'tv' ? 'tv' : 'movie', +p.id));
