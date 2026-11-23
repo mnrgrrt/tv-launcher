@@ -51,15 +51,8 @@
             </intent-filter>
         </activity>
 
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.updates"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
+        <!-- Antwoord van Android bij het bijwerken van Thuis (zie Updater). -->
+        <receiver android:name=".InstallResult" android:exported="false" />
 
         <activity android:name=".VodActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />

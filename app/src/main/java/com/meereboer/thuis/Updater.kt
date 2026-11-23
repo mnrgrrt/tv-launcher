@@ -5,7 +5,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.core.content.FileProvider
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.pm.PackageInstaller
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
@@ -48,7 +50,8 @@ object Updater {
         return JSONObject().put("current", curName).put("latest", l.name).put("newer", l.code > cur)
     }
 
-    /** Downloadt de nieuwste APK, controleert het versienummer en opent meteen het installatiescherm van Android. */
+    /** Downloadt de nieuwste APK, controleert het versienummer en installeert via de PackageInstaller van Android.
+     *  Android vraagt dan zelf één keer "Installeren?"; daarna start Thuis vanzelf opnieuw. */
     fun downloadAndInstall(ctx: android.app.Activity): String {
         if (Build.VERSION.SDK_INT >= 26 && !ctx.packageManager.canRequestPackageInstalls()) {
             val i = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${ctx.packageName}"))
@@ -56,25 +59,38 @@ object Updater {
             ctx.startActivity(i)
             return "permission"
         }
-        val dir = File(ctx.cacheDir, "updates").apply { mkdirs() }
         val l = latest(ctx)
         if (l.url.isEmpty()) throw RuntimeException("Geen nieuwe versie gevonden")
-        val file = File(dir, "thuis.apk")
-        val tmp = File(dir, "thuis.apk.part")
-        Server.http.newCall(Request.Builder().url(l.url).build()).execute().use { r ->
-            if (!r.isSuccessful) throw RuntimeException("Download mislukt (${r.code})")
-            tmp.outputStream().use { out -> r.body!!.byteStream().copyTo(out) }
-        }
-        // Is dit echt de nieuwe versie? Anders niet installeren (scheelt een installatie van dezelfde versie).
-        @Suppress("DEPRECATION")
-        val got = ctx.packageManager.getPackageArchiveInfo(tmp.path, 0)?.let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode.toInt() else it.versionCode } ?: 0
-        if (got <= installedVersion(ctx)) { tmp.delete(); throw RuntimeException("De download was nog de oude versie. Probeer het over een minuut opnieuw.") }
-        file.delete(); tmp.renameTo(file)
-        val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.updates", file)
-        val i = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, "application/vnd.android.package-archive")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        ctx.runOnUiThread { ctx.startActivity(i) }
+        val tmp = File(ctx.cacheDir, "thuis-update.apk")
+        try {
+            Server.http.newCall(Request.Builder().url(l.url).build()).execute().use { r ->
+                if (!r.isSuccessful) throw RuntimeException("Download mislukt (${r.code})")
+                tmp.outputStream().use { out -> r.body!!.byteStream().copyTo(out) }
+            }
+            // Is dit echt de nieuwe versie? Anders niet installeren (scheelt een installatie van dezelfde versie).
+            @Suppress("DEPRECATION")
+            val got = ctx.packageManager.getPackageArchiveInfo(tmp.path, 0)?.let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode.toInt() else it.versionCode } ?: 0
+            if (got <= installedVersion(ctx)) throw RuntimeException("De download was nog de oude versie. Probeer het over een minuut opnieuw.")
+            val pi = ctx.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply { setAppPackageName(ctx.packageName) }
+            val id = pi.createSession(params)
+            pi.openSession(id).use { session ->
+                session.openWrite("thuis.apk", 0, tmp.length()).use { out -> tmp.inputStream().use { it.copyTo(out) }; session.fsync(out) }
+                val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+                val result = PendingIntent.getBroadcast(ctx, id, Intent(ctx, InstallResult::class.java), flags)
+                session.commit(result.intentSender)
+            }
+        } finally { tmp.delete() }
         return "install"
+    }
+}
+
+/** Antwoord van de PackageInstaller: vraagt Android om bevestiging, dan tonen we dat scherm meteen. */
+class InstallResult : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, i: Intent) {
+        if (i.getIntExtra(PackageInstaller.EXTRA_STATUS, -999) != PackageInstaller.STATUS_PENDING_USER_ACTION) return
+        @Suppress("DEPRECATION")
+        val confirm = i.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
+        ctx.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
