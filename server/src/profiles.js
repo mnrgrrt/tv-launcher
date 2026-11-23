@@ -49,6 +49,8 @@ export function move(id, dir) {
   db.prepare('UPDATE profiles SET sort = 0 WHERE id = 1').run();
   ids.forEach((x, k) => db.prepare('UPDATE profiles SET sort = ? WHERE id = ?').run(k + 1, x));
 }
+/** Verder kijken van Plex zelf tonen bij dit profiel, aan of uit. */
+export const setPlexDeck = (id, on) => db.prepare('UPDATE profiles SET plex_user = ? WHERE id = ?').run(on ? '1' : '', +id);
 /** "Mag alles" aan of uit. */
 export const setAdmin = (id, on) => db.prepare('UPDATE profiles SET admin = ? WHERE id = ?').run(on ? 1 : 0, +id);
 export function setAvatar(id, avatar) {
@@ -99,8 +101,10 @@ export async function continueWatching(profile) {
       if (next) out.push({ ...meta, ...next, when: r.updated, next: true });
     }
   }
-  // Wat Plex zelf als "verder kijken" heeft, als het niet al via Thuis in de lijst staat.
-  try {
+  // Wat Plex zelf als "verder kijken" heeft (dat is van het Plex-account van de server, dus van één persoon):
+  // alleen bij Samen en bij profielen waar dat op de beheerpagina aan staat. Anders zien alle profielen hetzelfde.
+  const usesPlex = +profile === 1 || db.prepare('SELECT plex_user FROM profiles WHERE id = ?').get(+profile)?.plex_user === '1';
+  if (usesPlex) try {
     (await plex.deck()).slice(0, 8).forEach(p => {
       if (seen.has('plex:' + p.key) || (p.show && seen.has('plex:' + p.show))) return;
       out.push({ ...p, kind: p.type === 'movie' && !EPISODE.test(p.title) ? 'movie' : 'series', key: 'plex:' + p.key, when: p.added, resume: true });
