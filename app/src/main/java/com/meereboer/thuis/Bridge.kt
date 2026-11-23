@@ -53,20 +53,6 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
     @JavascriptInterface fun getApps(id: Int) = async(id) { AppList.load(act).toString() }
     @JavascriptInterface fun launch(pkg: String) { act.runOnUiThread { AppList.launch(act, pkg) } }
 
-    /** Een titel in een andere app openen: eerst de directe link (bijv. netflix://title/…), anders zoeken in de app op de titel, anders de app zelf. */
-    @JavascriptInterface fun openTitle(pkg: String, uri: String, title: String) {
-        act.runOnUiThread {
-            val tries = ArrayList<android.content.Intent>()
-            if (uri.isNotEmpty()) tries += android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri)).setPackage(pkg).putExtra("source", "30")
-            if (title.isNotEmpty()) tries += android.content.Intent(android.content.Intent.ACTION_SEARCH).setPackage(pkg).putExtra(android.app.SearchManager.QUERY, title)
-            for (i in tries) {
-                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                try { act.startActivity(i); return@runOnUiThread } catch (_: Exception) {}
-            }
-            AppList.launch(act, pkg)
-        }
-    }
-
     /** Android-instellingen openen: "all", "wifi", "bluetooth", "sound", "display", "apps", "home" (oorspronkelijk startscherm). */
     @JavascriptInterface fun openSystem(what: String) {
         act.runOnUiThread {

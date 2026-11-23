@@ -34,7 +34,7 @@ export async function items(kind) {
   const add = (o, src) => {
     const k = o.tmdb ? 't' + o.tmdb : 'n' + norm(o.title) + '|' + o.year;
     const have = byKey.get(k);
-    if (!have) { const e = { ...o, sources: [src], services: [] }; byKey.set(k, e); list.push(e); return; }
+    if (!have) { const e = { ...o, sources: [src] }; byKey.set(k, e); list.push(e); return; }
     if (!have.sources.includes(src)) have.sources.push(src);
     have.genres = [...new Set([...have.genres, ...o.genres])];
     have.added = Math.max(have.added, o.added);
@@ -56,7 +56,7 @@ export async function items(kind) {
     add({ title: it.title, year: it.year, tmdb: it.tmdb, poster: it.thumb, added: it.added, genres: plexGenres(m), plex: it, plexRating: it.rating }, 'plex');
   }
   for (const m of showLib) { const it = plex.item(m); add({ title: it.title, year: it.year, tmdb: it.tmdb, poster: it.thumb, added: it.added, genres: plexGenres(m), plex: it }, 'plex'); }
-  for (const s of shows.values()) { s.plexEps.sort((a, b) => a.season - b.season || a.num - b.num); list.push({ ...s, sources: ['plex'], services: [] }); }
+  for (const s of shows.values()) { s.plexEps.sort((a, b) => a.season - b.season || a.num - b.num); list.push({ ...s, sources: ['plex'] }); }
   for (const m of iptv.items) {
     const title = cleanTitle(m.name), year = m.year || yearIn(m.name);
     add({ title, year, tmdb: m.tmdb || match.get(norm(title) + '|' + year) || 0, poster: m.icon, added: m.added, genres: m.genres, cats: [m.cat], vod: m }, 'iptv');
@@ -75,21 +75,6 @@ async function libs(type) {
   try { return (await Promise.all((await plex.sections()).filter(s => s.type === type).map(s => plex.all(s.key)))).flat(); } catch { return []; }
 }
 
-/** Catalogus voor één profiel: eigen titels plus wat er op zijn diensten staat. */
-async function forProfile(kind, services) {
-  const c = await items(kind), type = typeOf(kind);
-  const extra = new Map();
-  for (const s of tmdb.services().filter(s => services.includes(s.key) && s.provider > 0)) {
-    for (const x of await tmdb.serviceCatalog(type, s.provider).catch(() => [])) {
-      const own = c.byTmdb.get(x.tmdb), e = extra.get(x.tmdb) || (own ? { ...own, services: [] } : { ...x, services: [] });
-      if (!e.services.includes(s.key)) e.services.push(s.key);
-      extra.set(x.tmdb, e);
-    }
-  }
-  if (!extra.size) return c.list;
-  return [...c.list.map(o => extra.get(o.tmdb) || o), ...[...extra.values()].filter(e => !c.byTmdb.has(e.tmdb))];
-}
-
 // ---------- kwaliteit en voorkeuren ----------
 /** Cijfer om op te sorteren: IMDb als we dat hebben, anders TMDB, gewogen naar het aantal stemmen. */
 export function score(o) {
@@ -106,8 +91,8 @@ export function prefsOf(p) {
 
 // ---------- pagina's ----------
 /** Bovenkant van Films of Series: nieuw, genres en collecties (met Binnenkort). */
-export async function overview(kind, services, prefs) {
-  const list = (await forProfile(kind, services)).filter(o => allowed(o, prefs.skip)), c = mem[kind];
+export async function overview(kind, prefs) {
+  const c = await items(kind), list = c.list.filter(o => allowed(o, prefs.skip));
   const own = list.filter(o => o.sources.length);
   const g = {};
   list.filter(o => good(o, prefs.min)).forEach(o => o.genres.forEach(n => { (g[n] = g[n] || []).push(o); }));
@@ -126,14 +111,12 @@ export async function overview(kind, services, prefs) {
 }
 
 /** Bladeren. f = { genre, src ('plex', 'iptv' of een dienst), cat, sort ('beste', 'nieuw', 'az', 'jaar'), alles (1 = ook matige titels), offset }. */
-export async function browse(kind, f, services, prefs) {
+export async function browse(kind, f, prefs) {
   if (f.cat === 'soon') { const l = await upcoming(kind); return { total: l.length, offset: 0, items: l }; }
-  let list = (await forProfile(kind, services)).filter(o => allowed(o, prefs.skip));
+  let list = (await items(kind)).list.filter(o => allowed(o, prefs.skip));
   if (f.alles !== '1') list = list.filter(o => good(o, prefs.min));
   if (f.genre) list = list.filter(o => o.genres.includes(f.genre));
-  if (f.src === 'eigen') list = list.filter(o => o.sources.length);   // je eigen bibliotheek: Plex en IPTV
-  else if (f.src === 'plex' || f.src === 'iptv') list = list.filter(o => o.sources.includes(f.src));
-  else if (f.src) list = list.filter(o => o.services.includes(f.src));
+  if (f.src === 'plex' || f.src === 'iptv') list = list.filter(o => o.sources.includes(f.src));
   if (f.cat) list = list.filter(o => (o.cats || []).includes(f.cat));
   const sort = f.sort || 'beste';
   if (sort === 'beste') list = [...list].sort((a, b) => score(b) - score(a));
@@ -147,7 +130,7 @@ export async function browse(kind, f, services, prefs) {
 /** Binnenkort (Radarr/Sonarr): alleen wat er nog niet is. */
 async function upcoming(kind) {
   const l = await arr.upcoming(kind).catch(() => []);
-  return l.filter(u => !u.hasFile).map(u => ({ title: u.title, year: u.date, tmdb: u.tmdb, poster: u.thumb, genres: [], sources: [], services: [], soon: u.sub }));
+  return l.filter(u => !u.hasFile).map(u => ({ title: u.title, year: u.date, tmdb: u.tmdb, poster: u.thumb, genres: [], sources: [], soon: u.sub }));
 }
 
 /** Zoeken op titel in films en series (eigen titels). */
@@ -158,27 +141,21 @@ export async function search(q) {
   return [...films.list.filter(hit).slice(0, 30).map(o => ({ ...o, kind: 'movie' })), ...series.list.filter(hit).slice(0, 30).map(o => ({ ...o, kind: 'series' }))];
 }
 
-/** Nieuw voor jou: nieuw in Plex en IPTV, net uit en populair, en nieuw bij je diensten. Wat bij je smaak past bovenaan. */
-export async function forYou(services, prefs, taste) {
+/** Nieuw voor jou: nieuw in Plex en IPTV, en wat nu populair is. Wat bij je smaak past bovenaan.
+ *  Populaire titels die je niet zelf hebt komen apart (later): die kun je in Thuis niet afspelen. */
+export async function forYou(prefs, taste) {
   const out = new Map(), now = Date.now();
   const put = (o, kind) => { const k = kind + (o.tmdb || norm(o.title)); if (!out.has(k)) out.set(k, { ...o, kind }); };
   for (const kind of ['movie', 'series']) {
-    const all = await forProfile(kind, services);
-    all.filter(o => o.sources.length && o.added > now - 45 * 86400e3).slice(0, 60).forEach(o => put(o, kind));
-    all.filter(o => o.services.length && o.added > now - 120 * 86400e3).forEach(o => put(o, kind));
-    const c = mem[kind];
+    const c = await items(kind);
+    c.list.filter(o => o.added > now - 45 * 86400e3).slice(0, 60).forEach(o => put(o, kind));
     for (const t of await tmdb.trending(typeOf(kind)).catch(() => [])) put(c.byTmdb.get(t.tmdb) || t, kind);
   }
   const fresh = o => Math.max(0, 1 - (now - (o.added || 0)) / (180 * 86400e3));
   const l = [...out.values()].filter(o => allowed(o, prefs.skip) && good(o, prefs.min) && o.poster)
     .map(o => ({ o, s: (taste(o.genres) * 4) + score(o) / 2 + fresh(o) * 2 }))
     .sort((a, b) => b.s - a.s).map(x => x.o);
-  // Wat nergens te zien is (niet in Plex, IPTV of je diensten) apart, zodat je niet denkt dat je het kunt kijken.
-  const can = o => o.sources.length || o.services.length;
-  // Om en om: eerst wat op je diensten staat, dan wat in Plex of IPTV staat. Zo overheerst je eigen bibliotheek niet.
-  const svc = l.filter(o => o.services.length), own = l.filter(o => !o.services.length && o.sources.length), mix = [];
-  for (let i = 0; mix.length < 40 && (i < svc.length || i < own.length); i++) { if (svc[i]) mix.push(svc[i]); if (own[i]) mix.push(own[i]); }
-  return { now: mix.slice(0, 40), later: l.filter(o => !can(o)).slice(0, 20) };
+  return { now: l.filter(o => o.sources.length).slice(0, 40), later: l.filter(o => !o.sources.length).slice(0, 20) };
 }
 
 // ---------- aanvullen op de achtergrond ----------

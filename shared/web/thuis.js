@@ -274,7 +274,7 @@
     item('live', 'Live tv', NAVICON.live, function () { go('live', {}, true); });
     item('films', 'Films', NAVICON.films, function () { go('films', {}, true); });
     item('series', 'Series', NAVICON.series, function () { go('series', {}, true); });
-    item('lib', 'Bibliotheek', NAVICON.lib, function () { go('grid', { lib: true, kind: 'movie', title: 'Bibliotheek', src: 'eigen', alles: '1', sort: 'nieuw' }); });
+    item('lib', 'Bibliotheek', NAVICON.lib, function () { go('grid', { lib: true, kind: 'movie', title: 'Bibliotheek', alles: '1', sort: 'nieuw' }); });
     item('list', 'Mijn lijst', NAVICON.list, function () { go('profile', { tab: 'list' }); });
     // Diensten die op dit apparaat staan, met hun logo. OK opent de app.
     var svcBox = h('div', { class: 'svcs' }); nav.appendChild(svcBox);
@@ -284,10 +284,7 @@
       svcBox.appendChild(h('div', { class: 'hd' }, 'Diensten'));
       l.forEach(function (x) {
         var logo = (S.logos && S.logos[x.svc.key]) || x.app.icon || x.app.banner;
-        // Dienst met aanbod bij TMDB: eerst een eigen pagina met wat erop staat. Anders (Ziggo, WithLove, YouTube) meteen de app.
-        svcBox.appendChild(F(h('button', { class: 'it' }, '<i class="sv" style="' + bg(logo) + '"></i><span>' + esc(x.svc.name) + '</span>'), function () {
-          if (isStreaming(x.svc)) go('service', { key: x.svc.key, pkg: x.app.pkg, logo: logo }); else { closeOverlay(); N && N.launch(x.app.pkg); }
-        }, close));
+        svcBox.appendChild(F(h('button', { class: 'it' }, '<i class="sv" style="' + bg(logo) + '"></i><span>' + esc(x.svc.name) + '</span>'), function () { closeOverlay(); N && N.launch(x.app.pkg); }, close));
       });
     });
     item('apps', 'Alle apps', NAVICON.apps, function () { go('apps'); });
@@ -323,20 +320,15 @@
       '<div class="t1">' + esc(o.title) + '</div>' + (o.sub ? '<div class="t2">' + esc(o.sub) + '</div>' : '');
     return F(el, o.ok, { long: o.long, focus: o.focus });
   }
-  // Waar staat een titel: Plex, IPTV en/of streamingdiensten.
-  // Waar je het kunt zien: eerst je diensten (icoontje), dan Plex en IPTV. Hooguit drie, kort gehouden.
+  // Waar je het zelf hebt: Plex en/of IPTV. Heb je het niet, dan staat dat op de tegel.
   function srcBadges(o) {
-    var b = (o.services || []).map(function (k) {
-      var u = S.logos && S.logos[k];
-      return u ? '<i class="ic" title="' + esc(serviceName(k)) + '" style="' + bg(u) + '"></i>' : '<span>' + esc(serviceName(k).slice(0, 7)) + '</span>';
-    }).concat((o.sources || []).map(function (s) { return '<i class="ic ' + s + '" title="' + (s === 'plex' ? 'Plex' : 'IPTV') + '"></i>'; })).slice(0, 3);
-    // Nergens te zien (nog niet uit, of nergens die je hebt): dat meteen op de tegel.
-    if (!b.length) b = ['<span class="nog">Nog niet te zien</span>'];
+    var b = (o.sources || []).map(function (s) { return '<i class="ic ' + s + '" title="' + (s === 'plex' ? 'Plex' : 'IPTV') + '"></i>'; });
+    if (!b.length) b = ['<span class="nog">Niet bij jou</span>'];
     return '<div class="badges">' + b.join('') + '</div>';
   }
-  // Eén titel uit de catalogus (Plex en IPTV samen) of van een streamingdienst.
+  // Eén titel uit de catalogus (Plex en IPTV samen).
   function rating(o) { var r = o.imdbRating || o.vote || 0; return r ? '★ ' + r.toFixed(1).replace('.', ',') : ''; }
-  function whereFrom(o) { return (o.sources || []).map(function (s) { return s === 'plex' ? 'Plex' : 'IPTV'; }).concat((o.services || []).map(serviceName)).slice(0, 2).join(', '); }
+  function whereFrom(o) { return (o.sources || []).map(function (s) { return s === 'plex' ? 'Plex' : 'IPTV'; }).join(', '); }
   function titleTile(o, kind, onfocus) {
     return poster({ focus: onfocus, title: o.title, sub: o.soon ? o.year + ' · ' + o.soon : [o.year, rating(o)].filter(Boolean).join(' · '), img: o.poster, badges: srcBadges(o), ok: function () { openTitle(o, kind); },
       long: function () { if (kind === 'movie' && o.plex) playPlex(o.plex.key, o.plex); else if (kind === 'movie' && o.vod) playMovie(o.vod); } });
@@ -467,14 +459,6 @@
   // Live en terugkijken gaan allebei naar de live-speler (daar kun je ook spoelen, pauzeren en zappen).
   function playLive(catId, ch) { if (N) N.playLive(catId || 'alle', ch.id, 0, 0, ''); else toast('Live tv kan alleen op de tv'); }
   function playCatchup(ch, p, catId) { if (N) N.playLive(catId || 'alle', ch.id, p.start, p.end, p.title || ''); else toast('Terugkijken kan alleen op de tv'); }
-  function openApp(pkgOrMatch) {
-    if (!N) return toast('Apps openen kan alleen op de tv');
-    loadApps().then(function (apps) {
-      var m = String(pkgOrMatch).toLowerCase();
-      var a = apps.filter(function (x) { return x.pkg === pkgOrMatch || x.pkg.toLowerCase().indexOf(m) >= 0 || x.label.toLowerCase().indexOf(m) >= 0; })[0];
-      if (a) N.launch(a.pkg); else toast('Deze app staat niet op dit apparaat');
-    });
-  }
   function loadApps() { if (S.apps) return Promise.resolve(S.apps); if (!N) return Promise.resolve([]); return native('getApps').then(function (t) { S.apps = JSON.parse(t); return S.apps; }); }
   // Diensten waarvan de app op dit apparaat staat: [{svc, app}]
   function installedServices() {
@@ -485,13 +469,6 @@
       }).filter(Boolean);
     });
   }
-  // Diensten van dit profiel: zelf gekozen in Mijn profiel, anders wat er op dit apparaat staat.
-  function myServices() {
-    var p = me().prefs || {};
-    if (p.services) return Promise.resolve(p.services);
-    return installedServices().then(function (l) { return l.filter(function (x) { return isStreaming(x.svc); }).map(function (x) { return x.svc.key; }); });
-  }
-  // Diensten met eigen aanbod bij TMDB (Plex is van onszelf en telt hier niet mee).
   // Vaste volgorde: eerst tv kijken (Ziggo, Odido), dan WithLove, dan de rest zoals in services.json.
   var FIRST = ['ziggo', 'odido', 'withlove'];
   // Per profiel: eigen volgorde (appOrder) en verborgen apps (appHide), ingesteld in Mijn profiel › Apps op Thuis.
@@ -500,7 +477,6 @@
     var rank = function (k) { var i = order.indexOf(k); if (i >= 0) return i; var j = FIRST.indexOf(k); return 100 + (j < 0 ? 50 : j); };
     return l.filter(function (x) { return all || hide.indexOf(x.svc.key) < 0; }).slice().sort(function (a, b) { return rank(a.svc.key) - rank(b.svc.key); });
   }
-  function isStreaming(s) { return s.provider && s.key !== 'plex'; }
 
   // ---------- herinneringen ----------
   function toggleReminder(ch, p, catId) {
@@ -644,30 +620,22 @@
         });
       }, 350);
     }
-    // Thuis: eerst je diensten (daar begin je meestal), dan wat nieuw is en wat populair is. Verder kijken en live staan in Films, Series en Live tv.
-    var slots = {}; ['svc', 'foryou', 'fav', 'picks', 'later'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    // Thuis: eerst de apps (daar begin je meestal), dan wat nieuw is in je eigen bibliotheek. Verder kijken en live staan in Films, Series en Live tv.
+    var slots = {}; ['svc', 'foryou', 'fav', 'later'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.svc.className = 'first';
-    var svcQ = myServices().then(function (keys) { return 'profile=' + S.profile + '&services=' + keys.join(','); });
-    svcQ.then(function (q) { return get('/api/home?' + q); }).then(function (d) {
-      var picks = (d.picks && d.picks.picks) || [];
-      if (picks.length) slots.picks.appendChild(rowSection('Populair bij je diensten', picks.map(function (p) {
-        return wide({ title: p.title, sub: p.type + (p.year ? ' · ' + p.year : ''), img: p.thumb, badge: serviceName(p.service),
-          ok: function () { go('info', { type: p.id.indexOf('tv') === 0 ? 'tv' : 'movie', tmdb: p.tmdb, title: p.title }); },
-          focus: function () { showArt({ tmdb: p.tmdb, type: p.id.indexOf('tv') === 0 ? 'tv' : 'movie', title: p.title, meta: [p.type, p.year, serviceName(p.service)].filter(Boolean).join(' · ') }); } });
-      })));
-    }).catch(function (e) { slots.picks.innerHTML = '<div class="empty">Thuis kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
-    // Nieuw voor jou: nieuw uit Plex, IPTV en je diensten, en net uit; wat bij jouw smaak past bovenaan.
-    svcQ.then(function (q) { return get('/api/foryou?' + q); }).then(function (d) {
+    var q = 'profile=' + S.profile;
+    // Nieuw voor jou: nieuw in Plex en IPTV en wat nu populair is; wat bij jouw smaak past bovenaan.
+    get('/api/foryou?' + q).then(function (d) {
       var tile = function (o) {
-        return titleTile(o, o.kind, function () { if (o.tmdb) showArt({ tmdb: o.tmdb, type: o.kind === 'series' ? 'tv' : 'movie', title: o.title, meta: [o.year, rating(o), whereFrom(o) || 'Nog niet te zien'].filter(Boolean).join(' · ') }); });
+        return titleTile(o, o.kind, function () { if (o.tmdb) showArt({ tmdb: o.tmdb, type: o.kind === 'series' ? 'tv' : 'movie', title: o.title, meta: [o.year, rating(o), whereFrom(o) || 'Niet bij jou'].filter(Boolean).join(' · ') }); });
       };
       if (d.now.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', d.now.map(tile)));
-      if (d.later.length) slots.later.appendChild(rowSection('Nog niet te zien', d.later.map(tile)));
-    }).catch(function () {});
+      if (d.later.length) slots.later.appendChild(rowSection('Populair, niet bij jou', d.later.map(tile)));
+    }).catch(function (e) { slots.foryou.innerHTML = '<div class="empty">Thuis kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
     // Favoriet genre van dit profiel (Mijn profiel › Voorkeuren): de beste titels die je kunt kijken.
     var fav = (me().prefs || {}).favGenre;
-    if (fav) svcQ.then(function (q) { return get('/api/catalog/movie/browse?' + q + '&genre=' + encodeURIComponent(fav) + '&sort=beste'); }).then(function (r) {
-      var l = r.items.filter(function (o) { return (o.sources || []).length || (o.services || []).length; }).slice(0, 30);
+    if (fav) get('/api/catalog/movie/browse?' + q + '&genre=' + encodeURIComponent(fav) + '&sort=beste').then(function (r) {
+      var l = r.items.slice(0, 30);
       if (l.length) slots.fav.appendChild(rowSection(fav + ' voor jou', l.map(function (o) { return titleTile(o, 'movie'); })));
     }).catch(function () {});
     // Bovenaan de apps waar je meteen naartoe wilt: tv (Ziggo of Odido) en WithLove eerst, dan de andere diensten.
@@ -677,7 +645,6 @@
     });
     return el;
   };
-  function serviceName(k) { var s = S.svcList.filter(function (x) { return x.key === k; })[0]; return s ? s.name : (k || ''); }
   function liveCats(force) {
     if (S.cats && !force && Date.now() - S.catsAt < 30 * 60e3) return Promise.resolve(S.cats);
     return get('/api/live/categories').then(function (c) { S.cats = c; S.catsAt = Date.now(); return c; });
@@ -803,38 +770,27 @@
   function library(kind) {
     var el = h('div', { class: 'screen' }); el.appendChild(topbar(kind === 'movie' ? 'films' : 'series'));
     var sc = h('div', { class: 'scroll' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
-    var slots = {}; ['cont', 'rec', 'newest', 'genres', 'coll', 'svc'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    var slots = {}; ['cont', 'rec', 'newest', 'genres', 'coll'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.cont.className = 'first'; slots.newest.appendChild(loading());
     var again = function () { go(kind === 'movie' ? 'films' : 'series', {}, true); };
     get('/api/continue?profile=' + S.profile).then(function (list) {
       var mine = list.filter(function (c) { return c.kind === kind; });
       if (mine.length) slots.cont.appendChild(rowSection('Verder kijken', mine.map(function (c) { return contTile(c, again); }), me().name));
     }).catch(function () {});
-    myServices().then(function (keys) {
-      var q = 'profile=' + S.profile + '&services=' + keys.join(',');
-      get('/api/catalog/' + kind + '/overview?' + q).then(function (o) {
-        S.ov[kind] = o; slots.newest.innerHTML = '';
-        if (!o.total) { slots.newest.innerHTML = '<div class="empty">Nog geen ' + (kind === 'movie' ? 'films' : 'series') + ' gevonden.</div>'; return; }
-        slots.newest.appendChild(rowSection('Nieuw', o.newest.map(function (m) { return titleTile(m, kind); })));
-        if ((o.recordings || []).length) slots.rec.appendChild(rowSection('Opnames', o.recordings.map(function (m) { return titleTile(m, kind); })));
-        slots.genres.appendChild(rowSection('Genres', o.genres.map(function (g) {
-          return mosaicTile(g.name, g.count + ' titels', g.posters, function () { go('grid', { kind: kind, genre: g.name, title: g.name }); });
-        })));
-        slots.coll.appendChild(rowSection('Collecties', o.collections.map(function (c) {
-          var f = c.id.split(':'), a = { kind: kind, title: c.name };
-          if (f[0] === 'src') { a.src = f[1]; a.alles = '1'; a.sort = 'nieuw'; } else if (f[0] === 'soon') { a.cat = 'soon'; a.alles = '1'; } else a.cat = f.slice(1).join(':');
-          return mosaicTile(c.name, c.count + ' titels', c.posters, function () { go('grid', a); });
-        })));
-      }).catch(function (e) { slots.newest.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
-      if (!keys.length) return;
-      get('/api/streaming/' + kind + '?services=' + keys.join(',')).then(function (rows) {
-        rows.forEach(function (r) {
-          slots.svc.appendChild(rowSection('Op ' + r.name, r.items.map(function (p) {
-            return poster({ title: p.title, sub: p.year, img: p.poster, badges: srcBadges({ services: [r.service] }), ok: function () { go('info', { type: kind === 'series' ? 'tv' : 'movie', tmdb: p.tmdb, title: p.title }); } });
-          })));
-        });
-      }).catch(function () {});
-    });
+    get('/api/catalog/' + kind + '/overview?profile=' + S.profile).then(function (o) {
+      S.ov[kind] = o; slots.newest.innerHTML = '';
+      if (!o.total) { slots.newest.innerHTML = '<div class="empty">Nog geen ' + (kind === 'movie' ? 'films' : 'series') + ' gevonden.</div>'; return; }
+      slots.newest.appendChild(rowSection('Nieuw', o.newest.map(function (m) { return titleTile(m, kind); })));
+      if ((o.recordings || []).length) slots.rec.appendChild(rowSection('Opnames', o.recordings.map(function (m) { return titleTile(m, kind); })));
+      slots.genres.appendChild(rowSection('Genres', o.genres.map(function (g) {
+        return mosaicTile(g.name, g.count + ' titels', g.posters, function () { go('grid', { kind: kind, genre: g.name, title: g.name }); });
+      })));
+      slots.coll.appendChild(rowSection('Collecties', o.collections.map(function (c) {
+        var f = c.id.split(':'), a = { kind: kind, title: c.name };
+        if (f[0] === 'src') { a.src = f[1]; a.alles = '1'; a.sort = 'nieuw'; } else if (f[0] === 'soon') { a.cat = 'soon'; a.alles = '1'; } else a.cat = f.slice(1).join(':');
+        return mosaicTile(c.name, c.count + ' titels', c.posters, function () { go('grid', a); });
+      })));
+    }).catch(function (e) { slots.newest.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
     return el;
   }
   var SORTS = [['beste', 'Beste eerst'], ['nieuw', 'Nieuwste eerst'], ['az', 'A tot Z'], ['jaar', 'Jaar']];
@@ -849,9 +805,8 @@
     el.appendChild(bar);
     var sc = h('div', { class: 'scroll', style: 'top:200px' }), inner = h('div', { class: 'scroll-inner' }), grid = h('div', { class: 'grid' });
     inner.appendChild(grid); sc.appendChild(inner); el.appendChild(sc);
-    myServices().then(function (keys) {
-      var srcs = a.lib ? [['eigen', 'Plex en IPTV'], ['plex', 'Plex'], ['iptv', 'IPTV']]
-        : [['', 'Alles'], ['plex', 'Plex'], ['iptv', 'IPTV']].concat(keys.map(function (k) { return [k, serviceName(k)]; }));
+    (function () {
+      var srcs = [['', 'Plex en IPTV'], ['plex', 'Plex'], ['iptv', 'IPTV']];
       // Bibliotheek: alles wat je zelf hebt, films of series.
       if (a.lib) bar.appendChild(F(h('button', { class: 'pill on', id: 'f-kind' }, a.kind === 'series' ? 'Series' : 'Films'), function () { a.kind = a.kind === 'series' ? 'movie' : 'series'; a.genre = ''; redo('f-kind'); }, { group: 'filters' }));
       if (a.cat !== 'soon') {
@@ -865,7 +820,7 @@
       var total = 0, busy = false;
       function load(offset) {
         busy = true;
-        get('/api/catalog/' + a.kind + '/browse?profile=' + S.profile + '&services=' + keys.join(',') + '&genre=' + encodeURIComponent(a.genre || '') + '&src=' + (a.src || '') +
+        get('/api/catalog/' + a.kind + '/browse?profile=' + S.profile + '&genre=' + encodeURIComponent(a.genre || '') + '&src=' + (a.src || '') +
           '&cat=' + encodeURIComponent(a.cat || '') + '&sort=' + (a.sort || '') + '&alles=' + (a.alles || '') + '&offset=' + offset).then(function (r) {
           total = r.total; count.textContent = total + ' titels';
           r.items.forEach(function (m) {
@@ -878,7 +833,7 @@
         }).catch(function (e) { busy = false; toast(e.message); });
       }
       load(0);
-    });
+    })();
     return el;
   };
   function pickGenre(a, done) {
@@ -890,27 +845,8 @@
       d.appendChild(box); openOverlay(d);
     };
     if (S.ov[a.kind]) return show(S.ov[a.kind]);
-    myServices().then(function (keys) { return get('/api/catalog/' + a.kind + '/overview?profile=' + S.profile + '&services=' + keys.join(',')); }).then(function (o) { S.ov[a.kind] = o; show(o); });
+    get('/api/catalog/' + a.kind + '/overview?profile=' + S.profile).then(function (o) { S.ov[a.kind] = o; show(o); });
   }
-
-  // ---------- pagina van een dienst ----------
-  // Zoals bij de Apple TV: eerst zien wat er op Netflix (of Prime, Videoland...) staat, met bovenaan de knop om de app te openen.
-  screens.service = function (a) {
-    var el = h('div', { class: 'screen' }), name = serviceName(a.key);
-    var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
-    var head = h('div', { class: 'svchead first' }, (a.logo ? '<i class="sv" style="' + bg(a.logo) + '"></i>' : '') + '<h1>' + esc(name) + '</h1>');
-    head.appendChild(F(h('button', { class: 'btn' }, 'Open ' + esc(name)), function () { if (N) N.launch(a.pkg); }));
-    inner.appendChild(head);
-    var slots = {}; ['new', 'mov', 'tv', 'best'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
-    var q = 'profile=' + S.profile + '&services=' + encodeURIComponent(a.key);
-    var tiles = function (l, kind) { return l.map(function (o) { return titleTile(o, kind); }); };
-    var tmdbTiles = function (l, type) { return l.map(function (p) { return poster({ title: p.title, sub: p.year, img: p.poster, ok: function () { go('info', { type: type, tmdb: p.tmdb, title: p.title }); } }); }); };
-    get('/api/catalog/movie/browse?' + q + '&src=' + a.key + '&sort=nieuw').then(function (r) { if (r.items.length) slots.new.appendChild(rowSection('Nieuw op ' + name, tiles(r.items.slice(0, 30), 'movie'))); }).catch(function () {});
-    get('/api/streaming/movie?services=' + a.key).then(function (rows) { rows.forEach(function (r) { slots.mov.appendChild(rowSection('Populaire films', tmdbTiles(r.items, 'movie'))); }); }).catch(function () {});
-    get('/api/streaming/series?services=' + a.key).then(function (rows) { rows.forEach(function (r) { slots.tv.appendChild(rowSection('Populaire series', tmdbTiles(r.items, 'tv'))); }); }).catch(function () {});
-    get('/api/catalog/movie/browse?' + q + '&src=' + a.key + '&sort=beste').then(function (r) { if (r.items.length) slots.best.appendChild(rowSection('Best beoordeeld', tiles(r.items.slice(0, 30), 'movie'))); }).catch(function () {});
-    return el;
-  };
 
   // ---------- infopagina ----------
   // Boven: poster, gegevens, waar je het kunt zien en de knoppen. Bij een serie daaronder meteen de seizoenen en afleveringen.
@@ -930,10 +866,10 @@
       var tmdbId = a.tmdb || (show && show.tmdb) || 0;
       var idQ = tmdbId ? Promise.resolve(tmdbId) : get('/api/info-find?type=' + a.type + '&title=' + encodeURIComponent(a.title || '') + '&year=' + encodeURIComponent((a.plex && a.plex.year) || (a.vod && a.vod.year) || '')).then(function (r) { return r.id || 0; }, function () { return 0; });
       return idQ.then(function (id) { tmdbId = id; a.tmdb = a.tmdb || id; return id; }).then(function () { return Promise.all([tmdbId ? get('/api/info/' + a.type + '/' + tmdbId).catch(function () { return null; }) : null,
-        get('/api/mylist?profile=' + S.profile).catch(function () { return []; }), myServices(),
+        get('/api/mylist?profile=' + S.profile).catch(function () { return []; }),
         !series && src ? get('/api/watched?profile=' + S.profile + '&key=' + encodeURIComponent(src)).catch(function () { return {}; }) : {}, show]); });
     }).then(function (r) {
-      var d = r[0] || {}, mine = r[2], seen = !!r[3].on, show = r[4];
+      var d = r[0] || {}, seen = !!r[2].on, show = r[3];
       var inList = r[1].some(function (x) { return x.key === (src || 'tmdb:' + a.type + a.tmdb); });
       bgEl.style.backgroundImage = "url('" + img(d.backdrop || (show && show.backdrop) || (a.plex && a.plex.art) || (a.vod && a.vod.backdrop)) + "')";
       if (d.cast && d.cast.length) castLine.innerHTML = '<span class="dim">Met </span>' + esc(d.cast.slice(0, 3).map(function (c) { return c.name; }).join(', '));
@@ -942,21 +878,20 @@
         (d.ratings && d.ratings.rt ? ' · Rotten Tomatoes ' + d.ratings.rt : '');
       var meta = [d.year || (a.vod && a.vod.year), nSeasons ? nSeasons + ' seizoen' + (nSeasons > 1 ? 'en' : '') : d.runtime ? d.runtime + ' min' : '',
         d.age ? '<span class="tag">' + esc(d.age) + '</span>' : '', imdb, (d.genres || []).slice(0, 3).join(' · ')].filter(Boolean);
-      // Waar te zien: eerst de diensten die je hebt, dan Plex en IPTV. Diensten die je niet hebt staan er grijs bij.
-      var svc = d.services || [], have = svc.filter(function (x) { return x.key && mine.indexOf(x.key) >= 0; }), other = svc.filter(function (x) { return have.indexOf(x) < 0 && !/channel|with ads|met reclame/i.test(x.name); });
-      var chip = function (x, dim) { return '<span class="where' + (dim ? ' dim' : '') + '">' + (x.logo ? '<i style="' + bg(x.logo) + '"></i>' : '') + esc(x.name) + '</span>'; };
-      var canWatch = have.length || a.plex || a.vod;
+      // Ook op een streamingdienst? Dat staat er ter informatie bij; kijken doe je in Thuis via Plex of IPTV, of in de app zelf.
+      var other = (d.services || []).filter(function (x) { return !/channel|with ads|met reclame/i.test(x.name); });
+      var chip = function (x) { return '<span class="where dim">' + (x.logo ? '<i style="' + bg(x.logo) + '"></i>' : '') + esc(x.name) + '</span>'; };
+      var canWatch = a.plex || a.vod;
       txt.innerHTML = '<h1>' + esc(d.title || a.title) + '</h1><div class="meta">' + meta.map(function (m) { return '<span>' + (m.indexOf('<span') === 0 ? m : esc(m)) + '</span>'; }).join('') + '</div>' +
         '<p class="desc">' + esc(d.overview || (show && show.plot) || (a.plex && a.plex.summary) || (a.vod && a.vod.plot) || '') + '</p>' +
         '<div class="wherebox">' + (canWatch ? '' : '<span class="dim">Nog niet te zien</span>') +
-        (other.length ? '<span class="dim"' + (canWatch ? '' : ' style="margin-left:14px"') + '>Ook op</span>' + other.slice(0, 4).map(function (x) { return chip(x, true); }).join('') : '') + '</div>';
+        (other.length ? '<span class="dim"' + (canWatch ? '' : ' style="margin-left:14px"') + '>Ook op</span>' + other.slice(0, 4).map(chip).join('') : '') + '</div>';
       if (d.tmdb) (S.art[a.type + d.tmdb] ? Promise.resolve(S.art[a.type + d.tmdb]) : get('/api/art/' + a.type + '/' + d.tmdb).then(function (x) { S.art[a.type + d.tmdb] = x; return x; }, function () { return {}; })).then(function (x) {
         if (!x.logo) return; var lg = new Image(); lg.className = 'ilogo'; lg.alt = d.title || ''; lg.onload = function () { var t = txt.querySelector('h1'); if (t) t.replaceWith(lg); }; lg.src = img(x.logo);
       });
       var bt = h('div', { class: 'ibtns' });
-      // Kijken: één knop per bron, met het logo. Eerst je eigen diensten (dan hoef je niet via IPTV), dan Plex, dan IPTV.
+      // Kijken: één knop per bron, met het logo: Plex, dan IPTV.
       var srcBtn = function (logoHtml, label, fn) { return F(h('button', { class: 'btn src' }, logoHtml + '<span>' + esc(label) + '</span>'), fn); };
-      have.forEach(function (x) { bt.appendChild(srcBtn(x.logo ? '<i class="ic" style="' + bg(x.logo) + '"></i>' : '', x.name.replace(/^Amazon /, ''), function () { openInApp(x.key, d); })); });
       if (series && show) {
         var nx = nextUp(show);
         if (nx) bt.appendChild(srcBtn('<i class="ic ' + (a.plex ? 'plex' : 'iptv') + '"></i>', (a.plex ? 'Plex' : 'IPTV') + ' · ' + nx.label + ' S' + nx.s.season + ' afl. ' + nx.e.num, function () { playEp(nx.s, nx.e); }));
@@ -1090,19 +1025,6 @@
   function setWatched(items, on) {
     return api('POST', '/api/watched', { profile: S.profile, items: items, on: on }).then(function () { S.ov = {}; }, function (e) { toast(e.message); throw e; });
   }
-  // Meteen naar de titel in de app van de dienst. Netflix: rechtstreeks via het Netflix-nummer. Andere diensten: zoeken op de titel in die app.
-  function openInApp(key, d) {
-    if (!N) return toast('Apps openen kan alleen op de tv');
-    var m = serviceMatch(key).toLowerCase();
-    loadApps().then(function (apps) {
-      var app = apps.filter(function (x) { return x.pkg.toLowerCase().indexOf(m) >= 0 || x.label.toLowerCase().indexOf(m) >= 0; })[0];
-      if (!app) return toast('Deze app staat niet op dit apparaat');
-      var title = d.title || '';
-      if (key === 'netflix' && d.imdb) get('/api/deeplink?imdb=' + d.imdb).then(function (r) { N.openTitle(app.pkg, r.netflix ? 'netflix://title/' + r.netflix : '', title); }, function () { N.openTitle(app.pkg, '', title); });
-      else N.openTitle(app.pkg, '', title);
-    });
-  }
-  function serviceMatch(k) { var s = S.svcList.filter(function (x) { return x.key === k; })[0]; return s ? s.match : k; }
   // Opnames uit de filmbibliotheek ("Rondo - S08E15") per seizoen.
   function groupEps(eps) {
     var by = {}; eps.forEach(function (e) { (by[e.season] = by[e.season] || []).push({ key: e.key, num: e.num, title: 'Aflevering ' + e.num, img: e.img, progress: e.progress }); });
@@ -1259,7 +1181,7 @@
     var el = h('div', { class: 'screen' }), p = me(), tab = a.tab || 'list';
     var side = h('div', { class: 'side' });
     side.appendChild(h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:14px;padding:10px 0 26px' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '" style="width:170px;height:170px;border-radius:50%;object-fit:cover"><h1 style="font-size:42px">' + esc(p.name) + '</h1>'));
-    [['list', 'Mijn lijst'], ['cont', 'Verder kijken'], ['seen', 'Bekeken'], ['svc', 'Mijn diensten'], ['apps', 'Apps op Thuis'], ['skip', 'Genres overslaan'], ['avatar', 'Avatar kiezen'], ['prefs', 'Voorkeuren'], ['switch', 'Wissel van profiel']].forEach(function (t) {
+    [['list', 'Mijn lijst'], ['cont', 'Verder kijken'], ['seen', 'Bekeken'], ['apps', 'Apps op Thuis'], ['skip', 'Genres overslaan'], ['avatar', 'Avatar kiezen'], ['prefs', 'Voorkeuren'], ['switch', 'Wissel van profiel']].forEach(function (t) {
       side.appendChild(F(h('button', { class: 'listrow' + (t[0] === tab ? ' on' : '') }, esc(t[1])), function () {
         if (t[0] === 'switch') return whoDialog();
         a.tab = t[0]; go('profile', a, true);
@@ -1321,19 +1243,6 @@
           box2.appendChild(row);
         });
         if (!a._focus) focus(box2.querySelector('.listrow'));
-      });
-    } else if (tab === 'svc') {
-      main.appendChild(h('h2', { style: 'font-size:36px' }, 'Mijn diensten'));
-      main.appendChild(h('div', { class: 'dim', style: 'font-size:20px;margin-bottom:10px' }, 'Waar heb jij een abonnement op? Dat bepaalt Voor jou en de rijen per dienst bij Films en Series. OK zet aan of uit.'));
-      myServices().then(function (mine) {
-        S.svcList.filter(isStreaming).forEach(function (x) {
-          var on = mine.indexOf(x.key) >= 0;
-          main.appendChild(F(h('button', { class: 'listrow', id: 'svc-' + x.key }, '<b>' + esc(x.name) + '</b><span class="dim">' + (on ? 'Aan' : 'Uit') + '</span>'), function () {
-            var list = on ? mine.filter(function (k) { return k !== x.key; }) : mine.concat([x.key]);
-            api('POST', '/api/profiles/' + p.id + '/prefs', { services: list }).then(function () { p.prefs = Object.assign(p.prefs || {}, { services: list }); a._focus = '#svc-' + x.key; go('profile', a, true); });
-          }));
-        });
-        var back = a._focus && main.querySelector(a._focus); if (back) focus(back);
       });
     } else if (tab === 'skip') {
       main.appendChild(h('h2', { style: 'font-size:36px' }, 'Genres overslaan'));

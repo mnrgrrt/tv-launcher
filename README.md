@@ -8,11 +8,13 @@ Eén gedeeld startscherm (HTML in `shared/web`) met per apparaat een eigen laag.
 | Samsung The Frame (Tizen) | `tizen/` | voorbereid |
 
 ## Wat Thuis doet
-- Startscherm met Verder kijken (per profiel, zelf weg te halen), Nu live, Streamingdiensten, Voor jou, Binnenkort en Apps.
-- Live tv met gids (een week terug), terugkijken, pauzeren en spoelen. In de speler: omhoog/omlaag zappen, OK = balk met knoppen.
-- Films en Series uit Plex en IPTV samen: één tegel per titel, genres, collecties, rijen per dienst en een raster met filters.
-- Zoeken als lijst met filters: zenders, nu live, straks, terugkijken, films en series.
-- Profielen met eigen avatar, lijst, diensten en voorkeuren.
+- Zijbalk als menu (Terug of links tegen de rand): profiel, Zoeken, Thuis, Live tv, Films, Series, Bibliotheek, Mijn lijst, de apps en Instellingen.
+- Startscherm: de apps (per profiel te ordenen), Nieuw voor jou, een rij met je favoriete genre en wat populair is maar je niet hebt.
+- Live tv met gids (een week terug en vooruit), terugkijken, pauzeren en spoelen.
+- Films en Series uit Plex en IPTV samen: één tegel per titel, Verder kijken (gedeeld tussen Plex en IPTV), opnames, genres, collecties en een raster met filters.
+- Infopagina met seizoenen, cast, extra's, trailers en meer zoals dit. Streamingdiensten staan er alleen ter informatie bij ("Ook op").
+- Zoeken als lijst met filters: zenders, nu live, straks, terugkijken, je eigen films en series, YouTube live.
+- Profielen met eigen avatar, lijst, bekeken, voorkeuren en volgorde van de apps. Schermbeveiliging met foto's.
 
 ## Bouwen
 - Thuis: eerst op de testtak (release "test"), daarna `main` (release "laatste"). Zie `CLAUDE.md`.

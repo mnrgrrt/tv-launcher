@@ -1,7 +1,7 @@
 // TMDB: voorstellen, zoeken, informatiepagina's.
 import fs from 'node:fs';
 import { S, cached } from './db.js';
-import { json, enc, pool } from './http.js';
+import { json, enc } from './http.js';
 import { genreName } from './plex.js';
 import { ratings } from './omdb.js';
 
@@ -37,18 +37,6 @@ export function catItem(x, type) {
   return { title: tv ? x.name : x.title, year: ((tv ? x.first_air_date : x.release_date) || '').slice(0, 4), tmdb: x.id,
     poster: x.poster_path ? TIMG + 'w342' + x.poster_path : '', genres: genresFromIds(x.genre_ids), vote: x.vote_average || 0, votes: x.vote_count || 0,
     pop: x.popularity || 0, added: Date.parse((tv ? x.first_air_date : x.release_date) || '') || 0, sources: [], services: [] };
-}
-
-/** Wat een dienst heeft (NL, abonnement): populair en best beoordeeld, een paar pagina's. Een halve dag bewaard. */
-export function serviceCatalog(type, provider) {
-  return cached(`tmdb:cat:${type}:${provider}`, 12 * 3600e3, async () => {
-    const base = `/discover/${type}?watch_region=NL&with_watch_providers=${provider}&with_watch_monetization_types=flatrate&language=nl-NL&include_adult=false`;
-    const pages = [...[1, 2, 3, 4].map(p => `${base}&sort_by=popularity.desc&page=${p}`), ...[1, 2, 3].map(p => `${base}&sort_by=vote_average.desc&vote_count.gte=300&page=${p}`)];
-    const seen = new Set(), out = [];
-    for (const r of await pool(pages, 3, u => tmdb(u).catch(() => ({ results: [] }))))
-      for (const x of (r && r.results) || []) if (!seen.has(x.id) && x.poster_path) { seen.add(x.id); out.push(catItem(x, type)); }
-    return out;
-  });
 }
 
 /** Net uit (films en series), ook als we ze nog nergens hebben. */
@@ -89,13 +77,6 @@ export async function findAny(name) {
   return h ? { type: h.media_type, id: h.id, genres: genresFromIds(h.genre_ids) } : null;
 }
 
-/** Populair bij één dienst (NL, in het abonnement), zonder kinderprogramma's. type = 'tv' of 'movie'. */
-export function byService(type, provider) {
-  return cached(`tmdb:svc:${type}:${provider}`, 6 * 3600e3, () =>
-    tmdb(`/discover/${type}?watch_region=NL&with_watch_providers=${provider}&with_watch_monetization_types=flatrate&sort_by=popularity.desc&language=nl-NL&page=1&include_adult=false` +
-      (type === 'tv' ? '&without_genres=10762,10751' : '&without_genres=10751,16'))
-      .then(o => (o.results || []).filter(x => x.backdrop_path || x.poster_path).map(x => item({ ...x, _type: type }, ''))));
-}
 /** Waar iemand in speelde of wat iemand maakte: de bekendste titels eerst. Een dag bewaard. */
 export function person(id) {
   return cached(`tmdb:p:${id}`, 24 * 3600e3, async () => {
@@ -117,31 +98,6 @@ export function logos() {
 }
 const streamingServices = () => services().filter(s => s.provider > 0 && s.key !== 'plex');
 
-/** Voor jou: om en om van de gekozen diensten (of alle diensten als er niets gekozen is). */
-export async function home(keys) {
-  if (!S('tmdbToken')) return { configured: false };
-  const list = streamingServices().filter(s => !keys || !keys.length || keys.includes(s.key));
-  const per = (await pool(list, 4, async s => {
-    const [tv, mv] = await Promise.all([byService('tv', s.provider).catch(() => []), byService('movie', s.provider).catch(() => [])]);
-    return [s.key, [...tv.filter(x => x.backdrop).slice(0, 4), ...mv.filter(x => x.backdrop).slice(0, 2)].map(x => ({ ...x, service: s.key }))];
-  })).filter(Boolean);
-  const picks = [], seen = new Set();
-  for (let r = 0; r < 6 && picks.length < 14; r++) per.forEach(([, l]) => { const it = l[r]; if (it && !seen.has(it.id) && picks.length < 14) { seen.add(it.id); picks.push(it); } });
-  return { configured: true, picks };
-}
-
-/** Rijen per dienst voor de pagina Films of Series. */
-export async function serviceRows(type, keys) {
-  if (!S('tmdbToken')) return [];
-  const list = streamingServices().filter(s => keys.includes(s.key));
-  return (await pool(list, 4, async s => ({ service: s.key, name: s.name, items: (await byService(type, s.provider)).map(x => ({ ...x, service: s.key })) })))
-    .filter(r => r && r.items.length);
-}
-
-export async function search(q) {
-  const res = await tmdb(`/search/multi?query=${enc(q)}&language=nl-NL&include_adult=false`);
-  return (res.results || []).filter(h => h.media_type === 'tv' || h.media_type === 'movie').slice(0, 14);
-}
 
 /** Alles voor de informatiepagina: details, acteurs, trailer, vergelijkbaar, diensten. */
 export function details(type, id) {

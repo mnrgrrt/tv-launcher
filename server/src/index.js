@@ -17,7 +17,6 @@ import * as youtube from './youtube.js';
 import * as searches from './searches.js';
 import * as photos from './photos.js';
 import { pipe, target } from './proxy.js';
-import { pool, json } from './http.js';
 import { status } from './status.js';
 
 const PORT = +process.env.PORT || 8484;
@@ -145,11 +144,10 @@ on('GET', '/api/live/catchup/:id', 'device', ({ p, q }) => {
 on('GET', '/api/live/url/:id', 'device', ({ p }) => ({ url: auth.sign(`/stream/live/${+p.id}`) }));
 
 // services = de diensten van dit profiel (de tv weet welke er op het apparaat staan); leeg = alle diensten.
-on('GET', '/api/home', 'device', async ({ q }) => ({ picks: await tmdb.home(svcOf(q)).catch(() => ({})) }));
 // Nieuw voor jou: nieuw uit alle bronnen, wat bij de smaak van dit profiel past bovenaan.
 on('GET', '/api/foryou', 'device', async ({ q }) => {
   const prof = +q.get('profile') || 1;
-  const l = await catalog.forYou(svcOf(q), catalog.prefsOf(profileOf(prof)), taste.forProfile(prof, taste.lookup));
+  const l = await catalog.forYou(catalog.prefsOf(profileOf(prof)), taste.forProfile(prof, taste.lookup));
   return { now: l.now.map(o => withSources(o.kind)(o)), later: l.later };
 });
 on('GET', '/api/services/logos', 'device', () => tmdb.logos().catch(() => ({})));
@@ -167,54 +165,31 @@ on('GET', '/api/info-find', 'device', ({ q }) => {
   if (!title) return { id: 0 };
   return cached(`tmdb:find:${type}:${title.toLowerCase()}:${year}`, 7 * 86400e3, async () => ({ id: await tmdb.findId(type, title, year).catch(() => 0) || (year ? await tmdb.findId(type, title, '').catch(() => 0) : 0) }));
 });
-// Rechtstreeks naar de titel in een app: het Netflix-nummer komt uit Wikidata (op IMDb-nummer). Een maand bewaard.
-on('GET', '/api/deeplink', 'device', ({ q }) => {
-  const imdb = String(q.get('imdb') || ''); if (!/^tt\d{5,10}$/.test(imdb)) return {};
-  return cached(`deeplink:${imdb}`, 30 * 86400e3, async () => {
-    const sparql = `SELECT ?nf WHERE { ?i wdt:P345 "${imdb}" . OPTIONAL { ?i wdt:P1874 ?nf } } LIMIT 1`;
-    const r = await json('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(sparql), { headers: { Accept: 'application/sparql-results+json', 'User-Agent': 'tv-serverr/1.0 (thuis)' }, what: 'Wikidata' }).catch(() => null);
-    if (!r) throw new Error('Wikidata niet bereikbaar');   // niet bewaren, volgende keer opnieuw proberen
-    const b = r.results?.bindings?.[0] || {};
-    return { netflix: /^\d+$/.test(b.nf?.value || '') ? b.nf.value : '' };
-  });
-});
 on('GET', '/api/person/:id', 'device', ({ p }) => tmdb.person(+p.id));
 on('GET', '/api/plex/extras/:key', 'device', ({ p }) => plex.extras(+p.key));
 
 // Films en series: Plex en IPTV samen (richting C: slimme rijen, genres, collecties en een raster met filters).
 const withSources = kind => o => ({ ...o, vod: o.vod ? withVod(kind, o.vod) : null });
 // services = de diensten van het profiel (de tv weet welke apps er staan); de voorkeuren (minimumcijfer, genres overslaan) komen uit het profiel.
-const svcOf = q => (q.get('services') || '').split(',').filter(Boolean);
 const profileOf = id => profiles.list().find(x => x.id === id);
 on('GET', '/api/catalog/:kind/overview', 'device', async ({ p, q }) => {
-  const o = await catalog.overview(kindOf(p.kind), svcOf(q), catalog.prefsOf(profileOf(+q.get('profile'))));
+  const o = await catalog.overview(kindOf(p.kind), catalog.prefsOf(profileOf(+q.get('profile'))));
   return { ...o, newest: o.newest.map(withSources(p.kind)) };
 });
 on('GET', '/api/catalog/:kind/browse', 'device', async ({ p, q }) => {
   const f = Object.fromEntries(['genre', 'src', 'cat', 'sort', 'alles', 'offset'].map(k => [k, q.get(k) || '']));
-  const o = await catalog.browse(kindOf(p.kind), f, svcOf(q), catalog.prefsOf(profileOf(+q.get('profile'))));
+  const o = await catalog.browse(kindOf(p.kind), f, catalog.prefsOf(profileOf(+q.get('profile'))));
   return { ...o, items: o.items.map(withSources(p.kind)) };
 });
-on('GET', '/api/streaming/:kind', 'device', ({ p, q }) => tmdb.serviceRows(kindOf(p.kind) === 'series' ? 'tv' : 'movie', (q.get('services') || '').split(',').filter(Boolean)));
 on('GET', '/api/vod/:kind/url/:id', 'device', ({ p, q }) => ({ url: auth.sign(`/stream/${kindOf(p.kind)}/${+p.id}.${safeExt(q.get('ext'))}`) }));
 
 on('GET', '/api/plex/play/:key', 'device', ({ p }) => plex.playItem(+p.key));
 
-// Zoeken: de gids (zenders, nu, straks, terug) en films en series. Dezelfde titel uit Plex, IPTV en
-// streamingdiensten wordt één regel met alle plekken waar hij staat.
+// Zoeken: de gids (zenders, nu, straks, terug), je eigen films en series (Plex en IPTV) en YouTube live.
 on('GET', '/api/search', 'device', async ({ q }) => {
   const s = (q.get('q') || '').trim(); if (s.length < 2) return {};
-  const [own, guide, web, yt] = await Promise.all([catalog.search(s).catch(() => []), epg.searchGuide(s).catch(() => ({})), tmdb.search(s).catch(() => []),
-    youtube.search(s).catch(() => ({ live: [], upcoming: [] }))]);
-  const titles = own.map(o => ({ ...withSources(o.kind)(o), services: [] }));
-  const byTmdb = new Map(titles.filter(t => t.tmdb).map(t => [(t.kind === 'series' ? 'tv' : 'movie') + t.tmdb, t]));
-  // Bij welke dienst staat het? Alleen voor de bovenste treffers, anders wordt het traag.
-  await pool(web.slice(0, 10), 5, async h => {
-    const services = await tmdb.providers(h.media_type, h.id), have = byTmdb.get(h.media_type + h.id);
-    if (have) { have.services = services; if (!have.poster) have.poster = tmdb.item(h, '').poster; return; }
-    if (services.length) titles.push({ ...tmdb.item(h, ''), kind: h.media_type === 'tv' ? 'series' : 'movie', sources: [], services });
-  });
-  return { guide, titles, youtube: yt };
+  const [own, guide, yt] = await Promise.all([catalog.search(s).catch(() => []), epg.searchGuide(s).catch(() => ({})), youtube.search(s).catch(() => ({ live: [], upcoming: [] }))]);
+  return { guide, titles: own.map(o => withSources(o.kind)(o)), youtube: yt };
 });
 // Laatst gezocht (per profiel)
 on('GET', '/api/searches', 'device', ({ q }) => searches.list(+q.get('profile') || 1));
