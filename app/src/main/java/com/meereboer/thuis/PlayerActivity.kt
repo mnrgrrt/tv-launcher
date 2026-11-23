@@ -3,7 +3,6 @@ package com.meereboer.thuis
 import android.app.Activity
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -99,6 +98,10 @@ class PlayerActivity : Activity() {
     private var numBuf = ""
 
     private val ui = Handler(Looper.getMainLooper())
+    // Tv uit: de speler stopt (kijkstand wordt bewaard). Bij weer aanzetten begint Thuis met "Wie kijkt er?".
+    private val screenOff = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context?, i: android.content.Intent?) { finish() }
+    }
     private val bg = Executors.newSingleThreadExecutor()
     private val clock = SimpleDateFormat("HH:mm", Locale("nl", "NL"))
 
@@ -109,16 +112,16 @@ class PlayerActivity : Activity() {
 
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
+    /** Tekst in Inter, zoals de rest van Thuis. Maten op 70%: rustiger, meer beeld. */
     private fun text(sizeSp: Float, bold: Boolean = false, color: Int = Color.WHITE) = TextView(this).apply {
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp * 0.7f)   // alles op 70%: rustiger, meer beeld
-        setTextColor(color)
-        if (bold) typeface = Typeface.DEFAULT_BOLD
+        Fonts.style(this, sizeSp * 0.7f, if (bold) 600 else 400, color)
         maxLines = 1
         ellipsize = android.text.TextUtils.TruncateAt.END
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        registerReceiver(screenOff, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_OFF))
         prefs = Prefs(this)
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -230,6 +233,8 @@ class PlayerActivity : Activity() {
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
             .build()
         p.addListener(object : Player.Listener {
+            // Gepauzeerd mag de schermbeveiliging na een tijd komen.
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) { playerView.keepScreenOn = playWhenReady }
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
                     Player.STATE_BUFFERING -> showCenter("Laden…")
@@ -273,7 +278,7 @@ class PlayerActivity : Activity() {
             }
         })
         playerView.player = p
-        SubStyle.apply(this, playerView.subtitleView, false)
+        SubStyle.apply(this, playerView.subtitleView)
         return p
     }
 
@@ -760,6 +765,7 @@ class PlayerActivity : Activity() {
     }
 
     override fun onDestroy() {
+        try { unregisterReceiver(screenOff) } catch (_: Exception) {}
         super.onDestroy()
         ui.removeCallbacksAndMessages(null)
         bg.shutdownNow()

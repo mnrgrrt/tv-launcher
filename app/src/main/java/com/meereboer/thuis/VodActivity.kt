@@ -2,7 +2,6 @@ package com.meereboer.thuis
 
 import android.app.Activity
 import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
@@ -57,13 +56,16 @@ class VodActivity : Activity() {
     private var zone = -1   // -1 = voortgangsbalk, 0.. = knop
     private lateinit var center: TextView
     private val ui = Handler(Looper.getMainLooper())
+    // Tv uit: de speler stopt (kijkstand wordt bewaard). Bij weer aanzetten begint Thuis met "Wie kijkt er?".
+    private val screenOff = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context?, i: android.content.Intent?) { finish() }
+    }
     private var resumed = false
     private var subsTried = false
     private lateinit var pv: PlayerView
     private lateinit var menu: LinearLayout
     private lateinit var menuTitle: TextView
     private lateinit var menuList: ListView
-    private var menuActions: List<() -> Unit> = emptyList()
     private val extraSubs = ArrayList<MediaItem.SubtitleConfiguration>()
     private var pendingLabel: String? = null
     // Losse ondertitelbestanden (label -> origineel) en de timing per film
@@ -148,12 +150,26 @@ class VodActivity : Activity() {
         return listOfNotNull(f.label, lang).distinct().joinToString(" · ").ifEmpty { "Spoor ${i + 1}" }
     }
 
-    private fun openMenu(titleText: String, labels: List<String>, actions: List<() -> Unit>, selected: Int) {
+    /** Eén keuze in een menu: tekst, vinkje als hij nu aan staat, en wat er gebeurt bij OK. */
+    private data class Opt(val label: String, val checked: Boolean = false, val act: () -> Unit = {})
+    private var menuOpts: List<Opt> = emptyList()
+
+    private fun openMenu(titleText: String, opts: List<Opt>, selected: Int) {
         menuTitle.text = titleText
-        menuActions = actions
-        menuList.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
-            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
-                (super.getView(position, convertView, parent) as TextView).apply { setTextColor(Color.WHITE); textSize = 14f; setPadding(dp(14), dp(7), dp(14), dp(7)); background = null; isSingleLine = true; ellipsize = android.text.TextUtils.TruncateAt.END }
+        menuOpts = opts
+        menuList.adapter = object : ArrayAdapter<Opt>(this, 0, opts) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val row = (convertView as? LinearLayout) ?: LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(14), dp(10), dp(16), dp(10))
+                    addView(TextView(context).apply { Fonts.style(this, 14f, 600) }, LinearLayout.LayoutParams(dp(24), -2))
+                    addView(TextView(context).apply { Fonts.style(this, 15f, 400); isSingleLine = true; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, -2, 1f))
+                }
+                val o = opts[position]
+                (row.getChildAt(0) as TextView).text = if (o.checked) "✓" else ""
+                (row.getChildAt(1) as TextView).text = o.label
+                return row
+            }
         }
         menu.visibility = View.VISIBLE
         menuList.requestFocus()
@@ -161,62 +177,51 @@ class VodActivity : Activity() {
     }
     private fun closeMenu() { menu.visibility = View.GONE; pv.requestFocus() }
 
-    /** Gele knop: alle ondertitels uit het bestand, uit, en versies van OpenSubtitles. */
-    /** Grootte, achtergrond en hoogte; elke OK wisselt en je ziet het meteen. */
+    /** Hoe de ondertitels eruitzien; elke OK wisselt en je ziet het meteen. */
     private fun styleMenu(sel: Int = 0) {
-        val labels = listOf(
-            "Grootte: " + SubStyle.sizes[SubStyle.size(this)].first,
-            "Achtergrond: " + SubStyle.backs[SubStyle.back(this)],
-            "Hoogte: " + SubStyle.places[SubStyle.place(this)].first,
-            "Klaar")
-        val acts = listOf<() -> Unit>(
-            { SubStyle.cycle(this, "size", SubStyle.sizes.size); SubStyle.apply(this, pv.subtitleView, osd.visibility == View.VISIBLE); styleMenu(0) },
-            { SubStyle.cycle(this, "back", SubStyle.backs.size); SubStyle.apply(this, pv.subtitleView, osd.visibility == View.VISIBLE); styleMenu(1) },
-            { SubStyle.cycle(this, "place", SubStyle.places.size); SubStyle.apply(this, pv.subtitleView, osd.visibility == View.VISIBLE); styleMenu(2) },
-            { })
-        openMenu("Weergave ondertitels", labels, acts, sel)
+        fun opt(label: String, key: String, i: Int) = Opt(label, false) { SubStyle.cycle(this, key); applySubs(); styleMenu(i) }
+        openMenu("Weergave ondertitels", listOf(
+            opt("Grootte: " + SubStyle.sizes[SubStyle.get(this, "size")].first, "size", 0),
+            opt("Dikte: " + SubStyle.weights[SubStyle.get(this, "weight")].first, "weight", 1),
+            opt("Achtergrond: " + SubStyle.backs[SubStyle.get(this, "bg")].first, "bg", 2),
+            opt("Hoogte: " + SubStyle.places[SubStyle.get(this, "place")].first, "place", 3),
+            Opt("Klaar")), sel)
     }
 
+    /** Ondertitels uit het bestand, uit, timing van losse bestanden en versies van OpenSubtitles. */
     private fun subtitleMenu() {
         val p = player ?: return
         val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT && it.isSupported }
         val off = p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) || groups.none { it.isSelected }
-        val labels = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
-        labels.add("    \u2699 Weergave: " + SubStyle.summary(this))
-        acts.add { styleMenu() }
-        labels.add((if (off) "✓ " else "    ") + "Uit")
-        acts.add { p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build(); flash("Ondertitels uit") }
+        val opts = ArrayList<Opt>()
+        opts.add(Opt("Uit", off) { p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build(); flash("Ondertitels uit") })
         groups.forEachIndexed { i, g ->
-            labels.add((if (g.isSelected && !off) "✓ " else "    ") + trackName(g, i))
-            acts.add {
+            opts.add(Opt(trackName(g, i), g.isSelected && !off) {
                 p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                     .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0)).build()
                 flash("Ondertitels: " + trackName(g, i))
-            }
+            })
         }
         // Timing alleen voor losse bestanden (OpenSubtitles)
         val cur = groups.firstOrNull { it.isSelected }?.getTrackFormat(0)?.label
         if (!off && cur != null && subFiles.containsKey(cur)) {
-            val o = subOffset()
-            labels.add("    \u25ce Gelijkzetten op een zin (makkelijkst)"); acts.add { startSync(cur) }
-            labels.add("    Tekst komt te vroeg (al in beeld v\u00f3\u00f3r het praten)"); acts.add { nudge(cur, 500) }
-            labels.add("    Tekst komt te laat (pas in beeld n\u00e1 het praten)"); acts.add { nudge(cur, -500) }
-            if (o != 0L) { labels.add("    Timing terugzetten zoals hij was"); acts.add { setOffset(cur, 0L) } }
+            opts.add(Opt("Gelijkzetten op een zin") { startSync(cur) })
+            opts.add(Opt("Tekst komt te vroeg") { nudge(cur, 500) })
+            opts.add(Opt("Tekst komt te laat") { nudge(cur, -500) })
+            if (subOffset() != 0L) opts.add(Opt("Timing terugzetten") { setOffset(cur, 0L) })
         }
+        opts.add(Opt("Weergave: " + SubStyle.summary(this)) { styleMenu() })
         val sel = if (off) 0 else groups.indexOfFirst { it.isSelected } + 1
-        labels.add("    OpenSubtitles: zoeken…"); acts.add { }
-        openMenu("Ondertitels", labels, acts, sel)
+        val searching = Opt("OpenSubtitles: zoeken…")
+        openMenu("Ondertitels", opts + searching, sel)
         bg.execute {
             val res = try { subsSearch() } catch (e: Exception) { emptyList() }
             ui.post {
-                if (menu.visibility != View.VISIBLE) return@post
-                labels.removeAt(labels.size - 1); acts.removeAt(acts.size - 1)
-                if (res.isEmpty()) { labels.add("    OpenSubtitles: niets gevonden"); acts.add { } }
-                res.forEach { r ->
+                if (menu.visibility != View.VISIBLE || menuOpts.lastOrNull() !== searching) return@post
+                val more = if (res.isEmpty()) listOf(Opt("OpenSubtitles: niets gevonden")) else res.map { r ->
                     val lang = if (r.optString("lang") == "nl") "NL" else r.optString("lang").uppercase()
                     val label = "OpenSubtitles · $lang · " + r.optString("release").take(40) + (if (r.optBoolean("hearing")) " · SDH" else "")
-                    labels.add("    $label  (${r.optInt("downloads")}×)")
-                    acts.add {
+                    Opt("$label  (${r.optInt("downloads")}×)") {
                         flash("Ondertitel ophalen…")
                         bg.execute {
                             val f = try { subsDownload(r.optLong("fileId")) } catch (e: Exception) { null }
@@ -224,27 +229,27 @@ class VodActivity : Activity() {
                         }
                     }
                 }
-                openMenu("Ondertitels", labels, acts, sel)
+                openMenu("Ondertitels", opts + more, menuList.selectedItemPosition.coerceAtLeast(sel))
             }
         }
     }
 
     private fun moreMenu() {
-        openMenu("Meer", listOf("5 minuten vooruit", "5 minuten terug", "Weergave ondertitels", "Vanaf het begin"),
-            listOf({ player?.let { it.seekTo(it.currentPosition + 300_000) }; showOsd() },
-                { player?.let { it.seekTo((it.currentPosition - 300_000).coerceAtLeast(0)) }; showOsd() },
-                { styleMenu() }, { player?.seekTo(0); showOsd() }), 0)
+        openMenu("Meer", listOf(
+            Opt("5 minuten vooruit") { player?.let { it.seekTo(it.currentPosition + 300_000) }; showOsd() },
+            Opt("5 minuten terug") { player?.let { it.seekTo((it.currentPosition - 300_000).coerceAtLeast(0)) }; showOsd() },
+            Opt("Vanaf het begin") { player?.seekTo(0); showOsd() },
+            Opt("Weergave ondertitels") { styleMenu() }), 0)
     }
 
-    /** Groene knop: geluidssporen. */
+    /** Geluidssporen. */
     private fun audioMenu() {
         val p = player ?: return
         val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO && it.isSupported }
         if (groups.size < 2) { flash("Maar één geluidsspoor"); return }
-        openMenu("Geluid", groups.mapIndexed { i, g -> (if (g.isSelected) "✓ " else "    ") + trackName(g, i) },
-            groups.mapIndexed { i, g -> { p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
-                .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0)).build(); flash("Geluid: " + trackName(g, i)) } },
-            groups.indexOfFirst { it.isSelected })
+        openMenu("Geluid", groups.mapIndexed { i, g -> Opt(trackName(g, i), g.isSelected) {
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0)).build()
+            flash("Geluid: " + trackName(g, i)) } }, groups.indexOfFirst { it.isSelected })
     }
     private val bg = Executors.newSingleThreadExecutor()
 
@@ -284,7 +289,7 @@ class VodActivity : Activity() {
     private fun hideBar() {
         zone = -1
         osd.animate().alpha(0f).setDuration(250).withEndAction { osd.visibility = View.GONE }.start()
-        SubStyle.apply(this, pv.subtitleView, false)
+        SubStyle.apply(this, pv.subtitleView, 0f)
     }
     private val tick = object : Runnable {
         override fun run() {
@@ -296,10 +301,22 @@ class VodActivity : Activity() {
         }
     }
 
+    /** Titel zonder taalcode vooraan en zonder jaartal en punt achteraan (dat staat er al onder). */
+    private fun cleanTitle(t: String) = t.replace(Regex("^\\[[A-Z]{2}\\]\\s*|^[A-Z]{2}\\s*[|:-]\\s*"), "")
+        .replace(Regex("\\s*\\(\\d{4}\\)[\\s.]*$"), "").trimEnd('.', ' ')
+
+    /** Ondertitels toepassen; is de balk in beeld, dan staan ze er precies boven. */
+    private fun applySubs() {
+        val shown = osd.visibility == View.VISIBLE && osd.height > 0 && pv.height > 0
+        val lift = if (shown) (osd.height - osd.paddingTop + dp(12)).toFloat() / pv.height else 0f
+        SubStyle.apply(this, pv.subtitleView, lift)
+    }
+
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        registerReceiver(screenOff, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_OFF))
         item = JSONObject(intent.getStringExtra("item") ?: "{}")
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -312,62 +329,68 @@ class VodActivity : Activity() {
         }
         root.addView(pv, FrameLayout.LayoutParams(-1, -1))
 
-        // Onderbalk: titel links, daaronder de voortgang met tijden, en een rij ronde knoppen.
+        // Onderbalk: titel, voortgang met tijden, en één rij knoppen die allemaal even groot zijn en op één lijn staan.
         osd = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(48), dp(120), dp(48), dp(18))
-            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0x99000000.toInt(), 0xE0000000.toInt()))
+            setPadding(dp(56), dp(140), dp(56), dp(26))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0x73000000, 0xCC000000.toInt(), 0xE6000000.toInt()))
         }
-        tvTitle = TextView(this).apply { setTextColor(Color.WHITE); textSize = 17f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
-        tvSub = TextView(this).apply { setTextColor(0xB3FFFFFF.toInt()); textSize = 12f; maxLines = 1 }
+        tvTitle = TextView(this).apply { Fonts.style(this, 20f, 600); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        tvSub = TextView(this).apply { Fonts.style(this, 13f, 400, 0xB3FFFFFF.toInt()); maxLines = 1 }
         bar = Scrub(this)
-        tvTime = TextView(this).apply { setTextColor(0xCCFFFFFF.toInt()); textSize = 11f }
-        tvLeft = TextView(this).apply { setTextColor(0xCCFFFFFF.toInt()); textSize = 11f; gravity = Gravity.END }
-        osd.addView(tvTitle); osd.addView(tvSub)
-        osd.addView(bar, LinearLayout.LayoutParams(-1, dp(20)).apply { topMargin = dp(8) })
+        tvTime = TextView(this).apply { Fonts.style(this, 12f, 500, 0xB3FFFFFF.toInt()) }
+        tvLeft = TextView(this).apply { Fonts.style(this, 12f, 500, 0xB3FFFFFF.toInt()); gravity = Gravity.END }
+        osd.addView(tvTitle)
+        osd.addView(tvSub, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(3) })
+        osd.addView(bar, LinearLayout.LayoutParams(-1, dp(16)).apply { topMargin = dp(12) })
         val times = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         times.addView(tvTime, LinearLayout.LayoutParams(0, -2, 1f)); times.addView(tvLeft, LinearLayout.LayoutParams(0, -2, 1f))
-        osd.addView(times)
-        val back = Icons.Button(this, Icons.BACK, 40, "10"); btnPlay = Icons.Button(this, Icons.PAUSE, 50); val fwd = Icons.Button(this, Icons.FWD, 40, "30")
-        val subs = Icons.Button(this, Icons.SUBS, 36); val audio = Icons.Button(this, Icons.AUDIO, 36); val more = Icons.Button(this, Icons.MORE, 36)
+        osd.addView(times, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
+        val size = 44
+        val back = Icons.Button(this, Icons.Skip(this, 10, false), size)
+        btnPlay = Icons.Button(this, Icons.Shape(Icons.PAUSE), size)
+        val fwd = Icons.Button(this, Icons.Skip(this, 30, true), size)
+        val subs = Icons.Button(this, Icons.Shape(Icons.SUBS), size)
+        val audio = Icons.Button(this, Icons.Shape(Icons.AUDIO), size)
+        val more = Icons.Button(this, Icons.Shape(Icons.MORE), size)
         btns = listOf(back, btnPlay, fwd, subs, audio, more)
         val row = FrameLayout(this)
-        val mid = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        listOf(back, btnPlay, fwd).forEach { mid.addView(it, LinearLayout.LayoutParams(it.layoutParams.width, it.layoutParams.height).apply { marginStart = dp(14); marginEnd = dp(14) }) }
-        val right = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        listOf(subs, audio, more).forEach { right.addView(it, LinearLayout.LayoutParams(it.layoutParams.width, it.layoutParams.height).apply { marginStart = dp(10) }) }
-        row.addView(mid, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
-        row.addView(right, FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.CENTER_VERTICAL))
-        osd.addView(row, LinearLayout.LayoutParams(-1, dp(64)).apply { topMargin = dp(4) })
+        fun group(l: List<Icons.Button>, gap: Int) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            l.forEachIndexed { i, b -> addView(b, LinearLayout.LayoutParams(dp(size), dp(size)).apply { if (i > 0) marginStart = dp(gap) }) }
+        }
+        row.addView(group(listOf(back, btnPlay, fwd), 28), FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        row.addView(group(listOf(subs, audio, more), 12), FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.CENTER_VERTICAL))
+        osd.addView(row, LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(8) })
         root.addView(osd, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
 
         center = TextView(this).apply {
-            setTextColor(Color.WHITE); textSize = 15f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
-            setPadding(dp(20), dp(12), dp(20), dp(12))
-            background = GradientDrawable().apply { setColor(0xB3000000.toInt()); cornerRadius = dp(14).toFloat() }
+            Fonts.style(this, 15f, 500); gravity = Gravity.CENTER
+            setPadding(dp(22), dp(14), dp(22), dp(14))
+            background = GradientDrawable().apply { setColor(0xD91C1C1F.toInt()); cornerRadius = dp(16).toFloat() }
             visibility = View.GONE
         }
         root.addView(center, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
-        // Keuzemenu (ondertitels, geluid, meer): een zwevende kaart rechts onderin, boven de knoppen.
+        // Keuzemenu (ondertitels, geluid, meer): een zwevende kaart rechts, boven de knoppen.
         menu = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply { setColor(0xF21C1C1F.toInt()); cornerRadius = dp(20).toFloat() }
-            setPadding(dp(10), dp(14), dp(10), dp(10))
+            setPadding(dp(8), dp(16), dp(8), dp(8))
             elevation = dp(12).toFloat()
             visibility = View.GONE
         }
-        menuTitle = TextView(this).apply { setTextColor(0x99FFFFFF.toInt()); textSize = 11f; typeface = Typeface.DEFAULT_BOLD; isAllCaps = true; letterSpacing = 0.08f; setPadding(dp(18), 0, 0, dp(8)) }
+        menuTitle = TextView(this).apply { Fonts.style(this, 12f, 600, 0x99FFFFFF.toInt()); isAllCaps = true; letterSpacing = 0.06f; setPadding(dp(16), 0, 0, dp(8)) }
         menu.addView(menuTitle)
         menuList = ListView(this).apply {
             divider = null; isVerticalScrollBarEnabled = false
-            selector = GradientDrawable().apply { setColor(0x33FFFFFF); cornerRadius = dp(12).toFloat() }
-            onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ -> val a = menuActions.getOrNull(pos); closeMenu(); a?.invoke() }
+            selector = GradientDrawable().apply { setColor(0x29FFFFFF); cornerRadius = dp(12).toFloat() }
+            onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ -> val a = menuOpts.getOrNull(pos)?.act; closeMenu(); a?.invoke() }
         }
         menu.addView(menuList, LinearLayout.LayoutParams(-1, -2))
-        root.addView(menu, FrameLayout.LayoutParams(dp(360), -2, Gravity.END or Gravity.BOTTOM).apply { setMargins(0, dp(40), dp(40), dp(96)) })
+        root.addView(menu, FrameLayout.LayoutParams(dp(400), -2, Gravity.END or Gravity.BOTTOM).apply { setMargins(0, dp(48), dp(56), dp(112)) })
         setContentView(root)
 
-        tvTitle.text = item.optString("title").replace(Regex("^\\[[A-Z]{2}\\]\\s*|^[A-Z]{2}\\s*[|:-]\\s*"), "")
+        tvTitle.text = cleanTitle(item.optString("title"))
         tvSub.text = item.optString("sub")
 
         val http = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true).setUserAgent("Thuis/1.0")
@@ -424,7 +447,7 @@ class VodActivity : Activity() {
             override fun onPlayerError(error: PlaybackException) { show("Dit speelt niet af\n${error.errorCodeName}", 0) }
         })
         pv.player = p
-        SubStyle.apply(this, pv.subtitleView, false)
+        applySubs()
         player = p
         p.setMediaItem(mediaItem(emptyList()))
         p.prepare()
@@ -475,9 +498,14 @@ class VodActivity : Activity() {
         return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
     }
 
+    private var playing: Boolean? = null
     private fun updateOsd() {
         val p = player ?: return
-        btnPlay.setIcon(if (p.playWhenReady) Icons.PAUSE else Icons.PLAY)
+        if (playing != p.playWhenReady) {
+            playing = p.playWhenReady
+            btnPlay.setIcon(Icons.Shape(if (p.playWhenReady) Icons.PAUSE else Icons.PLAY))
+            pv.keepScreenOn = p.playWhenReady   // gepauzeerd mag de schermbeveiliging na een tijd komen
+        }
         val d = p.duration.takeIf { it > 0 } ?: return
         bar.progress = p.currentPosition.toFloat() / d; bar.buffered = p.bufferedPosition.toFloat() / d
         tvTime.text = fmt(p.currentPosition)
@@ -493,7 +521,7 @@ class VodActivity : Activity() {
     private fun showOsd() {
         if (osd.visibility != View.VISIBLE) { osd.alpha = 0f; osd.visibility = View.VISIBLE; osd.animate().alpha(1f).setDuration(200).start() }
         updateOsd(); light()
-        SubStyle.apply(this, pv.subtitleView, true)   // ondertitels boven de balk
+        osd.post { applySubs() }   // ondertitels boven de balk
         ui.removeCallbacks(hideOsd)
         if (player?.playWhenReady != false) ui.postDelayed(hideOsd, 5000)
     }
@@ -596,5 +624,10 @@ class VodActivity : Activity() {
         ui.removeCallbacksAndMessages(null)
         player?.release(); player = null
         bg.shutdownNow()
+    }
+
+    override fun onDestroy() {
+        try { unregisterReceiver(screenOff) } catch (_: Exception) {}
+        super.onDestroy()
     }
 }

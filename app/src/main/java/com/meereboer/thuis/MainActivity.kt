@@ -27,7 +27,7 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        registerReceiver(screenOff, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_OFF))
+        registerReceiver(screen, android.content.IntentFilter().apply { addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_SCREEN_ON) })
         hideSystemUi()
 
         val loader = WebViewAssetLoader.Builder()
@@ -90,25 +90,37 @@ class MainActivity : Activity() {
             or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
     }
 
-    // Hoe lang het scherm uit stond: daarmee vraagt Thuis na een tijdje "Wie kijkt er?".
-    private var screenOffAt = 0L
-    private val screenOff = object : android.content.BroadcastReceiver() {
-        override fun onReceive(c: android.content.Context?, i: android.content.Intent?) { screenOffAt = System.currentTimeMillis() }
+    // Aan/uit: na elke keer uit vraagt Thuis wie er kijkt (bij scherm aan, of zodra Thuis weer voor is).
+    private var woke = false
+    private val screen = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: android.content.Context?, i: Intent?) {
+            when (i?.action) {
+                Intent.ACTION_SCREEN_OFF -> woke = true
+                Intent.ACTION_SCREEN_ON -> if (hasWindowFocus()) resumeWeb()
+            }
+        }
+    }
+    private fun resumeWeb() {
+        if (!::web.isInitialized) return
+        val w = woke; woke = false
+        web.evaluateJavascript("window.__resume && window.__resume($w)", null)
     }
 
     override fun onResume() {
         super.onResume()
         hideSystemUi()
-        val away = if (screenOffAt > 0) System.currentTimeMillis() - screenOffAt else 0L
-        screenOffAt = 0L
-        if (::web.isInitialized) {
-            web.requestFocus()
-            web.evaluateJavascript("window.__resume && window.__resume($away)", null)
-        }
+        if (::web.isInitialized) web.requestFocus()
+        resumeWeb()
+    }
+
+    /** Home-knop: altijd naar het beginscherm, waar je ook bent (ook vanuit de spelers of een andere app). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.hasCategory(Intent.CATEGORY_HOME) && ::web.isInitialized) web.evaluateJavascript("window.__home && window.__home()", null)
     }
 
     override fun onDestroy() {
-        try { unregisterReceiver(screenOff) } catch (_: Exception) {}
+        try { unregisterReceiver(screen) } catch (_: Exception) {}
         super.onDestroy()
     }
 

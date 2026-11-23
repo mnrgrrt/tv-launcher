@@ -50,7 +50,7 @@
     return fetch(path, { method: method, headers: { 'X-Thuis-Key': key, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
       .then(function (r) { if (r.status === 401) throw new Error('NIET_GEKOPPELD'); return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
   }
-  function onApiError(e) { if (e.message === 'NIET_GEKOPPELD') { if (N) N.srvUnpair(); go('pair', {}, true); } throw e; }
+  function onApiError(e) { if (e.message === 'NIET_GEKOPPELD') { if (N) N.srvUnpair(); go('pair', {}, 'root'); } throw e; }
   var get = function (p) { return api('GET', p); };
   // Plaatjes: van de server (pad met /) via de app, https rechtstreeks, http via de app (anders blokkeert de pagina ze).
   function img(u) {
@@ -117,13 +117,6 @@
   // Sommige tv's geven geen e.key mee maar alleen een code (23 = OK op Android).
   var CODES = { 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown', 13: 'Enter', 23: 'Enter', 66: 'Enter', 160: 'Enter', 27: 'Escape', 8: 'Backspace', 4: 'GoBack', 461: 'GoBack' };
   function keyOf(e) { return (e.key && e.key !== 'Unidentified' && e.key !== 'Process') ? e.key : (CODES[e.keyCode] || ''); }
-  // Schermbeveiliging: elke toets haalt hem weg en doet verder niets (ook de bijbehorende keyup niet).
-  var lastKey = Date.now(), saver = null, swallowUp = false;
-  window.addEventListener('keydown', function (e) {
-    lastKey = Date.now();
-    if (saver) { stopSaver(); swallowUp = true; e.preventDefault(); e.stopImmediatePropagation(); }
-  }, true);
-  window.addEventListener('keyup', function (e) { if (swallowUp) { swallowUp = false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
   document.addEventListener('keydown', function (e) {
     var k = keyOf(e); touched = true;
     if (k === 'ArrowRight' || k === 'ArrowLeft' || k === 'ArrowUp' || k === 'ArrowDown') { e.preventDefault(); move(k.slice(5).toLowerCase()); return; }
@@ -143,66 +136,24 @@
   });
   document.addEventListener('click', function (e) { var f = e.target.closest('.f'); if (f) { focus(f); if (f._ok) f._ok(); } });
   window.__back = back;
-  function local(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
-  function setLocal(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  setInterval(function () {
-    var min = +local('thuis-saver', '10');
-    if (min > 0 && !saver && document.visibilityState !== 'hidden' && Date.now() - lastKey > min * 60000) startSaver();
-  }, 20000);
-  // Rustig wisselende foto's met de klok. Zelfde foto's als bovenaan Thuis (beheerpagina › Foto's voor Thuis).
-  function startSaver() {
-    var go2 = function (l) {
-      if (!l.length || saver) return;
-      saver = h('div', { class: 'saver' }, '<div class="bg"></div><div class="bg"></div><div class="sclock"></div><div class="scredit"></div>');
-      document.body.appendChild(saver);
-      var layers = saver.querySelectorAll('.bg'), n = Math.floor(Math.random() * l.length), on = 0;
-      var tick = function () {
-        if (!saver) return;
-        saver.querySelector('.sclock').innerHTML = clock(Date.now()) + '<small>' + esc(new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })) + '</small>';
-      };
-      var next = function () {
-        if (!saver) return;
-        var p = l[n++ % l.length], nxt = layers[on], old = layers[1 - on]; on = 1 - on;
-        var pic = new Image(); pic.onload = function () { if (!saver) return; nxt.style.backgroundImage = "url('" + pic.src + "')"; nxt.classList.add('on'); old.classList.remove('on'); saver.querySelector('.scredit').textContent = 'Foto: ' + p.by; }; pic.src = img(p.url);
-      };
-      // Eén vaste foto, of wisselen in het gekozen tempo.
-      var fixed = local('thuis-saver-photo', ''), pick = l.filter(function (p) { return p.url === fixed; });
-      if (pick.length) l = pick;
-      tick(); next(); saver._t = setInterval(tick, 10000);
-      if (l.length > 1) saver._p = setInterval(next, (+local('thuis-saver-speed', '45') || 45) * 1000);
-    };
-    if (S.photos) go2(S.photos); else get('/api/photos').then(function (l) { S.photos = l; go2(l); }, function () {});
-  }
-  // Kies een vaste foto voor de schermbeveiliging, of laat hem wisselen.
-  function pickSaverPhoto(done) {
-    var show = function (l) {
-      var d = h('div', { class: 'dialog' }, '<h2>Foto in de schermbeveiliging</h2>'), box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;justify-content:center;max-width:1300px' });
-      var cur = local('thuis-saver-photo', '');
-      box.appendChild(F(h('button', { class: 'pill' + (cur ? '' : ' on'), style: 'align-self:center' }, 'Wisselen'), function () { setLocal('thuis-saver-photo', ''); closeOverlay(); done(); }));
-      l.forEach(function (p) {
-        box.appendChild(F(h('button', { class: 'row-item', style: 'width:240px' }, '<div class="thumb" style="' + bg(p.url) + (p.url === cur ? ';outline:3px solid #fff' : '') + '"></div>'), function () { setLocal('thuis-saver-photo', p.url); closeOverlay(); done(); }));
-      });
-      d.appendChild(box); openOverlay(d);
-    };
-    if (S.photos) show(S.photos); else get('/api/photos').then(function (l) { S.photos = l; show(l); });
-  }
-  function stopSaver() { if (!saver) return; clearInterval(saver._t); clearInterval(saver._p); saver.remove(); saver = null; lastKey = Date.now(); }
-  // Terug in Thuis (scherm weer aan, of terug uit een andere app). Na een tijd uit: eerst kiezen wie er kijkt.
-  window.__resume = function (awayMs) {
-    lastKey = Date.now(); stopSaver();
-    var many = S.profiles && S.profiles.length > 1 && !(S.device && S.device.locked);
-    if (awayMs > 10 * 60000 && many && local('thuis-wake', 'aan') === 'aan') { go('home', {}, true); whoDialog(); }
-  };
+  // Terug in Thuis. Na aan/uit eerst kiezen wie er kijkt (behalve op een vastgezet apparaat).
+  window.__resume = function (woke) { if (woke && S.profiles) { go('home', {}, 'root'); wakeWho(); } };
+  // Home-knop op de afstandsbediening: altijd naar het beginscherm.
+  window.__home = function () { if (!S.profile) return; go('home', {}, 'root'); };
+  function manyProfiles() { return S.profiles && S.profiles.length > 1 && !(S.device && S.device.locked); }
+  function wakeWho() { if (manyProfiles()) whoDialog(true); }
 
   function F(el, ok, opts) { el.classList.add('f'); el._ok = ok; if (opts) { el._long = opts.long; el._onfocus = opts.focus; el._move = opts.move; if (opts.group) el.dataset.group = opts.group; } return el; }
 
   // ---------- schermen en terug ----------
   var stack = [], overlay = null, current = null;
   var screens = {};
+  // go(naam, args): nieuwe pagina, Terug komt hier weer uit. replace = true: zelfde plek in de geschiedenis (bijv. verversen).
+  // replace = 'root': opnieuw beginnen (beginscherm, ander profiel, koppelen).
   function go(name, args, replace) {
     closeOverlay();
-    if (current && !replace) stack.push(current);
-    if (replace) stack = [];
+    if (replace === 'root') stack = [];
+    else if (current && !replace) stack.push(current);
     current = { name: name, args: args || {} };
     render();
   }
@@ -219,10 +170,10 @@
   function firstContent() { var all = focusables(); return all.filter(function (e) { return e.closest('.first'); })[0] || all.filter(function (e) { return !e.closest('.top'); })[0] || all[0]; }
   function contentReady() { if (overlay || touched) return; var f = firstContent(); if (f && f !== cur && !f.closest('.top')) focus(f); }
   function back() {
-    if (overlay) { var o = overlay; closeOverlay(); if (o._onclose) o._onclose(); return; }
+    if (overlay) { if (overlay._sticky) return; var o = overlay; closeOverlay(); if (o._onclose) o._onclose(); return; }
     if (current && current.args && current.args._onback && current.args._onback() === true) return;
     if (stack.length) { current = stack.pop(); render(); return; }
-    if (isMain() && S.profile) return openSidebar();
+    if (current && current.name !== 'home' && S.profile) go('home', {}, 'root');
   }
   function openOverlay(el, onclose) {
     closeOverlay();
@@ -269,11 +220,11 @@
     };
     item('who', me().name, '<img class="av" alt="" src="' + esc(img(me().avatarUrl)) + '">', function () { whoDialog(); }, '<span class="clock">' + clock(Date.now()) + '</span>').classList.add('me');
     nav.appendChild(h('div', { class: 'gap' }));
-    item('search', 'Zoeken', NAVICON.search, function () { go('search', {}, true); });
-    item('home', 'Thuis', NAVICON.home, function () { go('home', {}, true); });
-    item('live', 'Live tv', NAVICON.live, function () { go('live', {}, true); });
-    item('films', 'Films', NAVICON.films, function () { go('films', {}, true); });
-    item('series', 'Series', NAVICON.series, function () { go('series', {}, true); });
+    item('search', 'Zoeken', NAVICON.search, function () { if (here === 'search') closeOverlay(); else go('search'); });
+    item('home', 'Thuis', NAVICON.home, function () { go('home', {}, 'root'); });
+    item('live', 'Live tv', NAVICON.live, function () { if (here === 'live') closeOverlay(); else go('live'); });
+    item('films', 'Films', NAVICON.films, function () { if (here === 'films') closeOverlay(); else go('films'); });
+    item('series', 'Series', NAVICON.series, function () { if (here === 'series') closeOverlay(); else go('series'); });
     item('lib', 'Bibliotheek', NAVICON.lib, function () { go('grid', { lib: true, kind: 'movie', title: 'Bibliotheek', alles: '1', sort: 'nieuw' }); });
     item('list', 'Mijn lijst', NAVICON.list, function () { go('profile', { tab: 'list' }); });
     // Diensten die op dit apparaat staan, met hun logo. OK opent de app.
@@ -386,21 +337,18 @@
     item.server = true; item.profile = S.profile;
     if (N) N.playItem(JSON.stringify(item)); else toast('Afspelen kan alleen op de tv');
   }
-  // Wie kijkt er? Alleen vragen als dat zo is ingesteld, of als iemand anders deze titel aan het kijken is.
+  // Kijkt iemand anders deze titel al? Dan vragen of je bij die verder wilt. (Wie er kijkt, vraagt Thuis al bij het aanzetten.)
   function askWho(key) {
-    var ask = (S.device && S.device.ask) || 'samen';
     if (S.device && S.device.locked) return Promise.resolve();
     return get('/api/watchers?key=' + encodeURIComponent(key) + '&profile=' + S.profile).then(function (w) {
-      if (ask === 'nooit' && !w.length) return;
-      if (!w.length && !(ask === 'altijd' || (ask === 'samen' && S.profile === 1))) return;
+      if (!w.length) return;
       return new Promise(function (resolve) {
         var d = h('div', { class: 'dialog' });
         var first = w[0];
-        d.appendChild(h('h2', null, first ? esc(first.name) + ' kijkt dit, verder als ' + esc(first.name) + '?' : 'Wie kijkt er?'));
-        if (first) d.appendChild(h('div', { class: 'dim', style: 'font-size:22px' }, 'Dan gaat het verder waar ' + esc(first.name) + ' was, en telt het kijken bij ' + esc(first.name) + '.'));
+        d.appendChild(h('h2', null, esc(first.name) + ' kijkt dit, verder als ' + esc(first.name) + '?'));
+        d.appendChild(h('div', { class: 'dim', style: 'font-size:22px' }, 'Dan gaat het verder waar ' + esc(first.name) + ' was, en telt het kijken bij ' + esc(first.name) + '.'));
         var row = h('div', { class: 'who' }), order = [];
-        if (first) order.push(first.id);
-        order.push(S.profile);
+        order.push(first.id, S.profile);
         S.profiles.forEach(function (p) { if (order.indexOf(p.id) < 0) order.push(p.id); });
         var left = 6, timer;
         var note = h('div', { class: 'dim', style: 'font-size:20px' });
@@ -551,7 +499,7 @@
     var box = h('div', { style: 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:90px' }, '<h1 style="font-size:64px;font-weight:600">Wie kijkt er?</h1>');
     var row = h('div', { class: 'who' });
     S.profiles.forEach(function (p) {
-      var b = F(h('button', { class: 'who-item' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '"><span>' + esc(p.name) + '</span>'), function () { setProfile(p.id); go('home', {}, true); });
+      var b = F(h('button', { class: 'who-item' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '"><span>' + esc(p.name) + '</span>'), function () { setProfile(p.id); go('home', {}, 'root'); });
       if (p.id === S.profile) b.id = 'cur';
       row.appendChild(b);
     });
@@ -559,20 +507,21 @@
     current.args._focus = '#cur';
     return el;
   };
-  function whoDialog() {
+  function whoDialog(must) {
     var d = h('div', { class: 'dialog' }, '<h2>Wie kijkt er?</h2>'), row = h('div', { class: 'who' });
     var locked = S.device && S.device.locked;
     S.profiles.forEach(function (p) {
       if (locked && p.id !== S.profile) return;
       var b = F(h('button', { class: 'who-item' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '"><span>' + esc(p.name) + '</span>'), function () {
-        setProfile(p.id); S.ov = {}; closeOverlay(); go('home', {}, true);
+        setProfile(p.id); S.ov = {}; closeOverlay(); go('home', {}, 'root');
       });
       if (p.id === S.profile) b.id = 'who-cur';
       row.appendChild(b);
     });
     d.appendChild(row);
-    d.appendChild(F(h('button', { class: 'btn' }, 'Mijn profiel'), function () { closeOverlay(); go('profile'); }));
+    if (!must) d.appendChild(F(h('button', { class: 'btn' }, 'Mijn profiel'), function () { closeOverlay(); go('profile'); }));
     openOverlay(d);
+    overlay._sticky = !!must;   // na aanzetten: eerst kiezen, Terug doet dan niets
     var c = d.querySelector('#who-cur'); if (c) focus(c);
   }
 
@@ -1296,6 +1245,58 @@
     return el;
   };
 
+  // ---------- schermbeveiliging (Android-dagdroom van Thuis, instellingen op het apparaat) ----------
+  var SAVERSRC = [['film', 'Filmart', 'Beelden van je eigen films en series'], ['album1', "Eigen foto's 1", 'Ook bovenaan Thuis'], ['album2', "Eigen foto's 2", ''],
+    ['album3', "Eigen foto's 3", ''], ['kunst', 'Kunst', 'Schilderijen uit het Art Institute of Chicago'], ['klok', 'Alleen klok en weer', 'Rustig scherm zonder foto\'s']];
+  function saverPrefs() { try { return JSON.parse(N.saverGet()); } catch (e) { return null; } }
+  function saverRows(row, redo) {
+    var sp = N && saverPrefs(); if (!sp) return;
+    var src = sp.src.split(','), names = SAVERSRC.filter(function (x) { return src.indexOf(x[0]) >= 0; }).map(function (x) { return x[1]; });
+    if (!sp.active) row('Schermbeveiliging is nog niet aangezet', 'Eenmalig via de computer in te stellen. Tot dan toont Android zijn eigen schermbeveiliging.', function () { N.openSystem('saver'); });
+    row('Schermbeveiliging: beelden', names.join(', '), function () { pickSaverSources(sp, redo); });
+    var DELAY = [['5', 'Na 5 minuten'], ['10', 'Na 10 minuten'], ['30', 'Na 30 minuten'], ['60', 'Na een uur'], ['0', 'Nooit']];
+    if (sp.canDelay) row('Schermbeveiliging start', labelOf(DELAY, String(sp.delay)), function () { N.saverSet(JSON.stringify({ delay: +nextOf(DELAY, String(sp.delay)) })); redo(); });
+    else row('Schermbeveiliging start', sp.delay ? 'Na ' + sp.delay + ' minuten (aanpassen nog niet toegestaan)' : 'Nooit', function () { N.openSystem('saver'); });
+    if (src.join() === 'klok') return;
+    row('Foto', sp.fixed ? 'Steeds dezelfde' : 'Wisselen', function () { pickSaverPhoto(sp, redo); });
+    var SPEED = [['45', 'Elke 45 seconden'], ['120', 'Elke 2 minuten'], ['300', 'Elke 5 minuten'], ['15', 'Elke 15 seconden']];
+    if (!sp.fixed) row('Wisselen van foto', labelOf(SPEED, String(sp.speed)), function () { N.saverSet(JSON.stringify({ speed: +nextOf(SPEED, String(sp.speed)) })); redo(); });
+  }
+  // Bronnen aan- en uitvinken. "Alleen klok en weer" sluit de rest uit.
+  function pickSaverSources(sp, redo) {
+    get('/api/saver?src=none').then(function (r) { return r.albums || {}; }, function () { return {}; }).then(function (albums) {
+      var src = sp.src.split(','), d = h('div', { class: 'dialog' }, '<h2>Beelden in de schermbeveiliging</h2>'), list = h('div', { style: 'display:flex;flex-direction:column;gap:8px;width:720px' });
+      var draw = function () {
+        list.innerHTML = '';
+        SAVERSRC.forEach(function (x) {
+          var on = src.indexOf(x[0]) >= 0, n = /^album/.test(x[0]) ? albums[x[0].slice(5)] : null;
+          var sub = n === 0 ? 'Nog leeg: foto\'s toevoegen op de beheerpagina' : n ? n + " foto's" + (x[2] ? ' · ' + x[2] : '') : x[2];
+          list.appendChild(F(h('button', { class: 'listrow', id: 'ss-' + x[0] }, '<span style="display:flex;flex-direction:column;gap:4px;text-align:left"><b>' + esc(x[1]) + '</b>' + (sub ? '<span class="dim" style="font-size:18px">' + esc(sub) + '</span>' : '') + '</span><span>' + (on ? '✓' : '') + '</span>'), function () {
+            if (x[0] === 'klok') src = ['klok'];
+            else { src = src.filter(function (k) { return k !== 'klok'; }); src = on ? src.filter(function (k) { return k !== x[0]; }) : src.concat(x[0]); }
+            if (!src.length) src = ['film'];
+            N.saverSet(JSON.stringify({ src: src.join(','), fixed: '' })); sp.src = src.join(','); sp.fixed = '';
+            draw(); focus(list.querySelector('#ss-' + x[0]));
+          }));
+        });
+      };
+      draw(); d.appendChild(list); openOverlay(d, redo);
+    });
+  }
+  // Eén vaste foto kiezen uit de gekozen bronnen, of laten wisselen.
+  function pickSaverPhoto(sp, redo) {
+    get('/api/saver?src=' + encodeURIComponent(sp.src)).then(function (r) {
+      var d = h('div', { class: 'dialog' }, '<h2>Foto in de schermbeveiliging</h2>'), box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;justify-content:center;max-width:1300px;max-height:640px;overflow:hidden' });
+      var pick = function (v) { N.saverSet(JSON.stringify({ fixed: v })); closeOverlay(); redo(); };
+      box.appendChild(F(h('button', { class: 'pill' + (sp.fixed ? '' : ' on'), style: 'align-self:center' }, 'Wisselen'), function () { pick(''); }));
+      r.images.slice(0, 24).forEach(function (p) {
+        var key = p.url.split('?')[0];
+        box.appendChild(F(h('button', { class: 'row-item', style: 'width:240px' }, '<div class="thumb" style="' + bg(p.url) + (key === sp.fixed ? ';outline:3px solid #fff' : '') + '"></div>'), function () { pick(key); }));
+      });
+      d.appendChild(box); openOverlay(d);
+    }, function (e) { toast(e.message); });
+  }
+
   // ---------- instellingen ----------
   screens.settings = function (a) {
     var el = h('div', { class: 'screen' }), tab = a.tab || 'device';
@@ -1313,14 +1314,7 @@
         var next = nextOf(VIEWN, S.view);
         api('POST', '/api/device', { view: next }).then(function () { S.view = next; fit(); a._focus = null; go('settings', a, true); }, function (e) { toast(e.message); });
       });
-      // Per apparaat, op het apparaat zelf bewaard.
-      var WAKE = [['aan', 'Aan'], ['uit', 'Uit']], SAVER = [['10', 'Na 10 minuten'], ['30', 'Na 30 minuten'], ['5', 'Na 5 minuten'], ['0', 'Uit']];
-      row('Wie kijkt er? bij aanzetten', labelOf(WAKE, local('thuis-wake', 'aan')), function () { setLocal('thuis-wake', nextOf(WAKE, local('thuis-wake', 'aan'))); a._focus = null; go('settings', a, true); });
-      row("Schermbeveiliging met foto's", labelOf(SAVER, local('thuis-saver', '10')), function () { setLocal('thuis-saver', nextOf(SAVER, local('thuis-saver', '10'))); a._focus = null; go('settings', a, true); });
-      var SPEED = [['45', 'Elke 45 seconden'], ['120', 'Elke 2 minuten'], ['300', 'Elke 5 minuten'], ['15', 'Elke 15 seconden']];
-      var one = local('thuis-saver-photo', '');
-      row('Foto in de schermbeveiliging', one ? 'Steeds dezelfde foto' : 'Wisselen', function () { pickSaverPhoto(function () { a._focus = null; go('settings', a, true); }); });
-      if (!one) row('Wisselen van foto', labelOf(SPEED, local('thuis-saver-speed', '45')), function () { setLocal('thuis-saver-speed', nextOf(SPEED, local('thuis-saver-speed', '45'))); a._focus = null; go('settings', a, true); });
+      saverRows(row, function () { a._focus = null; go('settings', a, true); });
       row('Alle Android-instellingen', 'De instellingen van dit apparaat zelf', function () { N && N.openSystem('all'); });
       row('Wifi en netwerk', '', function () { N && N.openSystem('wifi'); });
       row('Bluetooth', 'Afstandsbedieningen en koptelefoons', function () { N && N.openSystem('bluetooth'); });
@@ -1335,13 +1329,9 @@
       if (d.locked) { main.appendChild(h('div', { class: 'dim', style: 'font-size:22px' }, 'Dit apparaat is vastgezet op ' + esc(me().name) + '. Aanpassen kan op de beheerpagina van tv-serverr.')); return el; }
       var prof = S.profiles.filter(function (p) { return p.id === d.profile; })[0];
       var asks = { altijd: 'Altijd vragen', samen: 'Vragen bij Samen', nooit: 'Nooit vragen' };
-      row('Standaardprofiel', prof ? prof.name : 'Geen: bij het opstarten "Wie kijkt er?"', function () {
+      row('Standaardprofiel', prof ? prof.name + ': staat voorgeselecteerd bij "Wie kijkt er?"' : 'Geen', function () {
         var ids = [0].concat(S.profiles.map(function (p) { return p.id; })), next = ids[(ids.indexOf(d.profile || 0) + 1) % ids.length];
         api('POST', '/api/device', { profile: next }).then(function () { d.profile = next; go('settings', a, true); });
-      });
-      row('Vragen wie er kijkt bij het starten', asks[d.ask || 'samen'], function () {
-        var ks = ['altijd', 'samen', 'nooit'], next = ks[(ks.indexOf(d.ask || 'samen') + 1) % 3];
-        api('POST', '/api/device', { ask: next }).then(function () { d.ask = next; go('settings', a, true); });
       });
     } else if (tab === 'conn') {
       var info = N ? JSON.parse(N.srvInfo()) : { url: location.origin };
@@ -1352,7 +1342,7 @@
         var dd = h('div', { class: 'dialog' }, '<h2>Dit apparaat ontkoppelen?</h2><div class="dim" style="font-size:22px">Daarna heb je een nieuwe code van de beheerpagina nodig.</div>');
         var bt = h('div', { style: 'display:flex;gap:16px' });
         bt.appendChild(F(h('button', { class: 'btn' }, 'Nee'), closeOverlay));
-        bt.appendChild(F(h('button', { class: 'btn' }, 'Ja, ontkoppelen'), function () { if (N) N.srvUnpair(); closeOverlay(); go('pair', {}, true); }));
+        bt.appendChild(F(h('button', { class: 'btn' }, 'Ja, ontkoppelen'), function () { if (N) N.srvUnpair(); closeOverlay(); go('pair', {}, 'root'); }));
         dd.appendChild(bt); openOverlay(dd);
       });
     } else {
@@ -1389,7 +1379,7 @@
   // ---------- opstarten ----------
   function boot() {
     var info = N ? JSON.parse(N.srvInfo()) : { paired: true, profile: 0 };
-    if (!info.paired) return go('pair', {}, true);
+    if (!info.paired) return go('pair', {}, 'root');
     S.profile = info.profile || 0;
     var svc = fetch('services.json').then(function (r) { return r.json(); }).then(function (j) { return j.services; }, function () { return []; });
     Promise.all([get('/api/whoami'), get('/api/profiles'), svc]).then(function (r) {
@@ -1398,8 +1388,8 @@
       get('/api/services/logos').then(function (l) { S.logos = l; }, function () {});
       if (S.device.profile) setProfile(S.device.profile);                         // standaardprofiel van dit apparaat
       if (!S.profiles.some(function (p) { return p.id === S.profile; })) S.profile = 0;
-      if (!S.profile) return go('who', {}, true);
-      go('home', {}, true);
+      if (!S.profile) return go('who', {}, 'root');
+      go('home', {}, 'root'); wakeWho();
     }).catch(function (e) {
       if (e.message === 'NIET_GEKOPPELD') return;
       $app.innerHTML = '<div class="screen"><div style="position:absolute;left:160px;top:300px;width:1200px;display:flex;flex-direction:column;gap:24px"><h1 style="font-size:56px">tv-serverr is niet bereikbaar</h1><div class="dim" style="font-size:26px">' + esc(e.message) + '</div></div></div>';

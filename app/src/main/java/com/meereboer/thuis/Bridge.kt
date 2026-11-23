@@ -53,7 +53,11 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
     @JavascriptInterface fun getApps(id: Int) = async(id) { AppList.load(act).toString() }
     @JavascriptInterface fun launch(pkg: String) { act.runOnUiThread { AppList.launch(act, pkg) } }
 
-    /** Android-instellingen openen: "all", "wifi", "bluetooth", "sound", "display", "apps", "home" (oorspronkelijk startscherm). */
+    // ---------- schermbeveiliging ----------
+    @JavascriptInterface fun saverGet(): String = SaverPrefs.toJson(act)
+    @JavascriptInterface fun saverSet(json: String) = SaverPrefs.set(act, json)
+
+    /** Android-instellingen openen: "all", "wifi", "bluetooth", "sound", "display", "apps", "home" (oorspronkelijk startscherm), "saver" (schermbeveiliging). */
     @JavascriptInterface fun openSystem(what: String) {
         act.runOnUiThread {
             val action = when (what) {
@@ -63,6 +67,7 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
                 "display" -> android.provider.Settings.ACTION_DISPLAY_SETTINGS
                 "apps" -> android.provider.Settings.ACTION_APPLICATION_SETTINGS
                 "home" -> android.provider.Settings.ACTION_HOME_SETTINGS
+                "saver" -> android.provider.Settings.ACTION_DREAM_SETTINGS
                 else -> android.provider.Settings.ACTION_SETTINGS
             }
             try { act.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

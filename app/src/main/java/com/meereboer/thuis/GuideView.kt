@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
-import android.graphics.Typeface
 import android.text.TextPaint
 import android.text.TextUtils
 import android.view.View
@@ -101,10 +100,10 @@ class GuideView(context: Context) : View(context) {
         val ch = channels.getOrNull(row)
         val p = selectedProgramme()
         dim.textSize = h * 0.026f
-        dim.typeface = Typeface.DEFAULT_BOLD
+        dim.typeface = Fonts.semibold(context)
         c.drawText(("$title  ·  " + (ch?.let { "${it.num}  ${it.name}" } ?: "")).uppercase(), pad, h * 0.08f, dim)
         txt.textSize = h * 0.058f
-        txt.typeface = Typeface.DEFAULT_BOLD
+        txt.typeface = Fonts.semibold(context)
         val maxW = preview.left - pad - w * 0.03f
         val head = when {
             loading -> "Gids laden…"
@@ -112,7 +111,7 @@ class GuideView(context: Context) : View(context) {
             else -> ch?.name ?: ""
         }
         c.drawText(TextUtils.ellipsize(head, txt, maxW, TextUtils.TruncateAt.END).toString(), pad, h * 0.16f, txt)
-        dim.typeface = Typeface.DEFAULT
+        dim.typeface = Fonts.regular(context)
         dim.textSize = h * 0.028f
         if (p != null && p.start > 0) {
             val nowMs = System.currentTimeMillis()
@@ -152,7 +151,7 @@ class GuideView(context: Context) : View(context) {
             val chan = channels.getOrNull(r) ?: break
             val y = gridTop + i * rowH
             if (r == row) c.drawRect(pad - 10f, y, w - pad + 10f, y + rowH, rowFocus)
-            txt.typeface = if (r == row) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            txt.typeface = if (r == row) Fonts.semibold(context) else Fonts.regular(context)
             val label = "${chan.num}  ${chan.name}"
             c.drawText(TextUtils.ellipsize(label, txt, nameW - 20f, TextUtils.TruncateAt.END).toString(), pad, y + rowH * 0.62f, txt)
             val list = progs(r)

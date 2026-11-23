@@ -16,6 +16,7 @@ import * as taste from './taste.js';
 import * as youtube from './youtube.js';
 import * as searches from './searches.js';
 import * as photos from './photos.js';
+import * as saver from './saver.js';
 import { pipe, target } from './proxy.js';
 import { status } from './status.js';
 
@@ -79,9 +80,9 @@ on('POST', '/api/admin/profiles/:id/photo', 'admin', ({ p, b, me }) => { profile
 on('POST', '/api/admin/profiles/:id/history', 'admin', ({ p, b, me }) => {
   const n = taste.importCsv(p.id, b.csv); auth.audit(me.name, `kijkgeschiedenis toegevoegd voor profiel #${p.id} (${n} titels)`); return { titles: n };
 });
-on('GET', '/api/admin/photos', 'admin', () => photos.list());
-on('POST', '/api/admin/photos', 'admin', ({ b, me }) => { const l = photos.add(b.data, b.by); auth.audit(me.name, 'foto toegevoegd voor Thuis'); return l; });
-on('DELETE', '/api/admin/photos/:file', 'admin', ({ p, me }) => { const l = photos.remove(p.file); auth.audit(me.name, 'foto weggehaald: ' + p.file); return l; });
+on('GET', '/api/admin/photos', 'admin', ({ q }) => photos.list(q.get('album') || 1));
+on('POST', '/api/admin/photos', 'admin', ({ b, me }) => { const l = photos.add(b.album || 1, b.data, b.by); auth.audit(me.name, `foto toegevoegd aan album ${+b.album || 1}`); return l; });
+on('DELETE', '/api/admin/photos/:album/:file', 'admin', ({ p, me }) => { const l = photos.remove(p.album, p.file); auth.audit(me.name, `foto weggehaald uit album ${p.album}: ${p.file}`); return l; });
 on('POST', '/api/admin/profiles', 'admin', ({ b, me }) => { profiles.save(b); auth.audit(me.name, 'profiel opgeslagen: ' + b.name); return profiles.list(); });
 on('DELETE', '/api/admin/profiles/:id', 'admin', ({ p, me }) => { profiles.remove(p.id); auth.audit(me.name, 'profiel verwijderd #' + p.id); return profiles.list(); });
 on('POST', '/api/admin/users', 'admin', ({ b, me }) => { auth.addUser(b.name, b.password); auth.audit(me.name, 'beheerder toegevoegd: ' + b.name); return auth.users(); });
@@ -99,16 +100,18 @@ on('POST', '/api/admin/update', 'admin', ({ me }) => { fs.writeFileSync(FLAG, St
 on('GET', '/api/admin/status', 'admin', () => status(true));
 
 // Gekoppelde tv's
-on('GET', '/api/whoami', 'device', ({ dev }) => ({ device: dev.name, version: VERSION, profile: dev.profile || 0, locked: !!dev.locked, ask: dev.ask || 'samen', view: dev.view || '' }));
+on('GET', '/api/whoami', 'device', ({ dev }) => ({ device: dev.name, version: VERSION, profile: dev.profile || 0, locked: !!dev.locked, view: dev.view || '' }));
 // Op de tv zelf: standaardprofiel en vraag-instelling kiezen, behalve als het apparaat vastgezet is.
 on('POST', '/api/device', 'device', ({ dev, b }) => {
   // Weergave mag altijd; profiel en vragen alleen als het apparaat niet vastgezet is.
-  if (dev.locked && (b.profile != null || b.ask != null)) throw Object.assign(new Error('Dit apparaat is vastgezet op een profiel'), { status: 403 });
-  auth.setDevice(dev.id, { profile: b.profile, ask: b.ask, view: b.view }); return { ok: true };
+  if (dev.locked && b.profile != null) throw Object.assign(new Error('Dit apparaat is vastgezet op een profiel'), { status: 403 });
+  auth.setDevice(dev.id, { profile: b.profile, view: b.view }); return { ok: true };
 });
 on('GET', '/api/avatars', 'device', () => JSON.parse(fs.readFileSync(path.join(PUBLIC, 'avatars/index.json'), 'utf8')));
 // Foto's bovenaan Thuis
-on('GET', '/api/photos', 'device', () => photos.list());
+on('GET', '/api/photos', 'device', () => photos.list(1));
+// Schermbeveiliging: beelden uit de gekozen bronnen, het weer, en hoeveel foto's er in elk album zitten.
+on('GET', '/api/saver', 'device', async ({ q }) => ({ images: await saver.images(q.get('src')), weather: await saver.weather().catch(() => null), albums: photos.counts() }));
 on('POST', '/api/profiles/:id/avatar', 'device', ({ dev, p, b }) => {
   if (dev.locked && +p.id !== dev.profile) throw Object.assign(new Error('Niet toegestaan op dit apparaat'), { status: 403 });
   profiles.setAvatar(p.id, b.avatar); return profiles.list();
@@ -256,7 +259,11 @@ const server = http.createServer(async (req, res) => {
       return file(res, path.dirname(f), path.basename(f));
     }
     if (u.pathname.startsWith('/avatars/') && file(res, PUBLIC, u.pathname)) return;
-    if (u.pathname.startsWith('/achtergrond/') && file(res, photos.DIR, u.pathname.slice(13))) return;
+    if (u.pathname.startsWith('/foto/')) {
+      const [, , n, name] = u.pathname.split('/'), f = photos.file(n, name);
+      if (!f || !auth.verify(req.url)) return send(res, 404, { error: 'Onbekend' });
+      return file(res, path.dirname(f), path.basename(f));
+    }
     if (u.pathname === '/beheer' || u.pathname === '/') { res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"); if (file(res, PUBLIC, 'beheer.html')) return; }
     if (u.pathname.startsWith('/app/') && file(res, WEB, u.pathname.slice(5) || 'index.html')) return;
     send(res, 404, 'Niet gevonden', 'text/plain; charset=utf-8');
