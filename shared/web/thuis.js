@@ -178,11 +178,11 @@
   }
 
   // ---------- bovenbalk ----------
-  var TABS = [['home', 'Thuis'], ['live', 'Live tv'], ['films', 'Films'], ['series', 'Series'], ['search', 'Zoeken']];
+  var TABS = [['home', 'thuis'], ['live', 'Live tv'], ['films', 'Films'], ['series', 'Series'], ['search', 'Zoeken']];
   function topbar(active, onfocus) {
-    var bar = h('div', { class: 'top' }), left = h('div', { class: 'left' }, '<span class="brand">thuis</span>');
+    var bar = h('div', { class: 'top' }), left = h('div', { class: 'left' });
     TABS.forEach(function (t) {
-      var p = F(h('button', { class: 'pill' + (t[0] === active ? ' on' : '') }, t[1]), function () { go(t[0], {}, true); }, { group: 'top', focus: onfocus });
+      var p = F(h('button', { class: 'pill' + (t[0] === 'home' ? ' brand' : '') + (t[0] === active ? ' on' : '') }, t[1]), function () { go(t[0], {}, true); }, { group: 'top', focus: onfocus });
       if (t[0] === active) p.dataset.active = '1';
       left.appendChild(p);
     });
@@ -558,7 +558,8 @@
     var info = h('div', { class: 'g-info' }), guide = h('div', { class: 'guide' });
     el.appendChild(pills); el.appendChild(info); el.appendChild(guide);
     el.appendChild(h('div', { class: 'hint' }, '<span><span class="kbd">↑ ↓</span>zender</span><span><span class="kbd">← →</span>tijd</span><span><span class="kbd">OK</span>kijken, terugkijken of herinnering</span><span>↺ = terugkijken kan</span>'));
-    var st = args.st || (args.st = { cat: null, from: 0, row: 0 });
+    // Vers binnen via de bovenbalk: focus op de categorieën, zodat je meteen naar Sport of ESPN kunt.
+    var fresh = !args.st, st = args.st || (args.st = { cat: null, from: 0, row: 0 });
     liveCats().then(function (cats) {
       var shown = cats.filter(function (c) { return c.channels.length; });
       if (!st.cat) st.cat = (shown.filter(function (c) { return c.id !== 'alle' && !c.parent; })[0] || shown[0] || {}).id;
@@ -628,7 +629,7 @@
           r.appendChild(line); body.appendChild(r);
         });
         var want = document.getElementById('liveNow') || body.querySelectorAll('.g-row')[st.row] && body.querySelectorAll('.g-row')[st.row].querySelector('.g-p');
-        focus(want || focusables()[0]);
+        focus((fresh && pills.querySelector('.pill.on')) || want || focusables()[0]);
       });
     }
     return el;
