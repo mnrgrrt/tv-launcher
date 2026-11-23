@@ -619,7 +619,7 @@
   }
 
   // ---------- live tv met gids ----------
-  var PX = 7.1, SPAN = 210;  // pixels per minuut, minuten in beeld
+  var PX = 5.4, SPAN = 280;  // pixels per minuut, minuten in beeld
   screens.live = function (args) {
     var el = h('div', { class: 'screen' }); el.appendChild(topbar('live'));
     var pills = h('div', { style: 'position:absolute;left:80px;right:80px;top:130px;display:flex;gap:10px;overflow:hidden' });
@@ -641,6 +641,21 @@
       if (cat) drawGuide(cat);
     }).catch(function (e) { guide.innerHTML = '<div class="empty" style="padding:0">Live tv is nu niet bereikbaar. ' + esc(e.message) + '</div>'; });
 
+    function pickDay() {
+      var d = h('div', { class: 'dialog' }, '<h2>Welke dag?</h2>'), box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-width:1200px' });
+      var t0 = new Date(); t0.setHours(0, 0, 0, 0);
+      var curDay = new Date(st.from + 60 * 60000); curDay.setHours(0, 0, 0, 0);
+      for (var k = -7; k <= 7; k++) (function (k) {
+        var day = t0.getTime() + k * 864e5, b = F(h('button', { class: 'pill' + (day === curDay.getTime() ? ' on' : '') }, esc(dayName(day + 12 * 36e5))), function () {
+          // Zelfde tijdstip op die dag; vandaag gewoon vanaf nu.
+          var tod = st.from - new Date(st.from).setHours(0, 0, 0, 0);
+          st.from = k === 0 ? 0 : day + tod; st.row = 0; closeOverlay(); go('live', args, true);
+        });
+        if (day === curDay.getTime()) b.id = 'day-cur';
+        box.appendChild(b);
+      })(k);
+      d.appendChild(box); openOverlay(d); focus(d.querySelector('#day-cur') || box.firstChild);
+    }
     function drawGuide(cat) {
       var now = Date.now();
       if (!st.from) { var d = new Date(now); d.setMinutes(d.getMinutes() < 30 ? 0 : 30, 0, 0); st.from = d.getTime() - 60 * 60000; }
@@ -648,12 +663,14 @@
       guide.innerHTML = '';
       // Kop: de dag boven de zenders, de tijden boven het rooster.
       var head = h('div', { class: 'g-head' }), times = h('div', { class: 'g-times' });
-      head.appendChild(h('div', { class: 'g-day' }, esc(dayName(from + 60 * 60000))));
+      // De dag is een knop: kies gisteren, morgen of een andere dag (een week terug, een week vooruit).
+      var dayBtn = F(h('button', { class: 'g-day pill', id: 'g-day' }, esc(dayName(from + 60 * 60000)) + ' ▾'), function () { pickDay(); }, { group: 'day' });
+      head.appendChild(dayBtn);
       for (var t = from; t < to; t += 30 * 60000) times.appendChild(h('span', { style: 'left:' + x(t) + 'px' }, clock(t)));
       head.appendChild(times); guide.appendChild(head);
       var clip = h('div', { class: 'g-clip' }), body = h('div', { class: 'g-body' }); clip.appendChild(body); guide.appendChild(clip);
       // De gekozen zender blijft net onder het midden staan; de lijst schuift eronder door.
-      var ROWH = 84;
+      var ROWH = 62;
       var scrollTo = function (i) { var vis = Math.max(3, Math.floor(clip.clientHeight / ROWH)), top = Math.max(0, Math.min(i - Math.floor(vis / 2), chans.length - vis)); body.style.transform = 'translateY(' + (-top * ROWH) + 'px)'; };
       var chans = cat.channels.slice(0, 120);
       get('/api/live/guide?ids=' + chans.map(function (c) { return c.id; }).join(',') + '&from=' + from + '&to=' + to).then(function (g) {
@@ -685,7 +702,7 @@
               // Voorbij de rand van het tijdvak: een uur verschuiven.
               move: function (dir) {
                 // Omhoog vanaf de bovenste zender: naar de categorie die nu in beeld is.
-                if (dir === 'up' && i === 0) { focus(pills.querySelector('.pill.on')); return true; }
+                if (dir === 'up' && i === 0) { focus(dayBtn); return true; }
                 var r2 = b.getBoundingClientRect(), lineR = line.getBoundingClientRect();
                 if (dir === 'right' && r2.right >= lineR.right - 10 && b === line.lastElementChild) { st.from += 60 * 60000; go('live', args, true); return true; }
                 if (dir === 'left' && r2.left <= lineR.left + 10 && b === line.firstElementChild) { st.from -= 60 * 60000; go('live', args, true); return true; }

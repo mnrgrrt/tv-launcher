@@ -133,26 +133,32 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .filters .count { margin-left: auto; font-size: 20px; color: var(--ink-3); }
 
 /* Gids */
-.guide { position: absolute; left: 80px; right: 80px; top: 440px; bottom: 84px; overflow: hidden; }
-.g-row { display: flex; gap: 12px; height: 76px; margin-bottom: 8px; }
-.g-ch { width: 260px; flex: none; border-radius: 10px; background: var(--card); display: flex; align-items: center; gap: 14px; padding: 0 16px; font-size: 22px; font-weight: 600; overflow: hidden; white-space: nowrap; }
-.g-ch img { width: 56px; height: 40px; object-fit: contain; }
+.guide { position: absolute; left: 80px; right: 80px; top: 350px; bottom: 64px; overflow: hidden; }
+/* Gids op driekwart maat: meer zenders en meer tijd in beeld */
+.g-row { display: flex; gap: 8px; height: 56px; margin-bottom: 6px; }
+.g-ch { width: 210px; flex: none; border-radius: 12px; background: rgba(255,255,255,.06); display: flex; align-items: center; gap: 12px; padding: 0 14px; font-size: 17px; font-weight: 600; overflow: hidden; white-space: nowrap; }
+.g-ch img { width: 44px; height: 30px; object-fit: contain; }
 .g-line { position: relative; flex: 1; overflow: hidden; }
-.g-p { position: absolute; top: 0; bottom: 0; border-radius: 10px; background: var(--card); padding: 0 16px; display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; }
-.g-p.past { background: #0e1218; color: rgba(255,255,255,.6); }
-.g-p.now { background: var(--card-2); }
-.g-p.focus { background: var(--ink); color: var(--bg); }
+.g-p { position: absolute; top: 0; bottom: 0; border-radius: 12px; background: rgba(255,255,255,.08); padding: 0 14px; display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; transition: background .2s, color .2s, transform .25s var(--ease); }
+.g-p.past { background: rgba(255,255,255,.03); color: rgba(255,255,255,.55); }
+.g-p.now { background: rgba(255,255,255,.14); }
+.g-p.focus { background: var(--ink); color: #111; transform: scale(1.03); box-shadow: 0 10px 26px rgba(0,0,0,.5); z-index: 3; }
 .g-p span { overflow: hidden; text-overflow: ellipsis; }
-.g-now { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--live); z-index: 2; }
-.g-head { display: flex; gap: 12px; height: 30px; font-size: 18px; color: var(--ink-3); }
-.g-day { width: 260px; flex: none; font-weight: 700; color: var(--ink); }
-.g-times { position: relative; flex: 1; }
-.g-times span { position: absolute; }
-.g-clip { position: absolute; left: 0; right: 0; top: 30px; bottom: 0; overflow: hidden; }
-.g-body { transition: transform .2s var(--ease); }
+.g-now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--live); z-index: 2; }
+.g-head { display: flex; gap: 8px; height: 38px; font-size: 15px; color: var(--ink-3); align-items: center; }
+.g-day { width: 210px; flex: none; }
+.g-day.pill { padding: 6px 14px; font-size: 16px; color: var(--ink); background: rgba(255,255,255,.1); text-align: left; }
+.g-times { position: relative; flex: 1; height: 100%; }
+.g-times span { position: absolute; top: 50%; transform: translateY(-50%); }
+.g-clip { position: absolute; left: 0; right: 0; top: 44px; bottom: 0; overflow: hidden; }
+.g-body { transition: transform .25s var(--ease); }
 .g-p.none { color: var(--ink-3); font-weight: 500; }
-.g-p.none.focus { color: var(--bg); }
-.g-info { position: absolute; left: 80px; right: 80px; top: 200px; height: 220px; border-radius: 16px; background: var(--panel); padding: 26px 36px; display: flex; flex-direction: column; gap: 8px; }
+.g-p.none.focus { color: #111; }
+/* Boven de gids: het gekozen programma groot, zonder kader */
+.g-info { position: absolute; left: 80px; right: 80px; top: 196px; height: 144px; padding: 0; display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+.g-info h2 { font-size: 34px !important; }
+.g-info .desc { font-size: 19px; -webkit-line-clamp: 2; max-width: 1200px; }
+.g-info .kicker { font-size: 15px; }
 
 /* Infopagina: beeld over de volle breedte, tekst linksonder */
 .ihero { position: relative; height: 780px; }
@@ -217,7 +223,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .side .listrow.on { background: rgba(255,255,255,.12); color: var(--ink); }
 .side .listrow.focus { background: var(--ink); color: var(--bg); }
 .main { position: absolute; left: 620px; right: 80px; top: 100px; bottom: 60px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
-.hint { position: absolute; left: 80px; right: 80px; bottom: 30px; font-size: 20px; color: var(--ink-3); display: flex; gap: 30px; }
+.hint { position: absolute; left: 80px; right: 80px; bottom: 20px; font-size: 16px; color: var(--ink-3); display: flex; gap: 30px; }
 .kbd { display: inline-block; padding: 1px 10px; border: 1px solid rgba(255,255,255,.4); border-radius: 6px; color: var(--ink); margin-right: 6px; font-size: 18px; }
 .empty { padding: 0 80px; font-size: 22px; color: var(--ink-3); }
 .spinner { padding: 0 80px; font-size: 22px; color: var(--ink-3); }
@@ -258,3 +264,4 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .svchead { display: flex; align-items: center; gap: 22px; padding: 70px 80px 10px; }
 .svchead .sv { width: 72px; height: 72px; border-radius: 18px; background: var(--card) center/cover no-repeat; flex: none; }
 .svchead h1 { font-size: 56px; margin-right: 20px; }
+.g-day.pill.focus { background: var(--ink); color: #111; }
