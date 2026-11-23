@@ -15,6 +15,7 @@ import * as subs from './subs.js';
 import * as profiles from './profiles.js';
 import { pipe, target } from './proxy.js';
 import { pool } from './http.js';
+import { status } from './status.js';
 
 const PORT = +process.env.PORT || 8484;
 const WEB = path.resolve(new URL('../../shared/web', import.meta.url).pathname);
@@ -48,14 +49,35 @@ const on = (method, pattern, level, fn) => routes.push({ method, re: new RegExp(
 on('GET', '/api/health', 'open', () => ({ ok: true, name: 'tv-serverr', version: VERSION }));
 on('POST', '/api/pair', 'open', async ({ req, b }) => ({ key: auth.pair(b.code, b.name, ipOf(req)) }));
 
-// Beheer (pincode)
-on('GET', '/api/admin/settings', 'admin', () => ({ settings: publicSettings(), epg: epg.epgStatus(), devices: auth.devices(), profiles: profiles.list() }));
-on('POST', '/api/admin/settings', 'admin', ({ b }) => { setSettings(b); uncache(''); return { ok: true }; });
-on('POST', '/api/admin/code', 'admin', () => ({ code: auth.newCode(), minutes: 10 }));
-on('DELETE', '/api/admin/devices/:id', 'admin', ({ p }) => { auth.unpair(p.id); return { ok: true }; });
-on('POST', '/api/admin/profiles', 'admin', ({ b }) => { profiles.save(b); return profiles.list(); });
-on('DELETE', '/api/admin/profiles/:id', 'admin', ({ p }) => { profiles.remove(p.id); return profiles.list(); });
+// Inloggen beheer
+const COOKIE = (v, age) => `tvs=${v}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}`;
+on('GET', '/api/session', 'open', ({ req }) => { const u = auth.userFor(req); return { user: u ? u.name : null, setup: !auth.hasUsers() }; });
+on('POST', '/api/setup', 'open', ({ req, res, b }) => {
+  const s = auth.setup(b.pin, b.name, b.password, ipOf(req)); auth.audit(s.name, 'eerste account aangemaakt');
+  res.setHeader('Set-Cookie', COOKIE(s.token, s.maxAge)); return { user: s.name };
+});
+on('POST', '/api/login', 'open', ({ req, res, b }) => {
+  const s = auth.login(b.name, b.password, ipOf(req)); res.setHeader('Set-Cookie', COOKIE(s.token, s.maxAge)); return { user: s.name };
+});
+on('POST', '/api/logout', 'open', ({ req, res }) => { auth.logout(req); res.setHeader('Set-Cookie', COOKIE('', 0)); return { ok: true }; });
+
+// Beheer (ingelogd)
+on('GET', '/api/admin/settings', 'admin', async () => ({ settings: publicSettings(), epg: epg.epgStatus(), devices: auth.devices(), profiles: profiles.list(),
+  users: auth.users(), log: auth.auditLog(), status: await status() }));
+on('POST', '/api/admin/settings', 'admin', ({ b, me }) => { setSettings(b); uncache(''); auth.audit(me.name, 'koppelingen aangepast: ' + Object.keys(b).join(', ')); return { ok: true }; });
+on('POST', '/api/admin/code', 'admin', ({ me }) => { auth.audit(me.name, 'koppelcode aangevraagd'); return { code: auth.newCode(), minutes: 10 }; });
+on('DELETE', '/api/admin/devices/:id', 'admin', ({ p, me }) => { auth.unpair(p.id); auth.audit(me.name, 'tv ontkoppeld #' + p.id); return { ok: true }; });
+on('POST', '/api/admin/profiles', 'admin', ({ b, me }) => { profiles.save(b); auth.audit(me.name, 'profiel opgeslagen: ' + b.name); return profiles.list(); });
+on('DELETE', '/api/admin/profiles/:id', 'admin', ({ p, me }) => { profiles.remove(p.id); auth.audit(me.name, 'profiel verwijderd #' + p.id); return profiles.list(); });
+on('POST', '/api/admin/users', 'admin', ({ b, me }) => { auth.addUser(b.name, b.password); auth.audit(me.name, 'beheerder toegevoegd: ' + b.name); return auth.users(); });
+on('DELETE', '/api/admin/users/:id', 'admin', ({ p, me }) => { auth.removeUser(p.id, me); auth.audit(me.name, 'beheerder verwijderd #' + p.id); return auth.users(); });
+on('POST', '/api/admin/password', 'admin', ({ b, me }) => { auth.changePw(me, b.old, b.password); auth.audit(me.name, 'eigen wachtwoord gewijzigd'); return { ok: true }; });
 on('POST', '/api/admin/epg', 'admin', () => { epg.refresh(); return { started: true }; });
+on('POST', '/api/admin/channels', 'admin', async ({ me }) => {
+  const { channels } = await xtream.channels(true); uncache('vod:'); epg.refresh(); status(true);
+  auth.audit(me.name, 'zenders ververst'); return { channels: channels.length };
+});
+on('GET', '/api/admin/status', 'admin', () => status(true));
 
 // Gekoppelde tv's
 on('GET', '/api/whoami', 'device', ({ dev }) => ({ device: dev.name, version: VERSION }));
@@ -67,6 +89,23 @@ on('GET', '/api/live/nownext', 'device', async ({ q }) => {
   const ids = new Set((q.get('ids') || '').split(',').map(Number));
   const { channels } = await xtream.channels();
   return xtream.nowNext(channels.filter(c => ids.has(c.id)).slice(0, 60), epg.nowNextFor);
+});
+on('GET', '/api/status', 'device', async () => { const st = await status(); return Object.fromEntries(Object.entries(st.sources).map(([k, v]) => [k, v.ok])); });
+on('GET', '/api/live/grid', 'device', async ({ q }) => {
+  const ids = new Set((q.get('ids') || '').split(',').map(Number));
+  const from = +q.get('from') || Date.now() - 3600e3, to = +q.get('to') || from + 4 * 3600e3;
+  const { channels } = await xtream.channels();
+  const list = channels.filter(c => ids.has(c.id) && c.epgId);
+  const byEpg = epg.grid([...new Set(list.map(c => c.epgId))], from, Math.min(to, from + 26 * 3600e3));
+  return Object.fromEntries(list.map(c => [c.id, byEpg[c.epgId] || []]));
+});
+on('GET', '/api/live/guide', 'device', async ({ q }) => {
+  const ids = new Set((q.get('ids') || '').split(',').map(Number));
+  const { channels } = await xtream.channels();
+  const chs = channels.filter(c => ids.has(c.id)).slice(0, 100);
+  const from = +q.get('from') || Date.now() - 3600e3, to = Math.min(+q.get('to') || from + 6 * 3600e3, from + 26 * 3600e3);
+  const g = epg.grid([...new Set(chs.map(c => c.epgId).filter(Boolean))], from, to);
+  return chs.map(c => ({ id: c.id, archive: c.archive, programmes: g[c.epgId] || [] }));
 });
 on('GET', '/api/live/url/:id', 'device', ({ p }) => ({ url: auth.sign(`/stream/live/${+p.id}`) }));
 
@@ -137,13 +176,18 @@ const server = http.createServer(async (req, res) => {
       if (!r) return send(res, 404, { error: 'Onbekend' });
       let dev = null;
       if (r.level === 'device') { dev = auth.deviceFor(req.headers['x-thuis-key'], ip); if (!dev) return send(res, 401, { error: 'Deze tv is niet gekoppeld' }); }
-      if (r.level === 'admin' && !auth.adminOk(req.headers['x-thuis-pin'], ip)) return send(res, 401, { error: 'Pincode onjuist' });
+      let me = null;
+      if (r.level === 'admin') {
+        me = auth.userFor(req); if (!me) return send(res, 401, { error: 'Niet ingelogd' });
+        // Extra header: een andere website kan die niet meesturen zonder dat de browser eerst toestemming vraagt.
+        if (req.method !== 'GET' && req.headers['x-thuis'] !== '1') return send(res, 403, { error: 'Geweigerd' });
+      }
       const b = ['POST', 'PUT'].includes(req.method) ? await body(req) : {};
-      const out = await r.fn({ req, res, dev, b, q: u.searchParams, p: r.re.exec(u.pathname).groups || {} });
+      const out = await r.fn({ req, res, dev, me, b, q: u.searchParams, p: r.re.exec(u.pathname).groups || {} });
       if (!res.headersSent) send(res, 200, out ?? {});
       return;
     }
-    if (u.pathname === '/beheer' || u.pathname === '/') { if (file(res, PUBLIC, 'beheer.html')) return; }
+    if (u.pathname === '/beheer' || u.pathname === '/') { res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"); if (file(res, PUBLIC, 'beheer.html')) return; }
     if (u.pathname.startsWith('/app/') && file(res, WEB, u.pathname.slice(5) || 'index.html')) return;
     send(res, 404, 'Niet gevonden', 'text/plain; charset=utf-8');
   } catch (e) {

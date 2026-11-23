@@ -1,54 +1,107 @@
 <!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>tv-serverr beheer</title>
 <style>
-:root{--bg:#0f1418;--card:#182027;--line:#26313a;--txt:#e8eef2;--dim:#93a3ae;--acc:#3DDBB0}
+:root{--bg:#0f1418;--card:#182027;--line:#26313a;--txt:#e8eef2;--dim:#93a3ae;--acc:#3DDBB0;--acctxt:#05221a;--in:#0c1115;--ok:#3DDBB0;--bad:#ff8a80}
+:root[data-theme=light]{--bg:#f3f5f7;--card:#fff;--line:#dde3e8;--txt:#14202a;--dim:#5d6c78;--acc:#13997a;--acctxt:#fff;--in:#fff;--ok:#13997a;--bad:#c62828}
+@media (prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f3f5f7;--card:#fff;--line:#dde3e8;--txt:#14202a;--dim:#5d6c78;--acc:#13997a;--acctxt:#fff;--in:#fff;--ok:#13997a;--bad:#c62828}}
 *{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--txt)}
-main{max-width:760px;margin:0 auto;padding:24px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 12px}
+main{max-width:780px;margin:0 auto;padding:24px}h1{font-size:22px;margin:0}h2{font-size:16px;margin:0 0 12px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin:16px 0}
-label{display:block;color:var(--dim);font-size:13px;margin:10px 0 4px}input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:#0c1115;color:var(--txt);font:inherit}
-button{background:var(--acc);color:#05221a;border:0;border-radius:8px;padding:9px 16px;font:600 14px system-ui;cursor:pointer;margin-top:12px}
-button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line)}
+label{display:block;color:var(--dim);font-size:13px;margin:10px 0 4px}
+input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--in);color:var(--txt);font:inherit}
+input[type=checkbox]{width:auto}
+button{background:var(--acc);color:var(--acctxt);border:0;border-radius:8px;padding:9px 16px;font:600 14px system-ui;cursor:pointer;margin-top:12px}
+button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);margin-top:0}
 .row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}
 .dim{color:var(--dim);font-size:13px}.code{font:700 40px ui-monospace,monospace;letter-spacing:6px;color:var(--acc)}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.err{color:#ff8a80}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.err{color:var(--bad);min-height:1.5em}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px}.ok{background:var(--ok)}.bad{background:var(--bad)}
+.tools{display:flex;gap:8px;align-items:center}
+@media (max-width:600px){.grid{grid-template-columns:1fr}}
 </style></head><body><main>
-<h1>tv-serverr</h1><div class="dim" id="ver"></div>
-<div class="card" id="login"><h2>Inloggen</h2><label>Pincode</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password">
-<button onclick="enter()">Openen</button><div class="err" id="lerr"></div></div>
+<header><div><h1>tv-serverr</h1><div class="dim" id="ver"></div></div>
+<div class="tools"><button class="ghost" id="theme" title="Dag of nacht"></button><button class="ghost" id="out" hidden>Uitloggen</button></div></header>
+
+<div class="card" id="login" hidden><h2>Inloggen</h2>
+ <label>Naam</label><input id="lname" autocomplete="username">
+ <label>Wachtwoord</label><input id="lpw" type="password" autocomplete="current-password">
+ <button id="lgo">Inloggen</button><div class="err" id="lerr"></div></div>
+
+<div class="card" id="setup" hidden><h2>Eerste account aanmaken</h2>
+ <p class="dim">Er is nog geen beheerder. Maak je eigen account aan. Ter controle is de pincode uit de installatie nodig; daarna gebruik je alleen nog je naam en wachtwoord.</p>
+ <label>Pincode uit de installatie</label><input id="spin" type="password" inputmode="numeric" autocomplete="off">
+ <label>Jouw naam</label><input id="sname" autocomplete="username">
+ <label>Wachtwoord (minstens 8 tekens)</label><input id="spw" type="password" autocomplete="new-password">
+ <button id="sgo">Account aanmaken</button><div class="err" id="serr"></div></div>
+
 <div id="app" hidden>
+ <div class="card"><h2>Bronnen</h2><div id="status"></div>
+  <button class="ghost" id="chan" style="margin-top:12px">Zenders en gids nu verversen</button> <span class="dim" id="chanmsg"></span>
+  <p class="dim">Nieuwe zenders in Dispatcharr komen vanzelf binnen 6 uur op alle tv's. Met deze knop meteen.</p></div>
  <div class="card"><h2>Tv koppelen</h2><p class="dim">Vraag een code aan en typ die op de tv in. De code is 10 minuten geldig.</p>
-  <div class="code" id="code"></div><button onclick="code()">Nieuwe code</button></div>
+  <div class="code" id="code"></div><button id="newcode">Nieuwe code</button></div>
  <div class="card"><h2>Gekoppelde tv's</h2><div id="devices"></div></div>
  <div class="card"><h2>Profielen</h2><div id="profiles"></div>
   <div class="grid"><div><label>Naam</label><input id="pname"></div><div><label>Kleur</label><input id="pcolor" value="#3DDBB0"></div></div>
-  <label><input type="checkbox" id="padmin" style="width:auto"> Mag alles verwijderen en goedkeuren</label><button onclick="addProfile()">Profiel toevoegen</button></div>
+  <label><input type="checkbox" id="padmin"> Mag alles verwijderen en goedkeuren</label><button id="padd">Profiel toevoegen</button></div>
  <div class="card"><h2>Koppelingen</h2><p class="dim">Velden met •••• zijn ingesteld. Laat leeg om niets te veranderen.</p><div class="grid" id="settings"></div>
-  <button onclick="save()">Opslaan</button> <span class="dim" id="saved"></span></div>
- <div class="card"><h2>Gids</h2><div class="dim" id="epg"></div><button class="ghost" onclick="api('POST','/api/admin/epg').then(()=>setTimeout(load,3000))">Nu verversen</button></div>
+  <button id="save">Opslaan</button> <span class="dim" id="saved"></span></div>
+ <div class="card"><h2>Gids</h2><div class="dim" id="epg"></div></div>
+ <div class="card"><h2>Beheerders</h2><div id="users"></div>
+  <div class="grid"><div><label>Naam</label><input id="uname" autocomplete="off"></div><div><label>Wachtwoord</label><input id="upw" type="password" autocomplete="new-password"></div></div>
+  <button id="uadd">Beheerder toevoegen</button><div class="err" id="uerr"></div>
+  <h2 style="margin-top:18px">Eigen wachtwoord wijzigen</h2>
+  <div class="grid"><div><label>Huidig</label><input id="pwold" type="password" autocomplete="current-password"></div><div><label>Nieuw</label><input id="pwnew" type="password" autocomplete="new-password"></div></div>
+  <button id="pwgo">Wijzigen</button><div class="err" id="pwerr"></div></div>
+ <div class="card"><h2>Logboek</h2><div id="log"></div></div>
 </div>
 <script>
-const F={server:'Dispatcharr-adres',user:'Dispatcharr-gebruiker',pass:'Dispatcharr-wachtwoord',format:'Streamformaat (ts/m3u8)',tmdbToken:'TMDB-sleutel',
+const $=id=>document.getElementById(id);
+const F={server:'Dispatcharr-adres',user:'Dispatcharr-gebruiker',pass:'Dispatcharr-wachtwoord (XC)',format:'Streamformaat (ts/m3u8)',tmdbToken:'TMDB-sleutel',
 plexUrl:'Plex-adres',plexToken:'Plex-token',osKey:'OpenSubtitles-sleutel',osUser:'OpenSubtitles-gebruiker',osPass:'OpenSubtitles-wachtwoord',
 radarrUrl:'Radarr-adres',radarrKey:'Radarr-sleutel',sonarrUrl:'Sonarr-adres',sonarrKey:'Sonarr-sleutel',categories:'Zenderregels (url)',haWebhook:'HA-webhook'};
 const SECRET=['pass','tmdbToken','plexToken','osKey','osPass','radarrKey','sonarrKey'];
-let PIN=sessionStorage.getItem('pin')||'';
-const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-async function api(m,u,b){const r=await fetch(u,{method:m,headers:{'X-Thuis-Pin':PIN,'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
- const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
+const NAMES={dispatcharr:'Dispatcharr (live tv, films, series)',plex:'Plex',radarr:'Radarr',sonarr:'Sonarr',tmdb:'TMDB (voorstellen, info)'};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const when=t=>t?new Date(t).toLocaleString('nl-NL',{dateStyle:'short',timeStyle:'short'}):'nooit';
-async function enter(){PIN=document.getElementById('pin').value;try{await load();sessionStorage.setItem('pin',PIN)}catch(e){document.getElementById('lerr').textContent=e.message}}
-async function load(){const d=await api('GET','/api/admin/settings');login.hidden=true;app.hidden=false;
- devices.innerHTML=d.devices.map(x=>`<div class="row"><div>${esc(x.name)}<div class="dim">laatst ${when(x.last_seen)} · ${esc(x.last_ip)}</div></div><button class="ghost" onclick="unpair(${x.id})">Ontkoppelen</button></div>`).join('')||'<div class="dim">Nog geen tv\'s.</div>';
- profiles.innerHTML=d.profiles.map(p=>`<div class="row"><div><span style="color:${esc(p.color)}">●</span> ${esc(p.name)} ${p.admin?'<span class="dim">· beheer</span>':''}</div>${p.id>1?`<button class="ghost" onclick="delProfile(${p.id})">Verwijderen</button>`:''}</div>`).join('');
- settings.innerHTML=Object.keys(F).map(k=>`<div><label>${F[k]}</label><input data-k="${k}" ${SECRET.includes(k)?'type="password" autocomplete="off" placeholder="'+(d.settings[k]?'••••':'')+'"':'value="'+esc(d.settings[k])+'"'}></div>`).join('');
- const e=d.epg;epg.textContent=e.at?`${e.count} programma's, bijgewerkt ${when(e.at)}`+(e.error?` · fout: ${e.error}`:''):(e.error?'Fout: '+e.error:'Nog niet geladen');
- fetch('/api/health').then(r=>r.json()).then(h=>ver.textContent='versie '+h.version)}
-async function code(){const c=await api('POST','/api/admin/code');document.getElementById('code').textContent=c.code}
-async function unpair(id){if(confirm('Deze tv ontkoppelen?')){await api('DELETE','/api/admin/devices/'+id);load()}}
-async function addProfile(){if(!pname.value.trim())return;await api('POST','/api/admin/profiles',{name:pname.value.trim(),color:pcolor.value,admin:padmin.checked});pname.value='';load()}
-async function delProfile(id){if(confirm('Profiel en kijkstand verwijderen?')){await api('DELETE','/api/admin/profiles/'+id);load()}}
-async function save(){const o={};document.querySelectorAll('#settings input').forEach(i=>{if(SECRET.includes(i.dataset.k)){if(i.value)o[i.dataset.k]=i.value}else o[i.dataset.k]=i.value});
- await api('POST','/api/admin/settings',o);saved.textContent='Opgeslagen';setTimeout(()=>saved.textContent='',2000);load()}
-pin.addEventListener('keydown',e=>{if(e.key==='Enter')enter()});
-if(PIN)load().catch(()=>{});
+async function api(m,u,b){const r=await fetch(u,{method:m,credentials:'same-origin',headers:{'X-Thuis':'1','Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+ const j=await r.json().catch(()=>({}));if(r.status===401&&!u.match(/login|setup|password/)){show('login');throw new Error('Niet ingelogd')}if(!r.ok)throw new Error(j.error||r.status);return j}
+function show(w){['login','setup','app'].forEach(x=>$(x).hidden=x!==w);$('out').hidden=w!=='app';if(w==='login')$('lname').focus()}
+const err=(id,f)=>async()=>{$(id).textContent='';try{await f()}catch(e){$(id).textContent=e.message}};
+
+// Dag/nacht: standaard zoals de computer, anders je eigen keuze (onthouden)
+function theme(t){if(t)localStorage.setItem('theme',t);const v=localStorage.getItem('theme');if(v)document.documentElement.dataset.theme=v;else delete document.documentElement.dataset.theme;
+ const dark=v?v==='dark':!matchMedia('(prefers-color-scheme: light)').matches;$('theme').textContent=dark?'☀ Dag':'☾ Nacht'}
+$('theme').onclick=()=>{const dark=document.documentElement.dataset.theme?document.documentElement.dataset.theme==='dark':!matchMedia('(prefers-color-scheme: light)').matches;theme(dark?'light':'dark')};
+theme();
+
+async function start(){fetch('/api/health').then(r=>r.json()).then(h=>$('ver').textContent='versie '+h.version);
+ const s=await api('GET','/api/session');if(s.user)return load();show(s.setup?'setup':'login')}
+$('lgo').onclick=err('lerr',async()=>{await api('POST','/api/login',{name:$('lname').value,password:$('lpw').value});$('lpw').value='';load()});
+$('lpw').onkeydown=e=>{if(e.key==='Enter')$('lgo').click()};
+$('sgo').onclick=err('serr',async()=>{await api('POST','/api/setup',{pin:$('spin').value,name:$('sname').value,password:$('spw').value});load()});
+$('out').onclick=async()=>{await api('POST','/api/logout');show('login')};
+
+async function load(){const d=await api('GET','/api/admin/settings');show('app');
+ $('status').innerHTML=Object.entries(d.status.sources).map(([k,v])=>`<div class="row"><div><span class="dot ${v.ok?'ok':'bad'}"></span>${esc(NAMES[k]||k)}</div><div class="dim">${v.ok?'bereikbaar':esc(v.error)}</div></div>`).join('');
+ $('devices').innerHTML=d.devices.map(x=>`<div class="row"><div>${esc(x.name)}<div class="dim">laatst ${when(x.last_seen)} · ${esc(x.last_ip)}</div></div><button class="ghost" data-unpair="${x.id}">Ontkoppelen</button></div>`).join('')||'<div class="dim">Nog geen tv\'s.</div>';
+ $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div><span class="dot" style="background:${esc(p.color)}"></span>${esc(p.name)} ${p.admin?'<span class="dim">· mag alles</span>':''}</div>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div>`).join('');
+ $('settings').innerHTML=Object.keys(F).map(k=>`<div><label>${F[k]}</label><input data-k="${k}" ${SECRET.includes(k)?'type="password" autocomplete="off" placeholder="'+(d.settings[k]?'••••':'')+'"':'value="'+esc(d.settings[k])+'"'}></div>`).join('');
+ const e=d.epg;$('epg').textContent=e.at?`${e.count} programma's bewaard`+(e.oldest?`, terug tot ${when(e.oldest)}`:'')+`. Laatst bijgewerkt ${when(e.at)}.`+(e.error?` Laatste poging mislukt: ${e.error}`:''):(e.error?'Fout: '+e.error:'Nog niet geladen');
+ $('users').innerHTML=d.users.map(u=>`<div class="row"><div>${esc(u.name)}<div class="dim">laatst ingelogd ${when(u.last_login)}</div></div><button class="ghost" data-deluser="${u.id}">Verwijderen</button></div>`).join('');
+ $('log').innerHTML=d.log.map(l=>`<div class="row"><div>${esc(l.what)}</div><div class="dim">${esc(l.who)} · ${when(l.at)}</div></div>`).join('')||'<div class="dim">Nog niets.</div>'}
+
+document.addEventListener('click',async e=>{const t=e.target.dataset;
+ if(t.unpair&&confirm('Deze tv ontkoppelen?')){await api('DELETE','/api/admin/devices/'+t.unpair);load()}
+ if(t.delprofile&&confirm('Profiel en kijkstand verwijderen?')){await api('DELETE','/api/admin/profiles/'+t.delprofile);load()}
+ if(t.deluser&&confirm('Deze beheerder verwijderen?')){try{await api('DELETE','/api/admin/users/'+t.deluser);load()}catch(x){alert(x.message)}}});
+$('newcode').onclick=async()=>{$('code').textContent=(await api('POST','/api/admin/code')).code;load()};
+$('padd').onclick=async()=>{if(!$('pname').value.trim())return;await api('POST','/api/admin/profiles',{name:$('pname').value.trim(),color:$('pcolor').value,admin:$('padmin').checked});$('pname').value='';load()};
+$('save').onclick=async()=>{const o={};document.querySelectorAll('#settings input').forEach(i=>{if(SECRET.includes(i.dataset.k)){if(i.value)o[i.dataset.k]=i.value}else o[i.dataset.k]=i.value});
+ await api('POST','/api/admin/settings',o);$('saved').textContent='Opgeslagen';setTimeout(()=>$('saved').textContent='',2000);load()};
+$('chan').onclick=async()=>{$('chanmsg').textContent='Bezig...';try{const r=await api('POST','/api/admin/channels');$('chanmsg').textContent=r.channels+' zenders. De gids volgt binnen een paar minuten.';setTimeout(load,4000)}catch(x){$('chanmsg').textContent=x.message}};
+$('uadd').onclick=err('uerr',async()=>{await api('POST','/api/admin/users',{name:$('uname').value,password:$('upw').value});$('uname').value=$('upw').value='';load()});
+$('pwgo').onclick=err('pwerr',async()=>{await api('POST','/api/admin/password',{old:$('pwold').value,password:$('pwnew').value});$('pwold').value=$('pwnew').value='';$('pwerr').textContent='Gewijzigd'});
+start();
 </script></main></body></html>

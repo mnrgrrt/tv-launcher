@@ -15,29 +15,44 @@ function t(s) {
   return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) - tz * 60000;
 }
 
+let retries = 0, retryTimer = null;
+const KEEP_DAYS = 8;   // een week terug, plus een dag marge
+
 export async function refresh() {
   if (!configured()) return;
+  clearTimeout(retryTimer);
   try {
     const xml = await http(`${S('server')}/xmltv.php?username=${enc(S('user'))}&password=${enc(S('pass'))}`, { timeout: 300000, what: 'gids' });
-    const from = Date.now() - 3 * 86400e3, until = Date.now() + 3 * 86400e3;
+    const from = Date.now() - KEEP_DAYS * 86400e3, until = Date.now() + 7 * 86400e3;
     const re = /<programme\b([^>]*)>([\s\S]*?)<\/programme>/g;
     const attr = (a, n) => { const m = new RegExp(n + '="([^"]*)"').exec(a); return m ? m[1] : ''; };
     const tag = (b, n) => { const m = new RegExp(`<${n}\\b[^>]*>([\\s\\S]*?)</${n}>`).exec(b); return m ? unesc(m[1]) : ''; };
-    const ins = db.prepare('INSERT INTO programmes (channel, start, stop, title, descr, cat, plain) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    db.exec('BEGIN'); db.exec('DELETE FROM programmes');
-    let m, n = 0;
+    const rows = [], first = new Map();
+    let m;
     while ((m = re.exec(xml))) {
-      const start = t(attr(m[1], 'start')), stop = t(attr(m[1], 'stop'));
-      if (stop < from || start > until) continue;
+      const start = t(attr(m[1], 'start')), stop = t(attr(m[1], 'stop')), ch = attr(m[1], 'channel');
+      if (!ch || stop < from || start > until) continue;
       const title = tag(m[2], 'title'), desc = tag(m[2], 'desc'), cat = [...m[2].matchAll(/<category\b[^>]*>([\s\S]*?)<\/category>/g)].map(x => unesc(x[1])).join(', ');
-      ins.run(attr(m[1], 'channel'), start, stop, title, desc, cat, plain(`${title} ${cat} ${desc}`));
-      n++;
+      rows.push([ch, start, stop, title, desc, cat, plain(`${title} ${cat} ${desc}`)]);
+      if (!first.has(ch) || start < first.get(ch)) first.set(ch, start);
     }
+    if (!rows.length) throw new Error('gids is leeg');
+    // Oude programma's bewaren: per zender alleen vervangen vanaf het eerste programma in de nieuwe gids.
+    const del = db.prepare('DELETE FROM programmes WHERE channel = ? AND start >= ?');
+    const ins = db.prepare('INSERT INTO programmes (channel, start, stop, title, descr, cat, plain) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    db.exec('BEGIN');
+    for (const [ch, start] of first) del.run(ch, start);
+    for (const r of rows) ins.run(...r);
+    db.prepare('DELETE FROM programmes WHERE stop < ?').run(from);
     db.exec('COMMIT');
-    status = { at: Date.now(), count: n, error: '' };
+    const total = db.prepare('SELECT COUNT(*) n, MIN(start) oldest FROM programmes').get();
+    status = { at: Date.now(), count: total.n, oldest: total.oldest, fresh: rows.length, error: '' };
+    retries = 0;
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
-    status = { ...status, error: e.message };
+    status = { ...status, error: e.message, failedAt: Date.now() };
+    // Bijvoorbeeld net na een herstart, als Dispatcharr nog niet klaar is: over 2 minuten opnieuw.
+    if (retries++ < 15) retryTimer = setTimeout(refresh, 120e3);
   }
 }
 
@@ -77,8 +92,8 @@ export async function searchGuide(q) {
   const byEpg = new Map(); all.forEach(ch => { if (ch.epgId && !byEpg.has(ch.epgId)) byEpg.set(ch.epgId, ch); });
   const where = words.map(() => 'plain LIKE ?').join(' OR ');
   const now = Date.now();
-  const rows = db.prepare(`SELECT channel, start, stop, title, descr, cat FROM programmes WHERE (${where}) AND stop > ? AND start < ? ORDER BY start LIMIT 400`)
-    .all(...words.map(w => `%${w}%`), now - 3 * 86400e3, now + 3 * 86400e3);
+  const rows = db.prepare(`SELECT channel, start, stop, title, descr, cat FROM programmes WHERE (${where}) AND stop > ? AND start < ? ORDER BY start LIMIT 600`)
+    .all(...words.map(w => `%${w}%`), now - 7 * 86400e3, now + 7 * 86400e3);
   const live = [], later = [], past = [];
   for (const r of rows) {
     const ch = byEpg.get(r.channel); if (!ch) continue;
@@ -93,4 +108,13 @@ export async function searchGuide(q) {
   const chans = all.filter(ch => plain(ch.name).includes(p)).slice(0, 30)
     .map(ch => ({ channel: ch.id, num: ch.num, name: ch.name, icon: ch.icon }));
   return { channels: chans, live: live.slice(0, 40), later: later.slice(0, 40), past: past.slice(0, 40) };
+}
+
+/** Gids voor een rij zenders in een tijdvak (voor het rooster in de app). */
+export function grid(epgIds, from, to) {
+  if (!epgIds.length) return {};
+  const q = db.prepare(`SELECT channel, start, stop, title, descr, cat FROM programmes WHERE channel IN (${epgIds.map(() => '?').join(',')}) AND stop > ? AND start < ? ORDER BY start`);
+  const out = {};
+  for (const r of q.all(...epgIds, from, to)) (out[r.channel] = out[r.channel] || []).push({ title: r.title, desc: r.descr, cat: r.cat, start: r.start, end: r.stop });
+  return out;
 }

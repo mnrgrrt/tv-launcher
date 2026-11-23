@@ -1,0 +1,11 @@
+[Unit]
+Description=Herstart Dispatcharr als die na een gluetun-herstart niet meer antwoordt
+After=docker.service
+Requires=docker.service
+
+[Service]
+ExecStart=/usr/local/bin/dispatcharr-waakhond.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
