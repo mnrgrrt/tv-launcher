@@ -9,6 +9,8 @@ export async function http(url, opt = {}) {
     return text;
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('time-out' + (opt.what ? ' bij ' + opt.what : ''));
+    // "fetch failed" zegt niets: geef de echte oorzaak (bv. ECONNREFUSED, ENOTFOUND) en het adres zonder wachtwoord.
+    if (e.cause) throw new Error(`${opt.what || 'verbinding'} niet bereikbaar (${e.cause.code || e.cause.message}) op ${url.replace(/\?.*$/, '').replace(/\/\/[^/]*@/, '//')}`);
     throw e;
   } finally { clearTimeout(t); }
 }
