@@ -52,6 +52,9 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
     // ---------- apps en apparaat ----------
     @JavascriptInterface fun getApps(id: Int) = async(id) { AppList.load(act).toString() }
     @JavascriptInterface fun launch(pkg: String) { act.runOnUiThread { AppList.launch(act, pkg) } }
+    /** HDMI-ingangen waar iets op zit, en ernaar schakelen. */
+    @JavascriptInterface fun getInputs(): String = Inputs.load(act).toString()
+    @JavascriptInterface fun openInput(id: String) { act.runOnUiThread { try { Inputs.open(act, id) } catch (_: Exception) {} } }
 
     // ---------- schermbeveiliging ----------
     @JavascriptInterface fun saverGet(): String = SaverPrefs.toJson(act)

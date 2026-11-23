@@ -88,9 +88,13 @@
     var inner = el.closest('.scroll-inner');
     if (inner) {
       var box = (el.closest('.section') || el).getBoundingClientRect(), y = parseFloat(inner.dataset.y || 0), T = box.top / SCALE, B = box.bottom / SCALE;
-      if (B > H - 20) y -= B - (H - 20); else if (T < 130) y += 130 - T;
+      // Onder het eerste (gevouwen) blok: de rij gaat netjes bovenaan staan, zodat er niet een half leeg scherm tussen zit.
+      var fd = inner.querySelector('.fold'), past = fd && !el.closest('.fold') && (fd.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (past && (B > H - 20 || T < 130)) y -= T - 130;
+      else if (B > H - 20) y -= B - (H - 20); else if (T < 130) y += 130 - T;
       if (el.closest('.first')) y = 0;
       y = Math.min(0, y); inner.dataset.y = y; inner.style.transform = 'translateY(' + y + 'px)';
+      inner.classList.toggle('down', y < 0);
     }
   }
   function move(dir) {
@@ -235,7 +239,7 @@
       svcBox.appendChild(h('div', { class: 'hd' }, 'Diensten'));
       l.forEach(function (x) {
         var logo = (S.logos && S.logos[x.svc.key]) || x.app.icon || x.app.banner;
-        svcBox.appendChild(F(h('button', { class: 'it' }, '<i class="sv" style="' + bg(logo) + '"></i><span>' + esc(x.svc.name) + '</span>'), function () { closeOverlay(); N && N.launch(x.app.pkg); }, close));
+        svcBox.appendChild(F(h('button', { class: 'it' }, (logo ? '<i class="sv" style="' + bg(logo) + '"></i>' : '<i class="sv hdmi"></i>') + '<span>' + esc(x.svc.name) + '</span>'), function () { closeOverlay(); openService(x); }, close));
       });
     });
     item('apps', 'Alle apps', NAVICON.apps, function () { go('apps'); });
@@ -248,6 +252,19 @@
   setInterval(function () { var t = document.querySelector('.snav .clock'); if (t) t.textContent = clock(Date.now()); checkReminders(); }, 20000);
 
   // ---------- tegels ----------
+  // Rust bij openen: alleen het eerste blok met inhoud staat in beeld, de rest begint onder de rand.
+  // Een zacht pijltje onderin laat zien dat er meer is; het verdwijnt zodra je naar beneden gaat.
+  function fold(slots) {
+    setTimeout(function () {
+      var pick = slots.filter(function (el) { return el.children.length && !el.querySelector('.spinner'); })[0];
+      slots.forEach(function (el) { if (el !== pick) { el.classList.remove('fold'); el.style.minHeight = ''; var m = el.querySelector(':scope > .more'); if (m) m.remove(); } });
+      var inner = pick && pick.closest('.scroll-inner'); if (!inner) return;
+      pick.classList.add('fold'); pick.style.minHeight = '';
+      var top = (pick.getBoundingClientRect().top - inner.getBoundingClientRect().top) / SCALE, start = inner.parentNode.getBoundingClientRect().top / SCALE;
+      pick.style.minHeight = Math.max(0, H - start - top) + 'px';
+      if (!pick.querySelector(':scope > .more')) pick.appendChild(h('div', { class: 'more' }, '<svg viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l9 8 9-8"/></svg>'));
+    }, 0);
+  }
   function rowSection(title, items, sub) {
     if (!items.length) return document.createTextNode('');
     setTimeout(contentReady, 0);
@@ -296,7 +313,7 @@
   }
   // Verder kijken: OK opent een keuzevenster (verder, vanaf begin, bekeken, naar de serie of film, weghalen).
   function contTile(c, after, focus) {
-    return wide({ title: c.title, sub: c.next ? c.sub : [c.sub, c.left > 0 ? 'nog ' + c.left + ' min' : ''].filter(Boolean).join(' · '), img: c.img || c.art || c.thumb, progress: c.progress,
+    return wide({ title: String(c.title || '').replace(/\s*\(\d{4}\)[\s.]*$/, ''), sub: c.next ? c.sub : [c.sub, c.left > 0 ? 'nog ' + c.left + ' min' : ''].filter(Boolean).join(' · '), img: c.img || c.art || c.thumb, progress: c.progress,
       badge: c.next ? 'Volgende' : '', ok: function () { contDialog(c, after); }, focus: focus });
   }
   function contDialog(c, after) {
@@ -319,10 +336,28 @@
     items.forEach(function (it) { bt.appendChild(F(h('button', { class: 'btn' }, esc(it[0])), function () { closeOverlay(); it[1](); })); });
     d.appendChild(bt); openOverlay(d);
   }
-  function appTile(title, app) {
-    var t = wide({ title: title, ok: function () { N.launch(app.pkg); } });
-    t.classList.add('app-tile'); t.querySelector('.thumb').style.backgroundImage = "url('" + (app.banner || app.icon) + "')";
+  function appTile(x, onfocus) {
+    var t = wide({ title: x.svc.name, ok: function () { openService(x); }, focus: onfocus });
+    t.classList.add('app-tile');
+    if (x.app.input) t.classList.add('hdmi');
+    else t.querySelector('.thumb').style.backgroundImage = "url('" + (x.app.banner || x.app.icon) + "')";
     return t;
+  }
+  // Titellogo alleen als het echt een los logo is. Heeft het plaatje een eigen (witte) achtergrond, dan blijft de titel in tekst staan.
+  function logoFor(url, use) {
+    var u = img(url), k = 'logo:' + u;
+    if (k in S) { if (S[k]) use(u); return; }
+    var i = new Image(); i.crossOrigin = 'anonymous';
+    i.onload = function () {
+      var ok = true;
+      try {
+        var c = document.createElement('canvas'), w = c.width = i.naturalWidth, hh = c.height = i.naturalHeight, x = c.getContext('2d'); x.drawImage(i, 0, 0);
+        ok = [[1, 1], [w - 2, 1], [1, hh - 2], [w - 2, hh - 2]].filter(function (p) { return x.getImageData(p[0], p[1], 1, 1).data[3] > 200; }).length < 3;
+      } catch (e) {}
+      S[k] = ok; if (ok) use(u);
+    };
+    i.onerror = function () { S[k] = true; use(u); };   // niet te controleren: dan gewoon tonen
+    i.src = u;
   }
   function loading(text) { return h('div', { class: 'spinner' }, esc(text || 'Laden…')); }
 
@@ -408,15 +443,24 @@
   function playLive(catId, ch) { if (N) N.playLive(catId || 'alle', ch.id, 0, 0, ''); else toast('Live tv kan alleen op de tv'); }
   function playCatchup(ch, p, catId) { if (N) N.playLive(catId || 'alle', ch.id, p.start, p.end, p.title || ''); else toast('Terugkijken kan alleen op de tv'); }
   function loadApps() { if (S.apps) return Promise.resolve(S.apps); if (!N) return Promise.resolve([]); return native('getApps').then(function (t) { S.apps = JSON.parse(t); return S.apps; }); }
-  // Diensten waarvan de app op dit apparaat staat: [{svc, app}]
+  // Diensten waarvan de app op dit apparaat staat, plus HDMI-ingangen waar iets op zit: [{svc, app}]
   function installedServices() {
     return loadApps().then(function (apps) {
-      return S.svcList.map(function (s) {
+      var l = S.svcList.map(function (s) {
         var app = apps.filter(function (a) { return a.pkg.toLowerCase().indexOf(s.match) >= 0 || a.label.toLowerCase().indexOf(s.match) >= 0; })[0];
         return app ? { svc: s, app: app } : null;
       }).filter(Boolean);
+      return l.concat(hdmiInputs());
     });
   }
+  // HDMI: sleutel per poort (blijft gelijk, ook als het apparaat een andere naam doorgeeft).
+  function hdmiInputs() {
+    var l = []; try { l = N && N.getInputs ? JSON.parse(N.getInputs()) : []; } catch (e) {}
+    return l.map(function (i) { return { svc: { key: 'hdmi:' + i.port, name: i.label }, app: { input: i.id } }; });
+  }
+  function openService(x) { if (!N) return; if (x.app.input) N.openInput(x.app.input); else N.launch(x.app.pkg); }
+  // In- of uitgeplugd: het beginscherm opnieuw opbouwen (alleen als je daar bent en niets open hebt).
+  window.__inputs = function () { if (current && current.name === 'home' && !overlay) go('home', current.args, true); };
   // Vaste volgorde: eerst tv kijken (Ziggo, Odido), dan WithLove, dan de rest zoals in services.json.
   var FIRST = ['ziggo', 'odido', 'withlove'];
   // Per profiel: eigen volgorde (appOrder) en verborgen apps (appHide), ingesteld in Mijn profiel › Apps op Thuis.
@@ -526,33 +570,22 @@
   }
 
   // ---------- thuis ----------
-  screens.home = function () {
-    var el = h('div', { class: 'screen' }); el.appendChild(topbar('home'));
-    // De foto loopt door tot achter de bovenbalk.
-    var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
+  // Grote achtergrond bovenaan (Thuis, Films, Series). In rust een beeld uit nextRest(), elke minuut een ander zolang je bovenin staat.
+  // Met focus op een titel: zacht overfaden naar het beeld van die titel, met logo (of titel) en een regel info.
+  function heroBlock(inner, nextRest) {
     var hero = h('div', { class: 'hero first' }, '<div class="bg on"></div><div class="bg"></div><div class="txt uit"><img class="logo" alt=""><h1></h1><div class="meta"></div></div>');
     inner.appendChild(hero);
-    var layers = hero.querySelectorAll('.bg'), txt = hero.querySelector('.txt'), shown = '', heroT = 0;
+    var layers = hero.querySelectorAll('.bg'), txt = hero.querySelector('.txt'), shown = '', heroT = 0, resting = true, restUrl = '';
     function setBg(u) {
-      if (u === shown) return; shown = u;
+      if (!u || u === shown) return; shown = u;
       var nxt = layers[0].classList.contains('on') ? layers[1] : layers[0], old = nxt === layers[0] ? layers[1] : layers[0];
       var pic = new Image(); pic.onload = function () { if (shown !== u) return; nxt.style.backgroundImage = "url('" + pic.src + "')"; nxt.classList.add('on'); old.classList.remove('on'); }; pic.src = img(u);
     }
-    // Rust: een foto uit de vaste set, zonder tekst. Elke keer een andere, en elke minuut een nieuwe zolang je bovenin staat.
-    var photo = null, resting = true;
-    function nextPhoto() {
-      var l = S.photos || []; if (!l.length) return;
-      var cand = l.filter(function (p) { return p !== photo; }); photo = cand[Math.floor(Math.random() * cand.length)] || l[0];
-    }
-    function showPhoto() {
-      clearTimeout(heroT); resting = true; if (!photo) return;
-      setBg(photo.url); txt.classList.add('uit');
-    }
-    (S.photos ? Promise.resolve(S.photos) : get('/api/photos').then(function (l) { S.photos = l; return l; }, function () { return []; }))
-      .then(function () { nextPhoto(); showPhoto(); });
-    clearInterval(S.photoTimer);
-    S.photoTimer = setInterval(function () { if (!document.body.contains(hero)) return clearInterval(S.photoTimer); if (resting && cur && cur.closest('.first')) { nextPhoto(); showPhoto(); } }, 60000);
-    // Een tegel met een mooie achtergrond: zacht overfaden, met het titellogo (of de titel). Anders blijft wat er staat.
+    function rest() { clearTimeout(heroT); resting = true; txt.classList.add('uit'); setBg(restUrl); }
+    function newRest() { nextRest().then(function (u) { restUrl = u || restUrl; if (resting) rest(); }, function () {}); }
+    newRest();
+    clearInterval(S.heroTimer);
+    S.heroTimer = setInterval(function () { if (!document.body.contains(hero)) return clearInterval(S.heroTimer); if (resting && cur && cur.closest('.first')) newRest(); }, 60000);
     function showArt(it) {
       clearTimeout(heroT);
       heroT = setTimeout(function () {
@@ -562,13 +595,29 @@
           if (!a.backdrop) return;
           resting = false;
           setBg(a.backdrop);
-          var lg = hero.querySelector('.logo'); lg.classList.toggle('on', !!a.logo); if (a.logo) lg.src = img(a.logo);
-          hero.querySelector('h1').textContent = a.logo ? '' : it.title || '';
+          var lg = hero.querySelector('.logo'), t1 = hero.querySelector('h1');
+          lg.classList.remove('on'); t1.textContent = it.title || '';
+          if (a.logo) logoFor(a.logo, function (u) { if (shown !== a.backdrop) return; lg.src = u; lg.classList.add('on'); t1.textContent = ''; });
           hero.querySelector('.meta').textContent = it.meta || '';
           txt.classList.remove('uit');
         });
       }, 350);
     }
+    return { showArt: showArt, rest: rest, refresh: newRest };
+  }
+  function artOf(o, kind) { return { tmdb: o.tmdb, type: kind === 'series' ? 'tv' : 'movie', title: o.title, meta: [o.year, rating(o), whereFrom(o) || 'Niet bij jou'].filter(Boolean).join(' · ') }; }
+  screens.home = function () {
+    var el = h('div', { class: 'screen' }); el.appendChild(topbar('home'));
+    // De foto loopt door tot achter de bovenbalk.
+    var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
+    // Rust: een eigen foto (album 1), zonder tekst. Elke keer een andere.
+    var photo = null;
+    var hb = heroBlock(inner, function () {
+      return (S.photos ? Promise.resolve(S.photos) : get('/api/photos').then(function (l) { S.photos = l; return l; }, function () { return []; })).then(function (l) {
+        var cand = l.filter(function (p) { return p !== photo; }); photo = cand[Math.floor(Math.random() * cand.length)] || l[0];
+        return photo ? photo.url : '';
+      });
+    }), showArt = hb.showArt, showPhoto = hb.rest;
     // Thuis: eerst de apps (daar begin je meestal), dan wat nieuw is in je eigen bibliotheek. Verder kijken en live staan in Films, Series en Live tv.
     var slots = {}; ['svc', 'foryou', 'fav', 'later'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.svc.className = 'first';
@@ -576,9 +625,10 @@
     // Nieuw voor jou: nieuw in Plex en IPTV en wat nu populair is; wat bij jouw smaak past bovenaan.
     get('/api/foryou?' + q).then(function (d) {
       var tile = function (o) {
-        return titleTile(o, o.kind, function () { if (o.tmdb) showArt({ tmdb: o.tmdb, type: o.kind === 'series' ? 'tv' : 'movie', title: o.title, meta: [o.year, rating(o), whereFrom(o) || 'Niet bij jou'].filter(Boolean).join(' · ') }); });
+        return titleTile(o, o.kind, function () { if (o.tmdb) showArt(artOf(o, o.kind)); });
       };
       if (d.now.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', d.now.map(tile)));
+      fold([slots.svc, slots.foryou]);
       if (d.later.length) slots.later.appendChild(rowSection('Populair, niet bij jou', d.later.map(tile)));
     }).catch(function (e) { slots.foryou.innerHTML = '<div class="empty">Thuis kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
     // Favoriet genre van dit profiel (Mijn profiel › Voorkeuren): de beste titels die je kunt kijken.
@@ -590,7 +640,8 @@
     // Bovenaan de apps waar je meteen naartoe wilt: tv (Ziggo of Odido) en WithLove eerst, dan de andere diensten.
     installedServices().then(function (l) {
       l = sortServices(l.filter(function (x) { return x.svc.key !== 'plex'; }));
-      if (l.length) slots.svc.appendChild(rowSection('Kijken', l.map(function (x) { return appTile(x.svc.name, x.app); })));
+      if (l.length) slots.svc.appendChild(rowSection('Kijken', l.map(function (x) { return appTile(x, showPhoto); })));
+      fold([slots.svc, slots.foryou]);
     });
     return el;
   };
@@ -605,7 +656,23 @@
     var el = h('div', { class: 'screen' }); el.appendChild(topbar('live'));
     var pills = h('div', { style: 'position:absolute;left:80px;right:80px;top:130px;display:flex;gap:10px;overflow:hidden' });
     var info = h('div', { class: 'g-info' }), guide = h('div', { class: 'guide' });
-    el.appendChild(pills); el.appendChild(info); el.appendChild(guide);
+    // Beeld van het programma met focus, rechtsboven. Loopt zacht weg achter de bovenste zenders.
+    var art = h('div', { class: 'g-art' }, '<div></div><div></div>'), artL = art.children, artOn = 0, artWant = '', artT = 0;
+    function setArt(pic, logo) {
+      var want = pic || logo || ''; if (want === artWant) return; artWant = want;
+      clearTimeout(artT);
+      artT = setTimeout(function () {
+        var show = function (url, isLogo) {
+          if (artWant !== want) return;
+          var nxt = artL[1 - artOn], old = artL[artOn]; artOn = 1 - artOn;
+          nxt.className = isLogo ? 'logo' : ''; nxt.style.backgroundImage = url ? "url('" + url.replace(/'/g, '%27') + "')" : 'none';
+          nxt.classList.add('on'); old.classList.remove('on');
+        };
+        if (!pic) return show(logo ? img(logo) : '', true);
+        var i = new Image(); i.onload = function () { show(i.src, false); }; i.onerror = function () { show(logo ? img(logo) : '', true); }; i.src = img(pic);
+      }, 180);
+    }
+    el.appendChild(art); el.appendChild(pills); el.appendChild(info); el.appendChild(guide);
     el.appendChild(h('div', { class: 'hint' }, '<span><span class="kbd">↑ ↓</span>zender</span><span><span class="kbd">← →</span>tijd</span><span><span class="kbd">OK</span>kijken, terugkijken of herinnering</span><span>↺ = terugkijken kan</span>'));
     // Vers binnen via de bovenbalk: focus op de categorieën, zodat je meteen naar Sport of ESPN kunt.
     var fresh = !args.st, st = args.st || (args.st = { cat: null, from: 0, row: 0 });
@@ -615,7 +682,7 @@
       var row = h('div', { class: 'row', style: 'padding:0;gap:10px' });
       shown.forEach(function (c) {
         row.appendChild(F(h('button', { class: 'pill' + (c.id === st.cat ? ' on' : '') }, esc(c.name)), function () { st.cat = c.id; st.from = 0; st.row = 0; go('live', args, true); }, { group: 'cats',
-          focus: function () { info.innerHTML = '<span class="kicker">Categorie</span><h2 style="font-size:40px">' + esc(c.name) + '</h2><div class="dim" style="font-size:22px">' + c.channels.length + (c.channels.length === 1 ? ' zender' : ' zenders') + (c.id === st.cat ? ' · nu in beeld' : ' · OK: deze zenders in de gids') + '</div>'; } }));
+          focus: function () { setArt('', ''); info.innerHTML = '<span class="kicker">Categorie</span><h2>' + esc(c.name) + '</h2><div class="dim" style="font-size:22px">' + c.channels.length + (c.channels.length === 1 ? ' zender' : ' zenders') + (c.id === st.cat ? ' · nu in beeld' : ' · OK: deze zenders in de gids') + '</div>'; } }));
       });
       pills.appendChild(row);
       var cat = shown.filter(function (c) { return c.id === st.cat; })[0] || shown[0];
@@ -675,9 +742,9 @@
               else toast('Deze zender bewaart dit programma niet');
             }, { group: 'g' + i, long: function () { progDialog(ch, p, cat.id, live, canBack, past); },
               focus: function () {
-                st.row = i; scrollTo(i);
+                st.row = i; scrollTo(i); setArt(p.img, ch.icon);
                 info.innerHTML = '<span class="kicker">' + esc(ch.name) + (p.none ? '' : ' · ' + clock(p.start) + '–' + clock(p.end) + (live ? ' · NU' : past ? ' · AFGELOPEN' : '')) + '</span>' +
-                  '<h2 style="font-size:40px">' + esc(p.none ? ch.name : p.title) + '</h2><p class="desc" style="max-width:1300px">' + esc(p.desc || p.cat || '') + '</p>' +
+                  '<h2>' + esc(p.none ? ch.name : p.title) + '</h2><p class="desc">' + esc(p.desc || p.cat || '') + '</p>' +
                   '<div class="dim" style="font-size:20px">' + (live ? 'OK: kijken' : canBack ? 'OK: terugkijken vanaf het begin' : past ? 'Kan niet meer teruggekeken worden' : 'OK: herinnering ' + (S.reminders[ch.id + ':' + p.start] ? 'weghalen' : 'zetten')) + '</div>';
               },
               // Voorbij de rand van het tijdvak: een uur verschuiven.
@@ -717,20 +784,35 @@
   // Richting C: bovenaan verder kijken en nieuw, daaronder genres, collecties en de diensten van dit profiel.
   // Een genre- of collectietegel opent het raster met filters.
   function library(kind) {
-    var el = h('div', { class: 'screen' }); el.appendChild(topbar(kind === 'movie' ? 'films' : 'series'));
-    var sc = h('div', { class: 'scroll' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
+    var el = h('div', { class: 'screen' });
+    var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
+    el.appendChild(topbar(kind === 'movie' ? 'films' : 'series'));
+    // Zoeken binnen alleen films of alleen series (omhoog vanaf de eerste rij).
+    el.appendChild(F(h('button', { class: 'pill lsearch' }, NAVICON.search + '<span>Zoeken in ' + (kind === 'movie' ? 'films' : 'series') + '</span>'), function () { go('search', { only: kind }); }));
+    // Bovenaan fanart van je eigen titels; met focus op een titel het beeld van die titel.
+    var pool = [];
+    var hb = heroBlock(inner, function () {
+      var l = pool.filter(function (o) { return o.tmdb; }); if (!l.length) return Promise.resolve('');
+      var o = l[Math.floor(Math.random() * l.length)], t = kind === 'series' ? 'tv' : 'movie';
+      return (S.art[t + o.tmdb] ? Promise.resolve(S.art[t + o.tmdb]) : get('/api/art/' + t + '/' + o.tmdb).then(function (a) { S.art[t + o.tmdb] = a; return a; })).then(function (a) { return a.backdrop || ''; });
+    });
+    var tile = function (m) { return titleTile(m, kind, function () { if (m.tmdb) hb.showArt(artOf(m, kind)); else hb.rest(); }); };
     var slots = {}; ['cont', 'rec', 'newest', 'genres', 'coll'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.cont.className = 'first'; slots.newest.appendChild(loading());
     var again = function () { go(kind === 'movie' ? 'films' : 'series', {}, true); };
     get('/api/continue?profile=' + S.profile).then(function (list) {
       var mine = list.filter(function (c) { return c.kind === kind; });
-      if (mine.length) slots.cont.appendChild(rowSection('Verder kijken', mine.map(function (c) { return contTile(c, again); }), me().name));
+      if (mine.length) slots.cont.appendChild(rowSection('Verder kijken', mine.map(function (c) {
+        return contTile(c, again, function () { if (c.tmdb) hb.showArt({ tmdb: c.tmdb, type: kind === 'series' ? 'tv' : 'movie', title: String(c.title || '').replace(/\s*\(\d{4}\)[\s.]*$/, ''), meta: c.sub || '' }); else hb.rest(); });
+      }), me().name));
+      fold([slots.cont, slots.rec, slots.newest]);
     }).catch(function () {});
     get('/api/catalog/' + kind + '/overview?profile=' + S.profile).then(function (o) {
-      S.ov[kind] = o; slots.newest.innerHTML = '';
+      S.ov[kind] = o; slots.newest.innerHTML = ''; pool = o.newest || []; hb.refresh();
       if (!o.total) { slots.newest.innerHTML = '<div class="empty">Nog geen ' + (kind === 'movie' ? 'films' : 'series') + ' gevonden.</div>'; return; }
-      slots.newest.appendChild(rowSection('Nieuw', o.newest.map(function (m) { return titleTile(m, kind); })));
-      if ((o.recordings || []).length) slots.rec.appendChild(rowSection('Opnames', o.recordings.map(function (m) { return titleTile(m, kind); })));
+      slots.newest.appendChild(rowSection('Nieuw', o.newest.map(tile)));
+      fold([slots.cont, slots.rec, slots.newest]);
+      if ((o.recordings || []).length) slots.rec.appendChild(rowSection('Opnames', o.recordings.map(tile)));
       slots.genres.appendChild(rowSection('Genres', o.genres.map(function (g) {
         return mosaicTile(g.name, g.count + ' titels', g.posters, function () { go('grid', { kind: kind, genre: g.name, title: g.name }); });
       })));
@@ -836,7 +918,7 @@
         '<div class="wherebox">' + (canWatch ? '' : '<span class="dim">Nog niet te zien</span>') +
         (other.length ? '<span class="dim"' + (canWatch ? '' : ' style="margin-left:14px"') + '>Ook op</span>' + other.slice(0, 4).map(chip).join('') : '') + '</div>';
       if (d.tmdb) (S.art[a.type + d.tmdb] ? Promise.resolve(S.art[a.type + d.tmdb]) : get('/api/art/' + a.type + '/' + d.tmdb).then(function (x) { S.art[a.type + d.tmdb] = x; return x; }, function () { return {}; })).then(function (x) {
-        if (!x.logo) return; var lg = new Image(); lg.className = 'ilogo'; lg.alt = d.title || ''; lg.onload = function () { var t = txt.querySelector('h1'); if (t) t.replaceWith(lg); }; lg.src = img(x.logo);
+        if (x.logo) logoFor(x.logo, function (u) { var lg = new Image(); lg.className = 'ilogo'; lg.alt = d.title || ''; lg.onload = function () { var t = txt.querySelector('h1'); if (t) t.replaceWith(lg); }; lg.src = u; });
       });
       var bt = h('div', { class: 'ibtns' });
       // Kijken: één knop per bron, met het logo: Plex, dan IPTV.
@@ -1004,8 +1086,11 @@
   // Zoeken: links typen of inspreken, met daaronder onderwerpen en wat je eerder zocht. Rechts één lijst met filters.
   var FILTERS = [['alles', 'Alles'], ['live', 'Nu live'], ['later', 'Straks'], ['past', 'Terugkijken'], ['channels', 'Zenders'], ['titles', 'Films en series'], ['youtube', 'YouTube']];
   var TOPICS = ['wielrennen', 'voetbal', 'formule 1', 'darts', 'tennis'];
+  // a.only = 'movie' of 'series': alleen zoeken in je eigen films of series (vanuit Films of Series).
   screens.search = function (a) {
-    var el = h('div', { class: 'screen' }); el.appendChild(topbar('search'));
+    var el = h('div', { class: 'screen' }), only = a.only || '';
+    el.appendChild(topbar('search'));
+    if (only) el.querySelector('.crumb').textContent = 'Zoeken in ' + (only === 'movie' ? 'films' : 'series');
     var st = a.st || (a.st = { q: a.q || '', filter: 'alles', r: null });
     var left = h('div', { style: 'position:absolute;left:80px;top:140px;width:400px;display:flex;flex-direction:column;gap:16px' });
     var field = h('div', { class: 'field', style: 'height:64px;font-size:28px' }); left.appendChild(field);
@@ -1022,7 +1107,7 @@
     // Onderwerpen en laatst gezocht. Ingedrukt houden haalt een eerdere zoekopdracht weg.
     function drawChips(recent) {
       chips.innerHTML = '';
-      TOPICS.forEach(function (t) { chips.appendChild(F(h('button', { class: 'chip topic' }, esc(t)), function () { pick(t); }, { group: 'chips' })); });
+      if (!only) TOPICS.forEach(function (t) { chips.appendChild(F(h('button', { class: 'chip topic' }, esc(t)), function () { pick(t); }, { group: 'chips' })); });
       recent.filter(function (q) { return TOPICS.indexOf(q) < 0; }).slice(0, 8).forEach(function (q) {
         chips.appendChild(F(h('button', { class: 'chip' }, '↺ ' + esc(q)), function () { pick(q); }, { group: 'chips', long: function () {
           api('DELETE', '/api/searches?profile=' + S.profile + '&q=' + encodeURIComponent(q)).then(drawChips); } }));
@@ -1035,6 +1120,7 @@
     function remember() { var q = st.q.trim(); if (q.length > 1) api('POST', '/api/searches', { profile: S.profile, q: q }).catch(function () {}); }
     // Nog niets getypt: wat er nu live is bij je meest gezochte onderwerp.
     function emptyState() {
+      if (only) { pills.innerHTML = ''; inner.innerHTML = '<div class="empty" style="padding:0">Typ of spreek een titel in.</div>'; return; }
       var top = (st.recent || [])[0] || TOPICS[0];
       pills.innerHTML = ''; inner.innerHTML = '';
       get('/api/search?q=' + encodeURIComponent(top)).then(function (r) {
@@ -1055,6 +1141,13 @@
       var r = st.r; if (!r) return;
       var g = r.guide || {}, yt = r.youtube || {};
       var lists = { live: g.live || [], later: g.later || [], past: g.past || [], channels: g.channels || [], titles: r.titles || [], youtube: (yt.live || []).concat(yt.upcoming || []) };
+      if (only) {   // alleen titels van deze soort, als raster
+        var mine = lists.titles.filter(function (t) { return t.kind === only; });
+        if (!mine.length) { inner.innerHTML = '<div class="empty" style="padding:0">Geen ' + (only === 'movie' ? 'films' : 'series') + ' gevonden voor "' + esc(st.q.trim()) + '"</div>'; return; }
+        var grd = h('div', { class: 'grid', style: 'padding:4px 0' });
+        mine.forEach(function (t) { var e = titleTile(t, t.kind), ok = e._ok; e._ok = function () { remember(); ok(); }; grd.appendChild(e); });
+        inner.appendChild(grd); return;
+      }
       var n = function (k) { return k === 'alles' ? Object.keys(lists).reduce(function (t, x) { return t + lists[x].length; }, 0) : lists[k].length; };
       FILTERS.forEach(function (f) {
         // Nu live staat er altijd, ook met 0: dan weet je dat er nu niets is.
@@ -1370,7 +1463,7 @@
     var sc = h('div', { class: 'scroll', style: 'top:130px' }), inner = h('div', { class: 'scroll-inner' }), g = h('div', { class: 'grid', style: 'grid-template-columns:repeat(6,240px);gap:26px 22px' });
     inner.appendChild(g); sc.appendChild(inner); el.appendChild(sc);
     loadApps().then(function (apps) {
-      apps.forEach(function (a) { g.appendChild(appTile(a.label, a)); });
+      apps.forEach(function (a) { g.appendChild(appTile({ svc: { name: a.label }, app: a })); });
       focus(focusables()[0]);
     });
     return el;

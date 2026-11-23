@@ -134,8 +134,8 @@ export async function searchGuide(q) {
 /** Gids voor een rij zenders in een tijdvak (voor het rooster in de app). */
 export function grid(epgIds, from, to) {
   if (!epgIds.length) return {};
-  const q = db.prepare(`SELECT channel, start, stop, title, descr, cat FROM programmes WHERE channel IN (${epgIds.map(() => '?').join(',')}) AND stop > ? AND start < ? ORDER BY start`);
+  const q = db.prepare(`SELECT channel, start, stop, title, descr, cat, img FROM programmes WHERE channel IN (${epgIds.map(() => '?').join(',')}) AND stop > ? AND start < ? ORDER BY start`);
   const out = {};
-  for (const r of q.all(...epgIds, from, to)) (out[r.channel] = out[r.channel] || []).push({ title: r.title, desc: r.descr, cat: r.cat, start: r.start, end: r.stop });
+  for (const r of q.all(...epgIds, from, to)) (out[r.channel] = out[r.channel] || []).push({ title: r.title, desc: r.descr, cat: r.cat, start: r.start, end: r.stop, img: r.img || '' });
   return out;
 }

@@ -23,6 +23,7 @@ import org.json.JSONObject
 /** Het startscherm: een volledig scherm WebView met de HTML uit assets/web. */
 class MainActivity : Activity() {
     private lateinit var web: WebView
+    private var inputWatch: android.media.tv.TvInputManager.TvInputCallback? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,6 +81,8 @@ class MainActivity : Activity() {
         setContentView(web)
         Prefs(this).wipeOldSecrets()
         web.loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
+        // HDMI-apparaat in- of uitgeplugd: de rij Kijken bijwerken.
+        inputWatch = Inputs.watch(this) { web.evaluateJavascript("window.__inputs && window.__inputs()", null) }
         web.requestFocus()
     }
 
@@ -121,6 +124,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         try { unregisterReceiver(screen) } catch (_: Exception) {}
+        Inputs.unwatch(this, inputWatch)
         super.onDestroy()
     }
 
