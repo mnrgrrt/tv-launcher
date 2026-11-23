@@ -190,7 +190,8 @@
     var tm = h('span', null, clock(Date.now())); right.appendChild(tm);
     var gear = F(h('button', { class: 'pill', 'aria-label': 'Instellingen' }, '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>'), function () { go('settings'); }, { group: 'top' });
     right.appendChild(gear);
-    var av = F(h('button', { class: 'avatar-btn', 'aria-label': 'Mijn profiel' }, '<img class="avatar" alt="" src="' + esc(img(me().avatarUrl)) + '">'), function () { go('profile'); }, { group: 'top', long: function () { whoDialog(); } });
+    // Wisselen in twee keer OK: avatar, dan het profiel. Mijn profiel staat in hetzelfde venster.
+    var av = F(h('button', { class: 'avatar-btn', 'aria-label': 'Wie kijkt er' }, '<img class="avatar" alt="" src="' + esc(img(me().avatarUrl)) + '">'), function () { whoDialog(); }, { group: 'top' });
     right.appendChild(av);
     bar.appendChild(left); bar.appendChild(right);
     return bar;
@@ -474,10 +475,20 @@
     return el;
   };
   function whoDialog() {
-    if (S.device && S.device.locked) return toast('Dit apparaat is vastgezet op ' + me().name);
     var d = h('div', { class: 'dialog' }, '<h2>Wie kijkt er?</h2>'), row = h('div', { class: 'who' });
-    S.profiles.forEach(function (p) { row.appendChild(F(h('button', { class: 'who-item' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '"><span>' + esc(p.name) + '</span>'), function () { setProfile(p.id); closeOverlay(); go(current.name, current.args, true); })); });
-    d.appendChild(row); openOverlay(d);
+    var locked = S.device && S.device.locked;
+    S.profiles.forEach(function (p) {
+      if (locked && p.id !== S.profile) return;
+      var b = F(h('button', { class: 'who-item' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '"><span>' + esc(p.name) + '</span>'), function () {
+        setProfile(p.id); S.ov = {}; closeOverlay(); go('home', {}, true);
+      });
+      if (p.id === S.profile) b.id = 'who-cur';
+      row.appendChild(b);
+    });
+    d.appendChild(row);
+    d.appendChild(F(h('button', { class: 'btn' }, 'Mijn profiel'), function () { closeOverlay(); go('profile'); }));
+    openOverlay(d);
+    var c = d.querySelector('#who-cur'); if (c) focus(c);
   }
 
   // ---------- thuis ----------
