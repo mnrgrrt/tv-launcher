@@ -49,7 +49,7 @@ const ENV = {
   tmdbToken: 'THUIS_TMDB', plexUrl: 'THUIS_PLEX_URL', plexToken: 'THUIS_PLEX_TOKEN',
   osKey: 'THUIS_OPENSUBTITLES_KEY', osUser: 'THUIS_OPENSUBTITLES_USER', osPass: 'THUIS_OPENSUBTITLES_PASS',
   radarrUrl: 'THUIS_RADARR_URL', radarrKey: 'THUIS_RADARR_KEY', sonarrUrl: 'THUIS_SONARR_URL', sonarrKey: 'THUIS_SONARR_KEY',
-  categories: 'THUIS_CATEGORIES', haWebhook: 'THUIS_HA_WEBHOOK', omdbKey: 'THUIS_OMDB_KEY', youtubeKey: 'THUIS_YOUTUBE_KEY'
+  categories: 'THUIS_CATEGORIES', haWebhook: 'THUIS_HA_WEBHOOK', omdbKey: 'THUIS_OMDB_KEY', youtubeKey: 'THUIS_YOUTUBE_KEY', weatherPlace: 'THUIS_WEATHER_PLACE'
 };
 export const SECRET = ['pass', 'tmdbToken', 'plexToken', 'osKey', 'osPass', 'radarrKey', 'sonarrKey', 'omdbKey', 'youtubeKey'];
 export function S(k) {
