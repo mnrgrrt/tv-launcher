@@ -195,6 +195,7 @@
     films: SVG('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M17 9h4M3 15h4M17 15h4"/>'),
     series: SVG('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M6 4h12"/>'),
     list: SVG('<path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"/>'),
+    lib: SVG('<path d="M4 4h4v16H4zM10 4h4v16h-4zM16.5 4.5l3.5 1-4 15-3.5-1z"/>'),
     apps: SVG('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>'),
     settings: SVG('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>')
   };
@@ -216,6 +217,7 @@
     item('live', 'Live tv', NAVICON.live, function () { go('live', {}, true); });
     item('films', 'Films', NAVICON.films, function () { go('films', {}, true); });
     item('series', 'Series', NAVICON.series, function () { go('series', {}, true); });
+    item('lib', 'Bibliotheek', NAVICON.lib, function () { go('grid', { lib: true, kind: 'movie', title: 'Bibliotheek', src: 'eigen', alles: '1', sort: 'nieuw' }); });
     item('list', 'Mijn lijst', NAVICON.list, function () { go('profile', { tab: 'list' }); });
     // Diensten die op dit apparaat staan, met hun logo. OK opent de app.
     var svcBox = h('div', { class: 'svcs' }); nav.appendChild(svcBox);
@@ -225,7 +227,10 @@
       svcBox.appendChild(h('div', { class: 'hd' }, 'Diensten'));
       l.forEach(function (x) {
         var logo = (S.logos && S.logos[x.svc.key]) || x.app.icon || x.app.banner;
-        svcBox.appendChild(F(h('button', { class: 'it' }, '<i class="sv" style="' + bg(logo) + '"></i><span>' + esc(x.svc.name) + '</span>'), function () { closeOverlay(); N && N.launch(x.app.pkg); }, close));
+        // Dienst met aanbod bij TMDB: eerst een eigen pagina met wat erop staat. Anders (Ziggo, WithLove, YouTube) meteen de app.
+        svcBox.appendChild(F(h('button', { class: 'it' }, '<i class="sv" style="' + bg(logo) + '"></i><span>' + esc(x.svc.name) + '</span>'), function () {
+          if (isStreaming(x.svc)) go('service', { key: x.svc.key, pkg: x.app.pkg, logo: logo }); else { closeOverlay(); N && N.launch(x.app.pkg); }
+        }, close));
       });
     });
     item('apps', 'Alle apps', NAVICON.apps, function () { go('apps'); });
@@ -424,7 +429,12 @@
   // Diensten met eigen aanbod bij TMDB (Plex is van onszelf en telt hier niet mee).
   // Vaste volgorde: eerst tv kijken (Ziggo, Odido), dan WithLove, dan de rest zoals in services.json.
   var FIRST = ['ziggo', 'odido', 'withlove'];
-  function sortServices(l) { return l.slice().sort(function (a, b) { var x = FIRST.indexOf(a.svc.key), y = FIRST.indexOf(b.svc.key); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y); }); }
+  // Per profiel: eigen volgorde (appOrder) en verborgen apps (appHide), ingesteld in Mijn profiel › Apps op Thuis.
+  function sortServices(l, all) {
+    var pr = me().prefs || {}, order = pr.appOrder || [], hide = pr.appHide || [];
+    var rank = function (k) { var i = order.indexOf(k); if (i >= 0) return i; var j = FIRST.indexOf(k); return 100 + (j < 0 ? 50 : j); };
+    return l.filter(function (x) { return all || hide.indexOf(x.svc.key) < 0; }).slice().sort(function (a, b) { return rank(a.svc.key) - rank(b.svc.key); });
+  }
   function isStreaming(s) { return s.provider && s.key !== 'plex'; }
 
   // ---------- herinneringen ----------
@@ -570,7 +580,7 @@
       }, 350);
     }
     // Thuis: eerst je diensten (daar begin je meestal), dan wat nieuw is en wat populair is. Verder kijken en live staan in Films, Series en Live tv.
-    var slots = {}; ['svc', 'foryou', 'picks', 'later'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    var slots = {}; ['svc', 'foryou', 'fav', 'picks', 'later'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.svc.className = 'first';
     var svcQ = myServices().then(function (keys) { return 'profile=' + S.profile + '&services=' + keys.join(','); });
     svcQ.then(function (q) { return get('/api/home?' + q); }).then(function (d) {
@@ -588,6 +598,12 @@
       };
       if (d.now.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', d.now.map(tile)));
       if (d.later.length) slots.later.appendChild(rowSection('Nog niet te zien', d.later.map(tile)));
+    }).catch(function () {});
+    // Favoriet genre van dit profiel (Mijn profiel › Voorkeuren): de beste titels die je kunt kijken.
+    var fav = (me().prefs || {}).favGenre;
+    if (fav) svcQ.then(function (q) { return get('/api/catalog/movie/browse?' + q + '&genre=' + encodeURIComponent(fav) + '&sort=beste'); }).then(function (r) {
+      var l = r.items.filter(function (o) { return (o.sources || []).length || (o.services || []).length; }).slice(0, 30);
+      if (l.length) slots.fav.appendChild(rowSection(fav + ' voor jou', l.map(function (o) { return titleTile(o, 'movie'); })));
     }).catch(function () {});
     // Bovenaan de apps waar je meteen naartoe wilt: tv (Ziggo of Odido) en WithLove eerst, dan de andere diensten.
     installedServices().then(function (l) {
@@ -752,7 +768,10 @@
     var sc = h('div', { class: 'scroll', style: 'top:200px' }), inner = h('div', { class: 'scroll-inner' }), grid = h('div', { class: 'grid' });
     inner.appendChild(grid); sc.appendChild(inner); el.appendChild(sc);
     myServices().then(function (keys) {
-      var srcs = [['', 'Alles'], ['plex', 'Plex'], ['iptv', 'IPTV']].concat(keys.map(function (k) { return [k, serviceName(k)]; }));
+      var srcs = a.lib ? [['eigen', 'Plex en IPTV'], ['plex', 'Plex'], ['iptv', 'IPTV']]
+        : [['', 'Alles'], ['plex', 'Plex'], ['iptv', 'IPTV']].concat(keys.map(function (k) { return [k, serviceName(k)]; }));
+      // Bibliotheek: alles wat je zelf hebt, films of series.
+      if (a.lib) bar.appendChild(F(h('button', { class: 'pill on', id: 'f-kind' }, a.kind === 'series' ? 'Series' : 'Films'), function () { a.kind = a.kind === 'series' ? 'movie' : 'series'; a.genre = ''; redo('f-kind'); }, { group: 'filters' }));
       if (a.cat !== 'soon') {
         bar.appendChild(F(h('button', { class: 'pill on', id: 'f-genre' }, 'Genre: ' + esc(a.genre || 'alle')), function () { pickGenre(a, function () { redo('f-genre'); }); }, { group: 'filters' }));
         bar.appendChild(F(h('button', { class: 'pill on', id: 'f-src' }, 'Bron: ' + esc(labelOf(srcs, a.src))), function () { a.src = nextOf(srcs, a.src); redo('f-src'); }, { group: 'filters' }));
@@ -791,6 +810,25 @@
     if (S.ov[a.kind]) return show(S.ov[a.kind]);
     myServices().then(function (keys) { return get('/api/catalog/' + a.kind + '/overview?profile=' + S.profile + '&services=' + keys.join(',')); }).then(function (o) { S.ov[a.kind] = o; show(o); });
   }
+
+  // ---------- pagina van een dienst ----------
+  // Zoals bij de Apple TV: eerst zien wat er op Netflix (of Prime, Videoland...) staat, met bovenaan de knop om de app te openen.
+  screens.service = function (a) {
+    var el = h('div', { class: 'screen' }), name = serviceName(a.key);
+    var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
+    var head = h('div', { class: 'svchead first' }, (a.logo ? '<i class="sv" style="' + bg(a.logo) + '"></i>' : '') + '<h1>' + esc(name) + '</h1>');
+    head.appendChild(F(h('button', { class: 'btn' }, 'Open ' + esc(name)), function () { if (N) N.launch(a.pkg); }));
+    inner.appendChild(head);
+    var slots = {}; ['new', 'mov', 'tv', 'best'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    var q = 'profile=' + S.profile + '&services=' + encodeURIComponent(a.key);
+    var tiles = function (l, kind) { return l.map(function (o) { return titleTile(o, kind); }); };
+    var tmdbTiles = function (l, type) { return l.map(function (p) { return poster({ title: p.title, sub: p.year, img: p.poster, ok: function () { go('info', { type: type, tmdb: p.tmdb, title: p.title }); } }); }); };
+    get('/api/catalog/movie/browse?' + q + '&src=' + a.key + '&sort=nieuw').then(function (r) { if (r.items.length) slots.new.appendChild(rowSection('Nieuw op ' + name, tiles(r.items.slice(0, 30), 'movie'))); }).catch(function () {});
+    get('/api/streaming/movie?services=' + a.key).then(function (rows) { rows.forEach(function (r) { slots.mov.appendChild(rowSection('Populaire films', tmdbTiles(r.items, 'movie'))); }); }).catch(function () {});
+    get('/api/streaming/series?services=' + a.key).then(function (rows) { rows.forEach(function (r) { slots.tv.appendChild(rowSection('Populaire series', tmdbTiles(r.items, 'tv'))); }); }).catch(function () {});
+    get('/api/catalog/movie/browse?' + q + '&src=' + a.key + '&sort=beste').then(function (r) { if (r.items.length) slots.best.appendChild(rowSection('Best beoordeeld', tiles(r.items.slice(0, 30), 'movie'))); }).catch(function () {});
+    return el;
+  };
 
   // ---------- infopagina ----------
   // Boven: poster, gegevens, waar je het kunt zien en de knoppen. Bij een serie daaronder meteen de seizoenen en afleveringen.
@@ -1127,7 +1165,7 @@
     var el = h('div', { class: 'screen' }), p = me(), tab = a.tab || 'list';
     var side = h('div', { class: 'side' });
     side.appendChild(h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:14px;padding:10px 0 26px' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '" style="width:170px;height:170px;border-radius:50%;object-fit:cover"><h1 style="font-size:42px">' + esc(p.name) + '</h1>'));
-    [['list', 'Mijn lijst'], ['cont', 'Verder kijken'], ['seen', 'Bekeken'], ['svc', 'Mijn diensten'], ['skip', 'Genres overslaan'], ['avatar', 'Avatar kiezen'], ['prefs', 'Voorkeuren'], ['switch', 'Wissel van profiel']].forEach(function (t) {
+    [['list', 'Mijn lijst'], ['cont', 'Verder kijken'], ['seen', 'Bekeken'], ['svc', 'Mijn diensten'], ['apps', 'Apps op Thuis'], ['skip', 'Genres overslaan'], ['avatar', 'Avatar kiezen'], ['prefs', 'Voorkeuren'], ['switch', 'Wissel van profiel']].forEach(function (t) {
       side.appendChild(F(h('button', { class: 'listrow' + (t[0] === tab ? ' on' : '') }, esc(t[1])), function () {
         if (t[0] === 'switch') return whoDialog();
         a.tab = t[0]; go('profile', a, true);
@@ -1168,6 +1206,27 @@
           }));
         });
         focus(box.firstChild);
+      });
+    } else if (tab === 'apps') {
+      // Volgorde en zichtbaarheid van de apps in de rij Kijken en in de zijbalk. Alleen voor dit profiel.
+      main.appendChild(h('h2', { style: 'font-size:36px' }, 'Apps op Thuis'));
+      main.appendChild(h('div', { class: 'dim', style: 'font-size:20px;margin-bottom:10px' }, 'OK zet een app aan of uit. Met "Hoger" schuift hij een plek naar boven.'));
+      var box2 = h('div', { class: 'scroll-inner', style: 'display:flex;flex-direction:column;gap:10px' }); main.appendChild(box2);
+      installedServices().then(function (l) {
+        l = sortServices(l.filter(function (x) { return x.svc.key !== 'plex'; }), true);
+        var pr = p.prefs || {}, hide = (pr.appHide || []).slice(), order = l.map(function (x) { return x.svc.key; });
+        var save = function (focusId) { api('POST', '/api/profiles/' + p.id + '/prefs', { appOrder: order, appHide: hide }).then(function () { p.prefs = Object.assign(pr, { appOrder: order, appHide: hide }); a._focus = focusId; go('profile', a, true); }); };
+        l.forEach(function (x, i) {
+          var k = x.svc.key, off = hide.indexOf(k) >= 0, row = h('div', { style: 'display:flex;gap:10px' });
+          row.appendChild(F(h('button', { class: 'listrow', id: 'app-' + k, style: 'flex:1' }, '<b>' + esc(x.svc.name) + '</b><span class="dim">' + (off ? 'Verborgen' : 'Op Thuis') + '</span>'), function () {
+            if (off) hide.splice(hide.indexOf(k), 1); else hide.push(k); save('#app-' + k);
+          }));
+          if (i > 0) row.appendChild(F(h('button', { class: 'listrow', id: 'up-' + k, style: 'width:150px;justify-content:center' }, 'Hoger'), function () {
+            order.splice(i, 1); order.splice(i - 1, 0, k); save('#up-' + k);
+          }));
+          box2.appendChild(row);
+        });
+        if (!a._focus) focus(box2.querySelector('.listrow'));
       });
     } else if (tab === 'svc') {
       main.appendChild(h('h2', { style: 'font-size:36px' }, 'Mijn diensten'));
@@ -1216,6 +1275,12 @@
       main.appendChild(F(h('button', { class: 'listrow' }, '<b>Alleen goede titels</b><span class="dim">' + esc((MINS.filter(function (m) { return m[0] === cur2; })[0] || MINS[0])[1]) + ' ›</span>'), function () {
         var i = MINS.map(function (m) { return m[0]; }).indexOf(cur2), next = MINS[(i + 1) % MINS.length][0];
         api('POST', '/api/profiles/' + p.id + '/prefs', { minRating: next }).then(function () { p.prefs = Object.assign(prefs, { minRating: next }); S.ov = {}; a._focus = null; go('profile', a, true); });
+      }));
+      // Favoriet genre: een eigen rij op Thuis met de beste titels in dat genre.
+      var favs = [''].concat(GENRES), fv = prefs.favGenre || '';
+      main.appendChild(F(h('button', { class: 'listrow' }, '<b>Favoriet genre op Thuis</b><span class="dim">' + esc(fv || 'Geen') + ' ›</span>'), function () {
+        var next = favs[(favs.indexOf(fv) + 1) % favs.length];
+        api('POST', '/api/profiles/' + p.id + '/prefs', { favGenre: next }).then(function () { p.prefs = Object.assign(prefs, { favGenre: next }); a._focus = null; go('profile', a, true); });
       }));
       PREFS.forEach(function (row) {
         var val = prefs[row[0]] || row[2][0][0], label = row[2].filter(function (o) { return o[0] === val; })[0][1];

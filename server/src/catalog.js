@@ -131,7 +131,8 @@ export async function browse(kind, f, services, prefs) {
   let list = (await forProfile(kind, services)).filter(o => allowed(o, prefs.skip));
   if (f.alles !== '1') list = list.filter(o => good(o, prefs.min));
   if (f.genre) list = list.filter(o => o.genres.includes(f.genre));
-  if (f.src === 'plex' || f.src === 'iptv') list = list.filter(o => o.sources.includes(f.src));
+  if (f.src === 'eigen') list = list.filter(o => o.sources.length);   // je eigen bibliotheek: Plex en IPTV
+  else if (f.src === 'plex' || f.src === 'iptv') list = list.filter(o => o.sources.includes(f.src));
   else if (f.src) list = list.filter(o => o.services.includes(f.src));
   if (f.cat) list = list.filter(o => (o.cats || []).includes(f.cat));
   const sort = f.sort || 'beste';
