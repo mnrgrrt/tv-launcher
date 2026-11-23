@@ -37,6 +37,9 @@ class MainActivity : Activity() {
             domStorageEnabled = true
             mediaPlaybackRequiresUserGesture = false
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            // De pagina is ontworpen op 1920 breed; Android schaalt hem passend op elk scherm.
+            useWideViewPort = true
+            loadWithOverviewMode = true
         }
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {

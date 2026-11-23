@@ -6,8 +6,11 @@
   var $app = document.getElementById('app');
   // Alles is ontworpen op 1920x1080; op een tv met een ander aantal css-pixels schalen we het geheel.
   var SCALE = 1;
-  function fit() { SCALE = Math.min(window.innerWidth / 1920, window.innerHeight / 1080) || 1; document.body.style.transformOrigin = '0 0'; document.body.style.transform = SCALE === 1 ? '' : 'scale(' + SCALE + ')'; }
-  fit(); window.addEventListener('resize', fit);
+  function fit() {
+    var w = Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0), hh = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+    SCALE = (w && hh) ? Math.min(w / 1920, hh / 1080) : 1; document.body.style.transformOrigin = '0 0'; document.body.style.transform = SCALE === 1 ? '' : 'scale(' + SCALE + ')'; }
+  // Pas na het opbouwen weet de tv hoe groot het scherm is: daarom ook later nog eens rekenen.
+  fit(); window.addEventListener('resize', fit); window.addEventListener('load', fit); setTimeout(fit, 300); setTimeout(fit, 1500);
 
   // ---------- hulpjes ----------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
