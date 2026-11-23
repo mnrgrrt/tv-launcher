@@ -2,16 +2,51 @@
 import { db } from './db.js';
 import * as plex from './plex.js';
 import * as vod from './vod.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { sign } from './auth.js';
 
-export const list = () => db.prepare('SELECT id, name, color, admin, plex_user, prefs FROM profiles ORDER BY sort, id').all()
-  .map(p => ({ ...p, admin: !!p.admin, prefs: JSON.parse(p.prefs || '{}') }));
+// Avatar per profiel: een nummer uit de vaste set (public/avatars) of een eigen foto.
+try { db.exec("ALTER TABLE profiles ADD COLUMN avatar TEXT DEFAULT ''"); } catch {}
+const PHOTOS = path.join(process.env.THUIS_DATA || '/data', 'photos');
+fs.mkdirSync(PHOTOS, { recursive: true });
+const photoFile = id => fs.readdirSync(PHOTOS).find(f => f.startsWith(`p${+id}.`));
+export function avatarUrl(p) {
+  if (p.avatar === 'photo') { const f = photoFile(p.id); if (f) return sign(`/photo/${f}?v=${fs.statSync(path.join(PHOTOS, f)).mtimeMs | 0}`, 24 * 30); }
+  const n = +p.avatar || ((p.id * 7) % 73) + 1;           // nog niets gekozen: vast plaatje op basis van het profiel
+  return `/avatars/${n}.svg`;
+}
+export const photoPath = f => (/^p\d+\.(jpg|png|webp)$/.test(f) ? path.join(PHOTOS, f) : null);
+const MAGIC = [['jpg', [0xff, 0xd8, 0xff]], ['png', [0x89, 0x50, 0x4e, 0x47]], ['webp', [0x52, 0x49, 0x46, 0x46]]];
+/** Eigen foto opslaan (base64). Alleen jpg, png of webp, maximaal 3 MB. */
+export function savePhoto(id, b64) {
+  const buf = Buffer.from(String(b64 || '').replace(/^data:[^,]+,/, ''), 'base64');
+  if (!buf.length || buf.length > 3 * 1024 * 1024) throw Object.assign(new Error('Foto te groot (max 3 MB)'), { status: 400 });
+  const kind = MAGIC.find(([, m]) => m.every((b, i) => buf[i] === b));
+  if (!kind) throw Object.assign(new Error('Alleen jpg, png of webp'), { status: 400 });
+  const old = photoFile(id); if (old) fs.rmSync(path.join(PHOTOS, old));
+  fs.writeFileSync(path.join(PHOTOS, `p${+id}.${kind[0]}`), buf);
+  db.prepare("UPDATE profiles SET avatar = 'photo' WHERE id = ?").run(+id);
+}
+
+export const list = () => db.prepare('SELECT id, name, color, admin, plex_user, prefs, avatar FROM profiles ORDER BY sort, id').all()
+  .map(p => ({ ...p, admin: !!p.admin, prefs: JSON.parse(p.prefs || '{}'), avatarUrl: avatarUrl(p) }));
+export function setAvatar(id, avatar) {
+  const v = String(avatar) === 'photo' ? 'photo' : String(Math.max(1, Math.min(73, +avatar || 1)));
+  db.prepare('UPDATE profiles SET avatar = ? WHERE id = ?').run(v, +id);
+}
 export function save(p) {
   if (p.id) db.prepare('UPDATE profiles SET name = ?, color = ?, admin = ?, plex_user = ?, prefs = ?, sort = ? WHERE id = ?')
     .run(p.name, p.color || '#3DDBB0', p.admin ? 1 : 0, p.plex_user || '', JSON.stringify(p.prefs || {}), +p.sort || 0, +p.id);
   else db.prepare('INSERT INTO profiles (name, color, admin, plex_user, prefs, sort) VALUES (?, ?, ?, ?, ?, ?)')
     .run(p.name, p.color || '#3DDBB0', p.admin ? 1 : 0, p.plex_user || '', JSON.stringify(p.prefs || {}), +p.sort || 0);
 }
-export const remove = id => { if (+id !== 1) db.prepare('DELETE FROM profiles WHERE id = ?').run(+id); };
+export const remove = id => {
+  if (+id === 1) return;                     // Samen blijft altijd
+  for (const t of ['profiles', 'progress', 'mylist', 'favorites']) db.prepare(`DELETE FROM ${t} WHERE ${t === 'profiles' ? 'id' : 'profile'} = ?`).run(+id);
+  const f = photoFile(id); if (f) fs.rmSync(path.join(PHOTOS, f));
+  db.prepare('UPDATE devices SET profile = 0, locked = 0 WHERE profile = ?').run(+id);
+};
 export function setPrefs(id, prefs) {
   const cur = JSON.parse(db.prepare('SELECT prefs FROM profiles WHERE id = ?').get(+id)?.prefs || '{}');
   db.prepare('UPDATE profiles SET prefs = ? WHERE id = ?').run(JSON.stringify({ ...cur, ...prefs }), +id);
@@ -78,4 +113,11 @@ export function setFavorites(profile, ids) {
   db.prepare('DELETE FROM favorites WHERE profile = ?').run(+profile);
   const st = db.prepare('INSERT INTO favorites (profile, channel, sort) VALUES (?, ?, ?)');
   (ids || []).forEach((c, i) => st.run(+profile, +c, i));
+}
+
+/** Wie kijkt deze serie of film nog meer? Voor "Verder als Floor?". Meest recente eerst. */
+export function watchers(key, except = 0) {
+  return db.prepare(`SELECT p.id, p.name, p.avatar, MAX(g.updated) updated, SUM(g.watched) done FROM progress g JOIN profiles p ON p.id = g.profile
+    WHERE (g.series_key = ? OR g.key = ?) AND g.profile != ? AND g.updated > ? GROUP BY p.id ORDER BY updated DESC`)
+    .all(key, key, +except, Date.now() - 90 * 86400e3).map(r => ({ id: r.id, name: r.name, avatarUrl: avatarUrl(r), updated: r.updated }));
 }

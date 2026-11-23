@@ -31,7 +31,7 @@ const send = (res, code, body, type = 'application/json; charset=utf-8') => {
 const ipOf = req => (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
 async function body(req) {
   let n = 0; const parts = [];
-  for await (const c of req) { n += c.length; if (n > 1e6) throw Object.assign(new Error('Te groot'), { status: 413 }); parts.push(c); }
+  for await (const c of req) { n += c.length; if (n > 5e6) throw Object.assign(new Error('Te groot'), { status: 413 }); parts.push(c); }
   const t = Buffer.concat(parts).toString('utf8'); return t ? JSON.parse(t) : {};
 }
 function file(res, root, rel) {
@@ -67,6 +67,9 @@ on('GET', '/api/admin/settings', 'admin', async () => ({ settings: publicSetting
 on('POST', '/api/admin/settings', 'admin', ({ b, me }) => { setSettings(b); uncache(''); auth.audit(me.name, 'koppelingen aangepast: ' + Object.keys(b).join(', ')); return { ok: true }; });
 on('POST', '/api/admin/code', 'admin', ({ me }) => { auth.audit(me.name, 'koppelcode aangevraagd'); return { code: auth.newCode(), minutes: 10 }; });
 on('DELETE', '/api/admin/devices/:id', 'admin', ({ p, me }) => { auth.unpair(p.id); auth.audit(me.name, 'tv ontkoppeld #' + p.id); return { ok: true }; });
+on('POST', '/api/admin/devices/:id', 'admin', ({ p, b, me }) => { auth.setDevice(p.id, b); auth.audit(me.name, 'apparaat aangepast #' + p.id); return auth.devices(); });
+on('POST', '/api/admin/profiles/:id/avatar', 'admin', ({ p, b }) => { profiles.setAvatar(p.id, b.avatar); return profiles.list(); });
+on('POST', '/api/admin/profiles/:id/photo', 'admin', ({ p, b, me }) => { profiles.savePhoto(p.id, b.data); auth.audit(me.name, 'foto geüpload voor profiel #' + p.id); return profiles.list(); });
 on('POST', '/api/admin/profiles', 'admin', ({ b, me }) => { profiles.save(b); auth.audit(me.name, 'profiel opgeslagen: ' + b.name); return profiles.list(); });
 on('DELETE', '/api/admin/profiles/:id', 'admin', ({ p, me }) => { profiles.remove(p.id); auth.audit(me.name, 'profiel verwijderd #' + p.id); return profiles.list(); });
 on('POST', '/api/admin/users', 'admin', ({ b, me }) => { auth.addUser(b.name, b.password); auth.audit(me.name, 'beheerder toegevoegd: ' + b.name); return auth.users(); });
@@ -84,8 +87,19 @@ on('POST', '/api/admin/update', 'admin', ({ me }) => { fs.writeFileSync(FLAG, St
 on('GET', '/api/admin/status', 'admin', () => status(true));
 
 // Gekoppelde tv's
-on('GET', '/api/whoami', 'device', ({ dev }) => ({ device: dev.name, version: VERSION }));
-on('GET', '/api/profiles', 'device', () => profiles.list().map(({ prefs, ...p }) => ({ ...p, prefs })));
+on('GET', '/api/whoami', 'device', ({ dev }) => ({ device: dev.name, version: VERSION, profile: dev.profile || 0, locked: !!dev.locked, ask: dev.ask || 'samen' }));
+// Op de tv zelf: standaardprofiel en vraag-instelling kiezen, behalve als het apparaat vastgezet is.
+on('POST', '/api/device', 'device', ({ dev, b }) => {
+  if (dev.locked) throw Object.assign(new Error('Dit apparaat is vastgezet op een profiel'), { status: 403 });
+  auth.setDevice(dev.id, { profile: b.profile, ask: b.ask }); return { ok: true };
+});
+on('GET', '/api/avatars', 'device', () => JSON.parse(fs.readFileSync(path.join(PUBLIC, 'avatars/index.json'), 'utf8')));
+on('POST', '/api/profiles/:id/avatar', 'device', ({ dev, p, b }) => {
+  if (dev.locked && +p.id !== dev.profile) throw Object.assign(new Error('Niet toegestaan op dit apparaat'), { status: 403 });
+  profiles.setAvatar(p.id, b.avatar); return profiles.list();
+});
+on('GET', '/api/watchers', 'device', ({ q }) => profiles.watchers(q.get('key') || '', +q.get('profile') || 0));
+on('GET', '/api/profiles', 'device', ({ dev }) => profiles.list().filter(p => !dev.locked || p.id === dev.profile));
 on('POST', '/api/profiles/:id/prefs', 'device', ({ p, b }) => { profiles.setPrefs(p.id, b); return { ok: true }; });
 
 on('GET', '/api/live/categories', 'device', async () => (await categories()).map(c => ({ ...c, channels: c.channels.map(ch => ({ ...ch, url: auth.sign(`/stream/live/${ch.id}`) })) })));
@@ -191,6 +205,12 @@ const server = http.createServer(async (req, res) => {
       if (!res.headersSent) send(res, 200, out ?? {});
       return;
     }
+    if (u.pathname.startsWith('/photo/')) {
+      const f = profiles.photoPath(u.pathname.slice(7));
+      if (!f || !auth.verify(req.url) || !fs.existsSync(f)) return send(res, 404, { error: 'Onbekend' });
+      return file(res, path.dirname(f), path.basename(f));
+    }
+    if (u.pathname.startsWith('/avatars/') && file(res, PUBLIC, u.pathname)) return;
     if (u.pathname === '/beheer' || u.pathname === '/') { res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"); if (file(res, PUBLIC, 'beheer.html')) return; }
     if (u.pathname.startsWith('/app/') && file(res, WEB, u.pathname.slice(5) || 'index.html')) return;
     send(res, 404, 'Niet gevonden', 'text/plain; charset=utf-8');

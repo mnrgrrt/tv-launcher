@@ -3,6 +3,10 @@ import crypto from 'node:crypto';
 import { db } from './db.js';
 
 db.exec(`CREATE TABLE IF NOT EXISTS devices (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, key_hash TEXT UNIQUE, created INTEGER, last_seen INTEGER, last_ip TEXT);`);
+// Per apparaat: standaardprofiel (0 = geen, dan "Wie kijkt er?") en of wisselen mag.
+try { db.exec('ALTER TABLE devices ADD COLUMN profile INTEGER DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE devices ADD COLUMN locked INTEGER DEFAULT 0'); } catch {}
+try { db.exec("ALTER TABLE devices ADD COLUMN ask TEXT DEFAULT 'samen'"); } catch {}   // vraag bij starten: altijd | samen | nooit
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const same = (a, b) => { const x = Buffer.from(a || ''), y = Buffer.from(b || ''); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
@@ -30,11 +34,17 @@ export function pair(code, name, ip) {
 
 export function deviceFor(key, ip) {
   if (!key) return null;
-  const d = db.prepare('SELECT id, name FROM devices WHERE key_hash = ?').get(sha(key));
+  const d = db.prepare('SELECT id, name, profile, locked, ask FROM devices WHERE key_hash = ?').get(sha(key));
   if (d) db.prepare('UPDATE devices SET last_seen = ?, last_ip = ? WHERE id = ?').run(Date.now(), ip, d.id);
   return d || null;
 }
-export const devices = () => db.prepare('SELECT id, name, created, last_seen, last_ip FROM devices ORDER BY created').all();
+export const devices = () => db.prepare('SELECT id, name, created, last_seen, last_ip, profile, locked, ask FROM devices ORDER BY created').all().map(d => ({ ...d, locked: !!d.locked }));
+export function setDevice(id, o) {
+  const cur = db.prepare('SELECT name, profile, locked, ask FROM devices WHERE id = ?').get(+id); if (!cur) return;
+  const ask = ['altijd', 'samen', 'nooit'].includes(o.ask) ? o.ask : cur.ask;
+  db.prepare('UPDATE devices SET name = ?, profile = ?, locked = ?, ask = ? WHERE id = ?').run(
+    o.name != null ? String(o.name).slice(0, 40) : cur.name, o.profile != null ? +o.profile : cur.profile, o.locked != null ? (o.locked ? 1 : 0) : cur.locked, ask, +id);
+}
 export const unpair = id => db.prepare('DELETE FROM devices WHERE id = ?').run(+id);
 
 // ---------- beheerders: naam + wachtwoord, sessie via cookie ----------

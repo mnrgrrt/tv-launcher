@@ -19,6 +19,13 @@ button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px}.ok{background:var(--ok)}.bad{background:var(--bad)}
 .tools{display:flex;gap:8px;align-items:center}
 @media (max-width:600px){.grid{grid-template-columns:1fr}}
+.av{width:44px;height:44px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:12px;cursor:pointer}
+.pl{display:flex;align-items:center}.acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.acts button,.acts select{margin:0}
+select{padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--in,#0c1115);color:var(--txt);font:inherit}
+#picker[hidden]{display:none}#picker{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9}
+#picker>div{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:720px;max-height:82vh;overflow:auto}
+#picker .g{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0}#picker img{width:72px;height:72px;border-radius:50%;cursor:pointer;outline:3px solid transparent;outline-offset:3px}
+#picker img:hover{outline-color:var(--acc)}
 </style></head><body><main>
 <header><div><h1>tv-serverr</h1><div class="dim" id="ver"></div></div>
 <div class="tools"><button class="ghost" id="theme" title="Dag of nacht"></button><button class="ghost" id="out" hidden>Uitloggen</button></div></header>
@@ -43,7 +50,7 @@ button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line
   <p class="dim">Nieuwe zenders in Dispatcharr komen vanzelf binnen 6 uur op alle tv's. Met deze knop meteen.</p></div>
  <div class="card"><h2>Tv koppelen</h2><p class="dim">Vraag een code aan en typ die op de tv in. De code is 10 minuten geldig.</p>
   <div class="code" id="code"></div><button id="newcode">Nieuwe code</button></div>
- <div class="card"><h2>Gekoppelde tv's</h2><div id="devices"></div></div>
+ <div class="card"><h2>Gekoppelde apparaten</h2><p class="dim">Standaardprofiel: daarmee start het apparaat meteen. Vast: op dat apparaat kan niet van profiel gewisseld worden. Vragen: of bij het starten van iets gevraagd wordt wie er kijkt.</p><div id="devices"></div></div>
  <div class="card"><h2>Profielen</h2><div id="profiles"></div>
   <div class="grid"><div><label>Naam</label><input id="pname"></div><div><label>Kleur</label><input id="pcolor" value="#3DDBB0"></div></div>
   <label><input type="checkbox" id="padmin"> Mag alles verwijderen en goedkeuren</label><button id="padd">Profiel toevoegen</button></div>
@@ -58,6 +65,7 @@ button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line
   <button id="pwgo">Wijzigen</button><div class="err" id="pwerr"></div></div>
  <div class="card"><h2>Logboek</h2><div id="log"></div></div>
 </div>
+<div id="picker" hidden><div><h2 id="pkt">Kies een avatar</h2><div id="pkg"></div><p class="dim" id="pkc"></p><button class="ghost" id="pkx">Sluiten</button></div></div><input type="file" id="photo" accept="image/jpeg,image/png,image/webp" hidden>
 <script>
 const $=id=>document.getElementById(id);
 const F={server:'Dispatcharr-adres',user:'Dispatcharr-gebruiker',pass:'Dispatcharr-wachtwoord (XC)',format:'Streamformaat (ts/m3u8)',tmdbToken:'TMDB-sleutel',
@@ -89,14 +97,33 @@ $('out').onclick=async()=>{await api('POST','/api/logout');show('login')};
 
 async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/settings');show('app');
  $('status').innerHTML=Object.entries(d.status.sources).map(([k,v])=>`<div class="row"><div><span class="dot ${v.ok?'ok':'bad'}"></span>${esc(NAMES[k]||k)}</div><div class="dim">${v.ok?'bereikbaar':esc(v.error)}</div></div>`).join('');
- $('devices').innerHTML=d.devices.map(x=>`<div class="row"><div>${esc(x.name)}<div class="dim">laatst ${when(x.last_seen)} · ${esc(x.last_ip)}</div></div><button class="ghost" data-unpair="${x.id}">Ontkoppelen</button></div>`).join('')||'<div class="dim">Nog geen tv\'s.</div>';
- $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div><span class="dot" style="background:${esc(p.color)}"></span>${esc(p.name)} ${p.admin?'<span class="dim">· mag alles</span>':''}</div>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div>`).join('');
+ PROF=d.profiles;
+ $('devices').innerHTML=d.devices.map(x=>`<div class="row"><div>${esc(x.name)}<div class="dim">laatst ${when(x.last_seen)} · ${esc(x.last_ip)}</div></div><div class="acts">
+  <select data-dev="${x.id}" data-f="profile"><option value="0">Geen: wie kijkt er?</option>${d.profiles.map(p=>`<option value="${p.id}" ${p.id===x.profile?'selected':''}>${esc(p.name)}</option>`).join('')}</select>
+  <label style="margin:0;display:flex;align-items:center;gap:4px"><input type="checkbox" data-dev="${x.id}" data-f="locked" ${x.locked?'checked':''} ${x.profile?'':'disabled'}> Vast</label>
+  <select data-dev="${x.id}" data-f="ask">${[['altijd','Altijd vragen'],['samen','Vragen bij Samen'],['nooit','Nooit vragen']].map(([v,t])=>`<option value="${v}" ${v===x.ask?'selected':''}>${t}</option>`).join('')}</select>
+  <button class="ghost" data-unpair="${x.id}">Ontkoppelen</button></div></div>`).join('')||'<div class="dim">Nog geen apparaten.</div>';
+ $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div class="pl"><img class="av" src="${esc(p.avatarUrl)}" alt="" data-pick="${p.id}">${esc(p.name)} ${p.admin?'<span class="dim">&nbsp;· mag alles</span>':''}</div><div class="acts">
+  <button class="ghost" data-pick="${p.id}">Avatar kiezen</button><button class="ghost" data-upload="${p.id}">Eigen foto</button>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div></div>`).join('');
  $('settings').innerHTML=Object.keys(F).map(k=>`<div><label>${F[k]}</label><input data-k="${k}" ${SECRET.includes(k)?'type="password" autocomplete="off" placeholder="'+(d.settings[k]?'••••':'')+'"':'value="'+esc(d.settings[k])+'"'}></div>`).join('');
  const e=d.epg;$('epg').textContent=e.at?`${e.count} programma's bewaard`+(e.oldest?`, terug tot ${when(e.oldest)}`:'')+`. Laatst bijgewerkt ${when(e.at)}.`+(e.error?` Laatste poging mislukt: ${e.error}`:''):(e.error?'Fout: '+e.error:'Nog niet geladen');
  $('users').innerHTML=d.users.map(u=>`<div class="row"><div>${esc(u.name)}<div class="dim">laatst ingelogd ${when(u.last_login)}</div></div><button class="ghost" data-deluser="${u.id}">Verwijderen</button></div>`).join('');
  $('log').innerHTML=d.log.map(l=>`<div class="row"><div>${esc(l.what)}</div><div class="dim">${esc(l.who)} · ${when(l.at)}</div></div>`).join('')||'<div class="dim">Nog niets.</div>'}
 
+let PROF=[],AV=null,PICK=0;
+document.addEventListener('change',async e=>{const t=e.target.dataset;if(!t.dev)return;const v=e.target.type==='checkbox'?e.target.checked:e.target.value;
+ try{await api('POST','/api/admin/devices/'+t.dev,{[t.f]:t.f==='profile'?+v:v});load()}catch(x){alert(x.message)}});
+async function picker(id){PICK=id;if(!AV)AV=await (await fetch('/avatars/index.json')).json();const p=PROF.find(x=>x.id==id);$('pkt').textContent='Avatar voor '+(p?p.name:'');
+ const grp=g=>AV.avatars.filter(a=>a.group===g).map(a=>`<img src="/avatars/${a.id}.svg" title="${esc(a.name)}" data-set="${a.id}">`).join('');
+ $('pkg').innerHTML=`<h3>Stoer en strak</h3><div class="g">${grp('stoer')}</div><h3>Grappig</h3><div class="g">${grp('grappig')}</div>`;$('pkc').textContent=AV.credits;$('picker').hidden=false}
+$('pkx').onclick=()=>$('picker').hidden=true;
+$('photo').onchange=async()=>{const f=$('photo').files[0];if(!f)return;if(f.size>3*1024*1024){alert('Foto te groot (max 3 MB)');return}
+ const data=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)});
+ try{await api('POST','/api/admin/profiles/'+PICK+'/photo',{data});load()}catch(x){alert(x.message)}$('photo').value=''};
 document.addEventListener('click',async e=>{const t=e.target.dataset;
+ if(t.pick){picker(t.pick);return}
+ if(t.set){await api('POST','/api/admin/profiles/'+PICK+'/avatar',{avatar:+t.set});$('picker').hidden=true;load();return}
+ if(t.upload){PICK=t.upload;$('photo').click();return}
  if(t.unpair&&confirm('Deze tv ontkoppelen?')){await api('DELETE','/api/admin/devices/'+t.unpair);load()}
  if(t.delprofile&&confirm('Profiel en kijkstand verwijderen?')){await api('DELETE','/api/admin/profiles/'+t.delprofile);load()}
  if(t.deluser&&confirm('Deze beheerder verwijderen?')){try{await api('DELETE','/api/admin/users/'+t.deluser);load()}catch(x){alert(x.message)}}});
