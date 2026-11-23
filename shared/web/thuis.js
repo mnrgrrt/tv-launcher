@@ -461,12 +461,13 @@
   function openService(x) { if (!N) return; if (x.app.input) N.openInput(x.app.input); else N.launch(x.app.pkg); }
   // In- of uitgeplugd: het beginscherm opnieuw opbouwen (alleen als je daar bent en niets open hebt).
   window.__inputs = function () { if (current && current.name === 'home' && !overlay) go('home', current.args, true); };
-  // Vaste volgorde: eerst tv kijken (Ziggo, Odido), dan WithLove, dan de rest zoals in services.json.
+  // Vaste volgorde: eerst HDMI, dan tv kijken (Ziggo, Odido), dan WithLove, dan de rest zoals in services.json.
   var FIRST = ['ziggo', 'odido', 'withlove'];
   // Per profiel: eigen volgorde (appOrder) en verborgen apps (appHide), ingesteld in Mijn profiel › Apps op Thuis.
   function sortServices(l, all) {
     var pr = me().prefs || {}, order = pr.appOrder || [], hide = pr.appHide || [];
-    var rank = function (k) { var i = order.indexOf(k); if (i >= 0) return i; var j = FIRST.indexOf(k); return 100 + (j < 0 ? 50 : j); };
+    // HDMI-apparaten vooraan (als je iets aansluit wil je daar meestal heen), dan de vaste volgorde.
+    var rank = function (k) { var i = order.indexOf(k); if (i >= 0) return i; if (/^hdmi:/.test(k)) return -1; var j = FIRST.indexOf(k); return 100 + (j < 0 ? 50 : j); };
     return l.filter(function (x) { return all || hide.indexOf(x.svc.key) < 0; }).slice().sort(function (a, b) { return rank(a.svc.key) - rank(b.svc.key); });
   }
 
@@ -797,7 +798,7 @@
       return (S.art[t + o.tmdb] ? Promise.resolve(S.art[t + o.tmdb]) : get('/api/art/' + t + '/' + o.tmdb).then(function (a) { S.art[t + o.tmdb] = a; return a; })).then(function (a) { return a.backdrop || ''; });
     });
     var tile = function (m) { return titleTile(m, kind, function () { if (m.tmdb) hb.showArt(artOf(m, kind)); else hb.rest(); }); };
-    var slots = {}; ['cont', 'rec', 'newest', 'genres', 'coll'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    var slots = {}; ['cont', 'newest', 'rec', 'genres', 'coll'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.cont.className = 'first'; slots.newest.appendChild(loading());
     var again = function () { go(kind === 'movie' ? 'films' : 'series', {}, true); };
     get('/api/continue?profile=' + S.profile).then(function (list) {
@@ -805,13 +806,13 @@
       if (mine.length) slots.cont.appendChild(rowSection('Verder kijken', mine.map(function (c) {
         return contTile(c, again, function () { if (c.tmdb) hb.showArt({ tmdb: c.tmdb, type: kind === 'series' ? 'tv' : 'movie', title: String(c.title || '').replace(/\s*\(\d{4}\)[\s.]*$/, ''), meta: c.sub || '' }); else hb.rest(); });
       }), me().name));
-      fold([slots.cont, slots.rec, slots.newest]);
+      fold([slots.cont, slots.newest]);
     }).catch(function () {});
     get('/api/catalog/' + kind + '/overview?profile=' + S.profile).then(function (o) {
       S.ov[kind] = o; slots.newest.innerHTML = ''; pool = o.newest || []; hb.refresh();
       if (!o.total) { slots.newest.innerHTML = '<div class="empty">Nog geen ' + (kind === 'movie' ? 'films' : 'series') + ' gevonden.</div>'; return; }
       slots.newest.appendChild(rowSection('Nieuw', o.newest.map(tile)));
-      fold([slots.cont, slots.rec, slots.newest]);
+      fold([slots.cont, slots.newest]);
       if ((o.recordings || []).length) slots.rec.appendChild(rowSection('Opnames', o.recordings.map(tile)));
       slots.genres.appendChild(rowSection('Genres', o.genres.map(function (g) {
         return mosaicTile(g.name, g.count + ' titels', g.posters, function () { go('grid', { kind: kind, genre: g.name, title: g.name }); });
@@ -839,12 +840,14 @@
     (function () {
       var srcs = [['', 'Plex en IPTV'], ['plex', 'Plex'], ['iptv', 'IPTV']];
       // Bibliotheek: alles wat je zelf hebt, films of series.
-      if (a.lib) bar.appendChild(F(h('button', { class: 'pill on', id: 'f-kind' }, a.kind === 'series' ? 'Series' : 'Films'), function () { a.kind = a.kind === 'series' ? 'movie' : 'series'; a.genre = ''; redo('f-kind'); }, { group: 'filters' }));
+      // Keuzeknoppen: wat er nu gekozen is, met een pijltje. OK wisselt of opent de keuze.
+      var opt = function (id, k, v) { return h('button', { class: 'pill menu', id: id }, (k ? '<span class="k">' + esc(k) + '</span>' : '') + esc(v) + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'); };
+      if (a.lib) bar.appendChild(F(opt('f-kind', '', a.kind === 'series' ? 'Series' : 'Films'), function () { a.kind = a.kind === 'series' ? 'movie' : 'series'; a.genre = ''; redo('f-kind'); }, { group: 'filters' }));
       if (a.cat !== 'soon') {
-        bar.appendChild(F(h('button', { class: 'pill on', id: 'f-genre' }, 'Genre: ' + esc(a.genre || 'alle')), function () { pickGenre(a, function () { redo('f-genre'); }); }, { group: 'filters' }));
-        bar.appendChild(F(h('button', { class: 'pill on', id: 'f-src' }, 'Bron: ' + esc(labelOf(srcs, a.src))), function () { a.src = nextOf(srcs, a.src); redo('f-src'); }, { group: 'filters' }));
-        bar.appendChild(F(h('button', { class: 'pill on', id: 'f-sort' }, labelOf(SORTS, a.sort)), function () { a.sort = nextOf(SORTS, a.sort); redo('f-sort'); }, { group: 'filters' }));
-        bar.appendChild(F(h('button', { class: 'pill on', id: 'f-good' }, a.alles === '1' ? 'Alle titels' : 'Alleen goed'), function () { a.alles = a.alles === '1' ? '' : '1'; redo('f-good'); }, { group: 'filters' }));
+        bar.appendChild(F(opt('f-genre', 'Genre', a.genre || 'Alle'), function () { pickGenre(a, function () { redo('f-genre'); }); }, { group: 'filters' }));
+        bar.appendChild(F(opt('f-src', 'Bron', labelOf(srcs, a.src)), function () { a.src = nextOf(srcs, a.src); redo('f-src'); }, { group: 'filters' }));
+        bar.appendChild(F(opt('f-sort', '', labelOf(SORTS, a.sort)), function () { a.sort = nextOf(SORTS, a.sort); redo('f-sort'); }, { group: 'filters' }));
+        bar.appendChild(F(opt('f-good', '', a.alles === '1' ? 'Alle titels' : 'Alleen goed'), function () { a.alles = a.alles === '1' ? '' : '1'; redo('f-good'); }, { group: 'filters' }));
       }
       bar.appendChild(count);
       var want = a._focus && bar.querySelector(a._focus); if (want) focus(want);

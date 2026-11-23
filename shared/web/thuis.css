@@ -18,9 +18,17 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 
 /* Focus zonder rand: wat je kiest komt naar voren, met schaduw en een lichte glans. Knoppen worden wit. */
 .f { outline: none; transition: transform .3s var(--ease), box-shadow .3s var(--ease), background .2s, color .2s; }
-.pill { padding: 12px 26px; border-radius: 999px; font-size: 24px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-.pill.on { color: var(--ink); background: rgba(255,255,255,.16); }
-.pill.focus { background: var(--ink); color: var(--bg); transform: scale(1.06); box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+.pill { position: relative; padding: 10px 22px; border-radius: 999px; font-size: 22px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+/* Gekozen: witte tekst met een klein streepje eronder (zoals tabbladen), geen grijze knop */
+.pill.on { color: var(--ink); font-weight: 650; }
+.pill.on::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 18px; height: 3px; margin-left: -9px; border-radius: 2px; background: currentColor; }
+.pill.focus { background: var(--ink); color: var(--bg); transform: scale(1.05); box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+/* Keuzeknop: wat er nu gekozen is, met een pijltje; licht glas zodat je ziet dat er iets te kiezen valt */
+.pill.menu { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); background: rgba(255,255,255,.07); }
+.pill.menu .k { color: var(--ink-3); font-weight: 500; }
+.pill.menu svg { width: 18px; height: 18px; opacity: .6; }
+.pill.menu.focus { background: var(--ink); color: var(--bg); }
+.pill.menu.focus .k { color: rgba(0,0,0,.5); }
 .btn { display: inline-flex; align-items: center; gap: 12px; padding: 16px 34px; border-radius: 999px; font-size: 24px; font-weight: 600; background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); white-space: nowrap; }
 .btn.focus { background: var(--ink); color: var(--bg); transform: scale(1.07); box-shadow: 0 14px 40px rgba(0,0,0,.5); }
 .row-item.focus .thumb, .tile.focus .thumb, .poster.focus .pimg { transform: scale(1.08); transform-origin: 50% 60%; box-shadow: 0 26px 44px rgba(0,0,0,.7); }
