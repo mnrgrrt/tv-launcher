@@ -3,6 +3,8 @@ name: APK bouwen
 on:
   push:
     branches: [main]
+    # Alleen een nieuwe Thuis als de app zelf verandert, niet bij wijzigingen aan tv-serverr.
+    paths: ['app/**', 'shared/**', 'tizen/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml']
   workflow_dispatch:
 
 permissions:
