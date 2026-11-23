@@ -16,6 +16,7 @@ import * as catalog from './catalog.js';
 import * as taste from './taste.js';
 import * as youtube from './youtube.js';
 import * as searches from './searches.js';
+import * as photos from './photos.js';
 import { pipe, target } from './proxy.js';
 import { pool } from './http.js';
 import { status } from './status.js';
@@ -79,6 +80,9 @@ on('POST', '/api/admin/profiles/:id/photo', 'admin', ({ p, b, me }) => { profile
 on('POST', '/api/admin/profiles/:id/history', 'admin', ({ p, b, me }) => {
   const n = taste.importCsv(p.id, b.csv); auth.audit(me.name, `kijkgeschiedenis toegevoegd voor profiel #${p.id} (${n} titels)`); return { titles: n };
 });
+on('GET', '/api/admin/photos', 'admin', () => photos.list());
+on('POST', '/api/admin/photos', 'admin', ({ b, me }) => { const l = photos.add(b.data, b.by); auth.audit(me.name, 'foto toegevoegd voor Thuis'); return l; });
+on('DELETE', '/api/admin/photos/:file', 'admin', ({ p, me }) => { const l = photos.remove(p.file); auth.audit(me.name, 'foto weggehaald: ' + p.file); return l; });
 on('POST', '/api/admin/profiles', 'admin', ({ b, me }) => { profiles.save(b); auth.audit(me.name, 'profiel opgeslagen: ' + b.name); return profiles.list(); });
 on('DELETE', '/api/admin/profiles/:id', 'admin', ({ p, me }) => { profiles.remove(p.id); auth.audit(me.name, 'profiel verwijderd #' + p.id); return profiles.list(); });
 on('POST', '/api/admin/users', 'admin', ({ b, me }) => { auth.addUser(b.name, b.password); auth.audit(me.name, 'beheerder toegevoegd: ' + b.name); return auth.users(); });
@@ -105,7 +109,7 @@ on('POST', '/api/device', 'device', ({ dev, b }) => {
 });
 on('GET', '/api/avatars', 'device', () => JSON.parse(fs.readFileSync(path.join(PUBLIC, 'avatars/index.json'), 'utf8')));
 // Foto's bovenaan Thuis
-on('GET', '/api/photos', 'device', () => JSON.parse(fs.readFileSync(path.join(PUBLIC, 'achtergrond/index.json'), 'utf8')).photos.map(p => ({ url: '/achtergrond/' + p.file, by: p.by })));
+on('GET', '/api/photos', 'device', () => photos.list());
 on('POST', '/api/profiles/:id/avatar', 'device', ({ dev, p, b }) => {
   if (dev.locked && +p.id !== dev.profile) throw Object.assign(new Error('Niet toegestaan op dit apparaat'), { status: 403 });
   profiles.setAvatar(p.id, b.avatar); return profiles.list();
@@ -250,7 +254,8 @@ const server = http.createServer(async (req, res) => {
       if (!f || !auth.verify(req.url) || !fs.existsSync(f)) return send(res, 404, { error: 'Onbekend' });
       return file(res, path.dirname(f), path.basename(f));
     }
-    if ((u.pathname.startsWith('/avatars/') || u.pathname.startsWith('/achtergrond/')) && file(res, PUBLIC, u.pathname)) return;
+    if (u.pathname.startsWith('/avatars/') && file(res, PUBLIC, u.pathname)) return;
+    if (u.pathname.startsWith('/achtergrond/') && file(res, photos.DIR, u.pathname.slice(13))) return;
     if (u.pathname === '/beheer' || u.pathname === '/') { res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"); if (file(res, PUBLIC, 'beheer.html')) return; }
     if (u.pathname.startsWith('/app/') && file(res, WEB, u.pathname.slice(5) || 'index.html')) return;
     send(res, 404, 'Niet gevonden', 'text/plain; charset=utf-8');
