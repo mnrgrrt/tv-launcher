@@ -286,16 +286,18 @@ class VodActivity : Activity() {
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
             .setMediaCodecSelector(Decoders.selector)
+        // Ook proberen als de chip zegt dat een spoor zwaar is (4K-remux, hoog niveau)
+        val selector = androidx.media3.exoplayer.trackselection.DefaultTrackSelector(this).apply {
+            setParameters(buildUponParameters().setExceedVideoConstraintsIfNecessary(true).setExceedRendererCapabilitiesIfNecessary(true))
+        }
         val p = ExoPlayer.Builder(this, renderers)
+            .setTrackSelector(selector)
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
             .setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(30_000)
             .build()
         // Nederlands geluid eerst; Nederlandse ondertitels aan als ze er zijn (ook bij anderstalig geluid).
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .setPreferredAudioLanguages("nl", "nld", "dut", "en")
-            // Ook proberen als de chip zegt dat een spoor zwaar is (4K-remux, hoog niveau)
-            .setExceedVideoConstraintsIfNecessary(true)
-            .setExceedRendererCapabilitiesIfNecessary(true)
             .setPreferredAudioRoleFlags(C.ROLE_FLAG_MAIN)
             .setPreferredTextLanguages("nl", "nld", "dut")
             .setSelectUndeterminedTextLanguage(false)
