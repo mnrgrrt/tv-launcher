@@ -1,0 +1,10 @@
+{
+  "name": "tv-serverr",
+  "version": "1.0.0",
+  "description": "tv-serverr: server voor Thuis: koppelingen, profielen, kijkstanden en gids op één plek",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": { "start": "node --disable-warning=ExperimentalWarning src/index.js" },
+  "engines": { "node": ">=22.13" },
+  "license": "UNLICENSED"
+}

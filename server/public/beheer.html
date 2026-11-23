@@ -1,0 +1,54 @@
+<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>tv-serverr beheer</title>
+<style>
+:root{--bg:#0f1418;--card:#182027;--line:#26313a;--txt:#e8eef2;--dim:#93a3ae;--acc:#3DDBB0}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--txt)}
+main{max-width:760px;margin:0 auto;padding:24px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin:16px 0}
+label{display:block;color:var(--dim);font-size:13px;margin:10px 0 4px}input{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:#0c1115;color:var(--txt);font:inherit}
+button{background:var(--acc);color:#05221a;border:0;border-radius:8px;padding:9px 16px;font:600 14px system-ui;cursor:pointer;margin-top:12px}
+button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line)}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}
+.dim{color:var(--dim);font-size:13px}.code{font:700 40px ui-monospace,monospace;letter-spacing:6px;color:var(--acc)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.err{color:#ff8a80}
+</style></head><body><main>
+<h1>tv-serverr</h1><div class="dim" id="ver"></div>
+<div class="card" id="login"><h2>Inloggen</h2><label>Pincode</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password">
+<button onclick="enter()">Openen</button><div class="err" id="lerr"></div></div>
+<div id="app" hidden>
+ <div class="card"><h2>Tv koppelen</h2><p class="dim">Vraag een code aan en typ die op de tv in. De code is 10 minuten geldig.</p>
+  <div class="code" id="code"></div><button onclick="code()">Nieuwe code</button></div>
+ <div class="card"><h2>Gekoppelde tv's</h2><div id="devices"></div></div>
+ <div class="card"><h2>Profielen</h2><div id="profiles"></div>
+  <div class="grid"><div><label>Naam</label><input id="pname"></div><div><label>Kleur</label><input id="pcolor" value="#3DDBB0"></div></div>
+  <label><input type="checkbox" id="padmin" style="width:auto"> Mag alles verwijderen en goedkeuren</label><button onclick="addProfile()">Profiel toevoegen</button></div>
+ <div class="card"><h2>Koppelingen</h2><p class="dim">Velden met •••• zijn ingesteld. Laat leeg om niets te veranderen.</p><div class="grid" id="settings"></div>
+  <button onclick="save()">Opslaan</button> <span class="dim" id="saved"></span></div>
+ <div class="card"><h2>Gids</h2><div class="dim" id="epg"></div><button class="ghost" onclick="api('POST','/api/admin/epg').then(()=>setTimeout(load,3000))">Nu verversen</button></div>
+</div>
+<script>
+const F={server:'Dispatcharr-adres',user:'Dispatcharr-gebruiker',pass:'Dispatcharr-wachtwoord',format:'Streamformaat (ts/m3u8)',tmdbToken:'TMDB-sleutel',
+plexUrl:'Plex-adres',plexToken:'Plex-token',osKey:'OpenSubtitles-sleutel',osUser:'OpenSubtitles-gebruiker',osPass:'OpenSubtitles-wachtwoord',
+radarrUrl:'Radarr-adres',radarrKey:'Radarr-sleutel',sonarrUrl:'Sonarr-adres',sonarrKey:'Sonarr-sleutel',categories:'Zenderregels (url)',haWebhook:'HA-webhook'};
+const SECRET=['pass','tmdbToken','plexToken','osKey','osPass','radarrKey','sonarrKey'];
+let PIN=sessionStorage.getItem('pin')||'';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(m,u,b){const r=await fetch(u,{method:m,headers:{'X-Thuis-Pin':PIN,'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
+const when=t=>t?new Date(t).toLocaleString('nl-NL',{dateStyle:'short',timeStyle:'short'}):'nooit';
+async function enter(){PIN=document.getElementById('pin').value;try{await load();sessionStorage.setItem('pin',PIN)}catch(e){document.getElementById('lerr').textContent=e.message}}
+async function load(){const d=await api('GET','/api/admin/settings');login.hidden=true;app.hidden=false;
+ devices.innerHTML=d.devices.map(x=>`<div class="row"><div>${esc(x.name)}<div class="dim">laatst ${when(x.last_seen)} · ${esc(x.last_ip)}</div></div><button class="ghost" onclick="unpair(${x.id})">Ontkoppelen</button></div>`).join('')||'<div class="dim">Nog geen tv\'s.</div>';
+ profiles.innerHTML=d.profiles.map(p=>`<div class="row"><div><span style="color:${esc(p.color)}">●</span> ${esc(p.name)} ${p.admin?'<span class="dim">· beheer</span>':''}</div>${p.id>1?`<button class="ghost" onclick="delProfile(${p.id})">Verwijderen</button>`:''}</div>`).join('');
+ settings.innerHTML=Object.keys(F).map(k=>`<div><label>${F[k]}</label><input data-k="${k}" ${SECRET.includes(k)?'type="password" autocomplete="off" placeholder="'+(d.settings[k]?'••••':'')+'"':'value="'+esc(d.settings[k])+'"'}></div>`).join('');
+ const e=d.epg;epg.textContent=e.at?`${e.count} programma's, bijgewerkt ${when(e.at)}`+(e.error?` · fout: ${e.error}`:''):(e.error?'Fout: '+e.error:'Nog niet geladen');
+ fetch('/api/health').then(r=>r.json()).then(h=>ver.textContent='versie '+h.version)}
+async function code(){const c=await api('POST','/api/admin/code');document.getElementById('code').textContent=c.code}
+async function unpair(id){if(confirm('Deze tv ontkoppelen?')){await api('DELETE','/api/admin/devices/'+id);load()}}
+async function addProfile(){if(!pname.value.trim())return;await api('POST','/api/admin/profiles',{name:pname.value.trim(),color:pcolor.value,admin:padmin.checked});pname.value='';load()}
+async function delProfile(id){if(confirm('Profiel en kijkstand verwijderen?')){await api('DELETE','/api/admin/profiles/'+id);load()}}
+async function save(){const o={};document.querySelectorAll('#settings input').forEach(i=>{if(SECRET.includes(i.dataset.k)){if(i.value)o[i.dataset.k]=i.value}else o[i.dataset.k]=i.value});
+ await api('POST','/api/admin/settings',o);saved.textContent='Opgeslagen';setTimeout(()=>saved.textContent='',2000);load()}
+pin.addEventListener('keydown',e=>{if(e.key==='Enter')enter()});
+if(PIN)load().catch(()=>{});
+</script></main></body></html>
