@@ -110,7 +110,7 @@ class PlayerActivity : Activity() {
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
     private fun text(sizeSp: Float, bold: Boolean = false, color: Int = Color.WHITE) = TextView(this).apply {
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp * 0.7f)   // alles op 70%: rustiger, meer beeld
         setTextColor(color)
         if (bold) typeface = Typeface.DEFAULT_BOLD
         maxLines = 1
@@ -137,7 +137,7 @@ class PlayerActivity : Activity() {
         // Balk onderin, in de stijl van Thuis. Ruime marges: sommige tv's snijden de randen af.
         bar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(72), dp(120), dp(72), dp(40))
+            setPadding(dp(48), dp(100), dp(48), dp(24))
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0xC005070A.toInt(), 0xF505070A.toInt()))
             visibility = View.GONE
         }
@@ -153,11 +153,11 @@ class PlayerActivity : Activity() {
             progressBackgroundTintList = ColorStateList.valueOf(0x40FFFFFF)
         }
         timeRow.addView(tvStart, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(14) })
-        timeRow.addView(progress, LinearLayout.LayoutParams(0, dp(6), 1f))
+        timeRow.addView(progress, LinearLayout.LayoutParams(0, dp(4), 1f))
         timeRow.addView(tvEnd, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(14) })
-        bar.addView(timeRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+        bar.addView(timeRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; visibility = View.GONE }
-        bar.addView(btnRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
+        bar.addView(btnRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         root.addView(bar, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
 
         // Zenderlijst links
@@ -177,7 +177,7 @@ class PlayerActivity : Activity() {
             onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ -> hideList(); play(pos) }
         }
         listPanel.addView(listView, LinearLayout.LayoutParams(-1, -1))
-        root.addView(listPanel, FrameLayout.LayoutParams(dp(420), -1, Gravity.START))
+        root.addView(listPanel, FrameLayout.LayoutParams(dp(320), -1, Gravity.START))
 
         // Melding in het midden (laden, fouten, zendernummer)
         center = text(28f, true).apply {
@@ -196,7 +196,7 @@ class PlayerActivity : Activity() {
             background = GradientDrawable().apply { setColor(0xF20A0D12.toInt()); cornerRadius = dp(18).toFloat() }
             visibility = View.GONE
         }
-        fun pill() = text(22f, true).apply { setPadding(dp(26), dp(14), dp(26), dp(14)) }
+        fun pill() = text(22f, true).apply { setPadding(dp(18), dp(9), dp(18), dp(9)) }
         choiceLive = pill().apply { setText("● Live") }
         choiceStart = pill().apply { setText("↺ Vanaf begin") }
         choice.addView(choiceLive, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(16) })
@@ -538,9 +538,9 @@ class PlayerActivity : Activity() {
             val on = i == btnSel
             btnRow.addView(text(19f, true, if (on) 0xFF05070A.toInt() else Color.WHITE).apply {
                 text = b.first
-                setPadding(dp(24), dp(11), dp(24), dp(11))
+                setPadding(dp(16), dp(7), dp(16), dp(7))
                 background = GradientDrawable().apply { setColor(if (on) Color.WHITE else 0x26FFFFFF); cornerRadius = dp(999).toFloat() }
-            }, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(12) })
+            }, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(8) })
         }
         btnRow.addView(text(16f, false, 0x99FFFFFF.toInt()).apply {
             text = if (replay != null) "↑ ↓ zappen   ·   ← → spoelen (vasthouden = sneller)" else "↑ ↓ zappen   ·   terug = balk weg"
