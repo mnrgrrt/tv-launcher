@@ -157,11 +157,28 @@ class VodActivity : Activity() {
     private fun closeMenu() { menu.visibility = View.GONE; pv.requestFocus() }
 
     /** Gele knop: alle ondertitels uit het bestand, uit, en versies van OpenSubtitles. */
+    /** Grootte, achtergrond en hoogte; elke OK wisselt en je ziet het meteen. */
+    private fun styleMenu(sel: Int = 0) {
+        val labels = listOf(
+            "Grootte: " + SubStyle.sizes[SubStyle.size(this)].first,
+            "Achtergrond: " + SubStyle.backs[SubStyle.back(this)],
+            "Hoogte: " + SubStyle.places[SubStyle.place(this)].first,
+            "Klaar")
+        val acts = listOf<() -> Unit>(
+            { SubStyle.cycle(this, "size", SubStyle.sizes.size); SubStyle.apply(this, pv.subtitleView, osd.visibility == View.VISIBLE); styleMenu(0) },
+            { SubStyle.cycle(this, "back", SubStyle.backs.size); SubStyle.apply(this, pv.subtitleView, osd.visibility == View.VISIBLE); styleMenu(1) },
+            { SubStyle.cycle(this, "place", SubStyle.places.size); SubStyle.apply(this, pv.subtitleView, osd.visibility == View.VISIBLE); styleMenu(2) },
+            { })
+        openMenu("Weergave ondertitels", labels, acts, sel)
+    }
+
     private fun subtitleMenu() {
         val p = player ?: return
         val groups = p.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT && it.isSupported }
         val off = p.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) || groups.none { it.isSelected }
         val labels = ArrayList<String>(); val acts = ArrayList<() -> Unit>()
+        labels.add("    \u2699 Weergave: " + SubStyle.summary(this))
+        acts.add { styleMenu() }
         labels.add((if (off) "✓ " else "    ") + "Uit")
         acts.add { p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build(); flash("Ondertitels uit") }
         groups.forEachIndexed { i, g ->
@@ -243,7 +260,7 @@ class VodActivity : Activity() {
         }
     }
 
-    private val hideOsd = Runnable { osd.visibility = View.GONE; pv.subtitleView?.setBottomPaddingFraction(0.08f) }
+    private val hideOsd = Runnable { osd.visibility = View.GONE; SubStyle.apply(this, pv.subtitleView, false) }
     private val tick = object : Runnable {
         override fun run() {
             updateOsd()
@@ -364,6 +381,7 @@ class VodActivity : Activity() {
             override fun onPlayerError(error: PlaybackException) { show("Dit speelt niet af\n${error.errorCodeName}", 0) }
         })
         pv.player = p
+        SubStyle.apply(this, pv.subtitleView, false)
         player = p
         p.setMediaItem(mediaItem(emptyList()))
         p.prepare()
@@ -418,7 +436,7 @@ class VodActivity : Activity() {
 
     private fun showOsd() {
         osd.visibility = View.VISIBLE; updateOsd()
-        pv.subtitleView?.setBottomPaddingFraction(0.24f)   // ondertitels boven de balk
+        SubStyle.apply(this, pv.subtitleView, true)   // ondertitels boven de balk
         ui.removeCallbacks(hideOsd)
         if (player?.playWhenReady != false) ui.postDelayed(hideOsd, 4000)
     }

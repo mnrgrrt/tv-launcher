@@ -258,6 +258,7 @@ class PlayerActivity : Activity() {
             }
         })
         playerView.player = p
+        SubStyle.apply(this, playerView.subtitleView, false)
         return p
     }
 
