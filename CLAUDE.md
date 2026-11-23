@@ -3,7 +3,8 @@
 Dit bestand geldt voor elke sessie in dit project. Lees het eerst, houd je eraan, en werk het bij als er iets verandert.
 
 ## Wat het is
-- **Thuis**: eigen tv-startscherm (Android-app in `app/`, schermen in `shared/web/`, Samsung-voorbereiding in `tizen/`).
+- **Sjuul TV** (eerst "Thuis"): eigen tv-startscherm (Android-app in `app/`, smaak `tv`, schermen in `shared/web/index.html` + `thuis.js`, Samsung-voorbereiding in `tizen/`).
+- **Sjuul TV telefoon**: zelfde app, smaak `telefoon` (`shared/web/telefoon.html` + `telefoon.js`). Release `telefoon-test` / `telefoon`, bestand `sjuul-telefoon.apk`. Gedeelde logica in `shared/web/kern.js`.
 - **tv-serverr**: de server (`server/`, Node 22, SQLite, geen npm-pakketten). Draait als Docker-container in docker-media (LXC 107, Proxmox-node dell), poort 8484, beheer op `/beheer`.
 - Tv's praten alleen met tv-serverr. Alle sleutels en wachtwoorden (Dispatcharr, Plex, TMDB, OpenSubtitles, Radarr, Sonarr, Home Assistant) staan alleen op de server.
 
