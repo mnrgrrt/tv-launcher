@@ -716,7 +716,7 @@
         })));
         slots.coll.appendChild(rowSection('Collecties', o.collections.map(function (c) {
           var f = c.id.split(':'), a = { kind: kind, title: c.name };
-          if (f[0] === 'src') a.src = f[1]; else if (f[0] === 'soon') { a.cat = 'soon'; a.alles = '1'; } else a.cat = f.slice(1).join(':');
+          if (f[0] === 'src') { a.src = f[1]; a.alles = '1'; a.sort = 'nieuw'; } else if (f[0] === 'soon') { a.cat = 'soon'; a.alles = '1'; } else a.cat = f.slice(1).join(':');
           return mosaicTile(c.name, c.count + ' titels', c.posters, function () { go('grid', a); });
         })));
       }).catch(function (e) { slots.newest.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
@@ -798,10 +798,12 @@
     var src = a.plex ? 'plex:' + a.plex.key : a.vod ? (a.vodKind === 'movie' ? 'movie:' : 'series:') + a.vod.id : '';
     var showQ = series && (a.plex || a.vod) ? get('/api/show?profile=' + S.profile + (a.plex ? '&plex=' + a.plex.key : '&vod=' + a.vod.id)).catch(function () { return null; }) : Promise.resolve(null);
     showQ.then(function (show) {
+      // Geen TMDB-nummer? Dan op titel en jaar opzoeken, zodat ook deze titels cast, extra's en aanbevelingen krijgen.
       var tmdbId = a.tmdb || (show && show.tmdb) || 0;
-      return Promise.all([tmdbId ? get('/api/info/' + a.type + '/' + tmdbId).catch(function () { return null; }) : null,
+      var idQ = tmdbId ? Promise.resolve(tmdbId) : get('/api/info-find?type=' + a.type + '&title=' + encodeURIComponent(a.title || '') + '&year=' + encodeURIComponent((a.plex && a.plex.year) || (a.vod && a.vod.year) || '')).then(function (r) { return r.id || 0; }, function () { return 0; });
+      return idQ.then(function (id) { tmdbId = id; a.tmdb = a.tmdb || id; return id; }).then(function () { return Promise.all([tmdbId ? get('/api/info/' + a.type + '/' + tmdbId).catch(function () { return null; }) : null,
         get('/api/mylist?profile=' + S.profile).catch(function () { return []; }), myServices(),
-        !series && src ? get('/api/watched?profile=' + S.profile + '&key=' + encodeURIComponent(src)).catch(function () { return {}; }) : {}, show]);
+        !series && src ? get('/api/watched?profile=' + S.profile + '&key=' + encodeURIComponent(src)).catch(function () { return {}; }) : {}, show]); });
     }).then(function (r) {
       var d = r[0] || {}, mine = r[2], seen = !!r[3].on, show = r[4];
       var inList = r[1].some(function (x) { return x.key === (src || 'tmdb:' + a.type + a.tmdb); });

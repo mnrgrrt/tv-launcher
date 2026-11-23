@@ -2,7 +2,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { db, S, setSettings, publicSettings, uncache } from './db.js';
+import { db, S, setSettings, publicSettings, uncache, cached } from './db.js';
 import * as auth from './auth.js';
 import * as xtream from './xtream.js';
 import { build as categories } from './categories.js';
@@ -160,6 +160,12 @@ on('GET', '/api/info/:type/:id', 'device', async ({ p }) => {
   const d = await tmdb.details(type, +p.id), c = await catalog.items(kind).catch(() => null);
   const related = d.related.map(x => { const o = c && c.byTmdb.get(x.tmdb); return o ? { ...x, sources: o.sources, plex: o.plex || null, vod: o.vod ? withVod(kind, o.vod) : null } : x; });
   return { ...d, related };
+});
+// Titel zonder TMDB-nummer (sommige Plex- en IPTV-titels): op naam en jaar opzoeken, een week bewaard.
+on('GET', '/api/info-find', 'device', ({ q }) => {
+  const type = q.get('type') === 'tv' ? 'tv' : 'movie', title = String(q.get('title') || '').slice(0, 120), year = String(q.get('year') || '').replace(/\D/g, '').slice(0, 4);
+  if (!title) return { id: 0 };
+  return cached(`tmdb:find:${type}:${title.toLowerCase()}:${year}`, 7 * 86400e3, async () => ({ id: await tmdb.findId(type, title, year).catch(() => 0) || (year ? await tmdb.findId(type, title, '').catch(() => 0) : 0) }));
 });
 on('GET', '/api/person/:id', 'device', ({ p }) => tmdb.person(+p.id));
 on('GET', '/api/plex/extras/:key', 'device', ({ p }) => plex.extras(+p.key));

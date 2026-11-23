@@ -153,7 +153,7 @@ class VodActivity : Activity() {
         menuActions = actions
         menuList.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
             override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
-                (super.getView(position, convertView, parent) as TextView).apply { setTextColor(Color.WHITE); textSize = 19f; setPadding(dp(18), dp(10), dp(18), dp(10)); background = null }
+                (super.getView(position, convertView, parent) as TextView).apply { setTextColor(Color.WHITE); textSize = 14f; setPadding(dp(14), dp(7), dp(14), dp(7)); background = null; isSingleLine = true; ellipsize = android.text.TextUtils.TruncateAt.END }
         }
         menu.visibility = View.VISIBLE
         menuList.requestFocus()
@@ -315,21 +315,21 @@ class VodActivity : Activity() {
         // Onderbalk: titel links, daaronder de voortgang met tijden, en een rij ronde knoppen.
         osd = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(56), dp(140), dp(56), dp(26))
+            setPadding(dp(48), dp(120), dp(48), dp(18))
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0x99000000.toInt(), 0xE0000000.toInt()))
         }
-        tvTitle = TextView(this).apply { setTextColor(Color.WHITE); textSize = 22f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
-        tvSub = TextView(this).apply { setTextColor(0xB3FFFFFF.toInt()); textSize = 14f; maxLines = 1 }
+        tvTitle = TextView(this).apply { setTextColor(Color.WHITE); textSize = 17f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        tvSub = TextView(this).apply { setTextColor(0xB3FFFFFF.toInt()); textSize = 12f; maxLines = 1 }
         bar = Scrub(this)
-        tvTime = TextView(this).apply { setTextColor(0xCCFFFFFF.toInt()); textSize = 13f }
-        tvLeft = TextView(this).apply { setTextColor(0xCCFFFFFF.toInt()); textSize = 13f; gravity = Gravity.END }
+        tvTime = TextView(this).apply { setTextColor(0xCCFFFFFF.toInt()); textSize = 11f }
+        tvLeft = TextView(this).apply { setTextColor(0xCCFFFFFF.toInt()); textSize = 11f; gravity = Gravity.END }
         osd.addView(tvTitle); osd.addView(tvSub)
-        osd.addView(bar, LinearLayout.LayoutParams(-1, dp(24)).apply { topMargin = dp(12) })
+        osd.addView(bar, LinearLayout.LayoutParams(-1, dp(20)).apply { topMargin = dp(8) })
         val times = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         times.addView(tvTime, LinearLayout.LayoutParams(0, -2, 1f)); times.addView(tvLeft, LinearLayout.LayoutParams(0, -2, 1f))
         osd.addView(times)
-        val back = Icons.Button(this, Icons.BACK, 52, "10"); btnPlay = Icons.Button(this, Icons.PAUSE, 64); val fwd = Icons.Button(this, Icons.FWD, 52, "30")
-        val subs = Icons.Button(this, Icons.SUBS, 48); val audio = Icons.Button(this, Icons.AUDIO, 48); val more = Icons.Button(this, Icons.MORE, 48)
+        val back = Icons.Button(this, Icons.BACK, 40, "10"); btnPlay = Icons.Button(this, Icons.PAUSE, 50); val fwd = Icons.Button(this, Icons.FWD, 40, "30")
+        val subs = Icons.Button(this, Icons.SUBS, 36); val audio = Icons.Button(this, Icons.AUDIO, 36); val more = Icons.Button(this, Icons.MORE, 36)
         btns = listOf(back, btnPlay, fwd, subs, audio, more)
         val row = FrameLayout(this)
         val mid = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -338,12 +338,12 @@ class VodActivity : Activity() {
         listOf(subs, audio, more).forEach { right.addView(it, LinearLayout.LayoutParams(it.layoutParams.width, it.layoutParams.height).apply { marginStart = dp(10) }) }
         row.addView(mid, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         row.addView(right, FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.CENTER_VERTICAL))
-        osd.addView(row, LinearLayout.LayoutParams(-1, dp(80)).apply { topMargin = dp(6) })
+        osd.addView(row, LinearLayout.LayoutParams(-1, dp(64)).apply { topMargin = dp(4) })
         root.addView(osd, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
 
         center = TextView(this).apply {
-            setTextColor(Color.WHITE); textSize = 24f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
-            setPadding(dp(28), dp(16), dp(28), dp(16))
+            setTextColor(Color.WHITE); textSize = 15f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
+            setPadding(dp(20), dp(12), dp(20), dp(12))
             background = GradientDrawable().apply { setColor(0xB3000000.toInt()); cornerRadius = dp(14).toFloat() }
             visibility = View.GONE
         }
@@ -352,11 +352,11 @@ class VodActivity : Activity() {
         menu = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply { setColor(0xF21C1C1F.toInt()); cornerRadius = dp(20).toFloat() }
-            setPadding(dp(14), dp(18), dp(14), dp(14))
+            setPadding(dp(10), dp(14), dp(10), dp(10))
             elevation = dp(12).toFloat()
             visibility = View.GONE
         }
-        menuTitle = TextView(this).apply { setTextColor(0x99FFFFFF.toInt()); textSize = 14f; typeface = Typeface.DEFAULT_BOLD; isAllCaps = true; letterSpacing = 0.08f; setPadding(dp(18), 0, 0, dp(8)) }
+        menuTitle = TextView(this).apply { setTextColor(0x99FFFFFF.toInt()); textSize = 11f; typeface = Typeface.DEFAULT_BOLD; isAllCaps = true; letterSpacing = 0.08f; setPadding(dp(18), 0, 0, dp(8)) }
         menu.addView(menuTitle)
         menuList = ListView(this).apply {
             divider = null; isVerticalScrollBarEnabled = false
@@ -364,7 +364,7 @@ class VodActivity : Activity() {
             onItemClickListener = AdapterView.OnItemClickListener { _, _, pos, _ -> val a = menuActions.getOrNull(pos); closeMenu(); a?.invoke() }
         }
         menu.addView(menuList, LinearLayout.LayoutParams(-1, -2))
-        root.addView(menu, FrameLayout.LayoutParams(dp(520), -2, Gravity.END or Gravity.BOTTOM).apply { setMargins(0, dp(40), dp(48), dp(120)) })
+        root.addView(menu, FrameLayout.LayoutParams(dp(360), -2, Gravity.END or Gravity.BOTTOM).apply { setMargins(0, dp(40), dp(40), dp(96)) })
         setContentView(root)
 
         tvTitle.text = item.optString("title").replace(Regex("^\\[[A-Z]{2}\\]\\s*|^[A-Z]{2}\\s*[|:-]\\s*"), "")

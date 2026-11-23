@@ -50,7 +50,7 @@ object Icons {
         val icon = Shape(data)
         private val bgc = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(0) }
         private val iv = ImageView(ctx).apply { setImageDrawable(icon) }
-        private val tv = TextView(ctx).apply { text = label; textSize = 10f; setTextColor(Color.WHITE); typeface = android.graphics.Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER }
+        private val tv = TextView(ctx).apply { text = label; textSize = 8f; setTextColor(Color.WHITE); typeface = android.graphics.Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER }
         init {
             val d = Icons.dp(ctx, sizeDp); background = bgc
             val pad = d / 4
