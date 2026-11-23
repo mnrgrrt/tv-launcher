@@ -849,7 +849,16 @@
         var b = this; seen = !seen;
         setWatched([{ key: src, kind: 'movie', meta: { title: d.title || a.title, img: d.backdrop || '', tmdb: a.tmdb, type: 'movie' } }], seen).then(function () { b.innerHTML = seen ? '✓ Bekeken' : 'Markeer als bekeken'; });
       }));
-      bt.appendChild(F(h('button', { class: 'btn' }, inList ? '✓ Mijn lijst' : '+ Mijn lijst'), function () {
+      // Staat deze titel in Verder kijken? Dan ook een knop om hem daar weg te halen (zonder hem op bekeken te zetten).
+      get('/api/continue?profile=' + S.profile).then(function (l) {
+        var c = l.filter(function (x) {
+          return x.key === src || (a.plex && (x.show === String(a.plex.key) || x.key === 'plex:' + a.plex.key)) || (a.vod && series && String(x.seriesId) === String(a.vod.id));
+        })[0];
+        if (!c) return;
+        var b = F(h('button', { class: 'btn' }, 'Uit Verder kijken'), function () { hideCont(c).then(function () { var n = b.nextSibling || b.previousSibling; b.remove(); if (n) focus(n); }); });
+        var ml = bt.querySelector('.btn.ml'); bt.insertBefore(b, ml || null);
+      }, function () {});
+      bt.appendChild(F(h('button', { class: 'btn ml' }, inList ? '✓ Mijn lijst' : '+ Mijn lijst'), function () {
         api('POST', '/api/mylist', { profile: S.profile, key: src || 'tmdb:' + a.type + a.tmdb, meta: { title: d.title || a.title, img: d.poster || '', type: a.type, tmdb: a.tmdb, plex: a.plex || null, vod: a.vod || null, vodKind: a.vodKind || '' } })
           .then(function (r2) { cur.innerHTML = r2.inList ? '✓ Mijn lijst' : '+ Mijn lijst'; toast(r2.inList ? 'Op je lijst gezet' : 'Van je lijst gehaald'); });
       }));
