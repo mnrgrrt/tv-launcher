@@ -452,6 +452,20 @@ class VodActivity : Activity() {
         p.setMediaItem(mediaItem(emptyList()))
         p.prepare()
         p.playWhenReady = true
+        // Aanraken (telefoon): tikken op het beeld toont of verbergt de balk, knoppen werken met een tik,
+        // en over de voortgangsbalk schuiven spoelt.
+        pv.setOnClickListener { if (osd.visibility == View.VISIBLE) { ui.removeCallbacks(hideOsd); hideBar() } else showOsd() }
+        btns.forEachIndexed { i, b -> b.setOnClickListener { zone = i; press(i); showOsd() } }
+        bar.setOnTouchListener { v, e ->
+            val pl = player ?: return@setOnTouchListener false
+            val d = pl.duration.takeIf { it > 0 } ?: return@setOnTouchListener false
+            val f = (e.x / v.width).coerceIn(0f, 1f)
+            when (e.action) {
+                android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> { zone = -1; bar.progress = f; tvTime.text = fmt((d * f).toLong()); ui.removeCallbacks(hideOsd); light() }
+                android.view.MotionEvent.ACTION_UP -> { pl.seekTo((d * f).toLong()); showOsd(); v.performClick() }
+            }
+            true
+        }
         showOsd()
         ui.post(tick)
     }

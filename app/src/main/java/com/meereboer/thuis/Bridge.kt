@@ -24,6 +24,13 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
     }
 
     @JavascriptInterface fun isApp(): Boolean = true
+    @JavascriptInterface fun isPhone(): Boolean = BuildConfig.TELEFOON
+    /** Telefoon: Terug op het eerste scherm sluit de app (op de tv is Sjuul TV het startscherm en blijft hij staan). */
+    @JavascriptInterface fun closeApp() { if (BuildConfig.TELEFOON) act.runOnUiThread { act.moveTaskToBack(true) } }
+    /** Mobiel internet (of een andere verbinding met een databundel)? Dan zuiniger afspelen. */
+    @JavascriptInterface fun metered(): Boolean = try {
+        (act.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).isActiveNetworkMetered
+    } catch (_: Exception) { false }
     @JavascriptInterface fun appVersion(): String =
         try { act.packageManager.getPackageInfo(act.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
 

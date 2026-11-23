@@ -8,7 +8,7 @@ export const on = () => !!(S('plexUrl') && S('plexToken'));
 async function get(path, method = 'GET') {
   const sep = path.includes('?') ? '&' : '?';
   const o = await json(`${S('plexUrl')}${path}${sep}X-Plex-Token=${enc(S('plexToken'))}`, { method,
-    headers: { Accept: 'application/json', 'X-Plex-Client-Identifier': CLIENT, 'X-Plex-Product': 'Thuis', 'X-Plex-Device-Name': 'tv-serverr' }, what: 'Plex' });
+    headers: { Accept: 'application/json', 'X-Plex-Client-Identifier': CLIENT, 'X-Plex-Product': 'Sjuul TV', 'X-Plex-Device-Name': 'tv-serverr' }, what: 'Plex' });
   return (o && o.MediaContainer) || {};
 }
 // Plaatjes lopen via de server (/img), zodat de tv geen Plex-token nodig heeft.

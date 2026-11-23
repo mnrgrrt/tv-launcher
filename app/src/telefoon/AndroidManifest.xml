@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alleen voor de telefoon: de app staat rechtop, de spelers draaien mee naar liggend. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name=".MainActivity" android:screenOrientation="portrait" />
+        <activity android:name=".VodActivity" android:screenOrientation="sensorLandscape" />
+        <activity android:name=".PlayerActivity" android:screenOrientation="sensorLandscape" />
+    </application>
+</manifest>

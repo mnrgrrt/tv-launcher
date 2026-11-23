@@ -14,10 +14,14 @@ import java.io.File
 
 /** Zelf bijwerken: een testversie kijkt naar de release "test", een gewone versie naar "laatste". */
 object Updater {
+    /** Release op GitHub: tv "test"/"laatste", telefoon "telefoon-test"/"telefoon". */
     private fun tag(ctx: Context): String {
         val name = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
-        return if (name.contains("test")) "test" else "laatste"
+        val test = name.contains("test")
+        return if (BuildConfig.TELEFOON) (if (test) "telefoon-test" else "telefoon") else (if (test) "test" else "laatste")
     }
+    /** Bestandsnaam met het interne nummer; de tv houdt zijn oude naam, zodat oudere versies hem blijven vinden. */
+    private val asset = if (BuildConfig.TELEFOON) Regex("^sjuul-telefoon-(\\d+)\\.apk$") else Regex("^thuis-(\\d+)\\.apk$")
     private fun api(ctx: Context) = "https://api.github.com/repos/mnrgrrt/tv-launcher/releases/tags/${tag(ctx)}"
 
     fun installedVersion(ctx: Context): Int {
@@ -37,9 +41,9 @@ object Updater {
             val o = JSONObject(r.body?.string() ?: "{}")
             val assets = o.optJSONArray("assets")
             val best = (0 until (assets?.length() ?: 0)).map { assets!!.getJSONObject(it) }
-                .mapNotNull { a -> Regex("^thuis-(\\d+)\\.apk$").find(a.optString("name"))?.groupValues?.get(1)?.toInt()?.let { it to a.optString("browser_download_url") } }
+                .mapNotNull { a -> asset.find(a.optString("name"))?.groupValues?.get(1)?.toInt()?.let { it to a.optString("browser_download_url") } }
                 .maxByOrNull { it.first }
-            return Latest(best?.first ?: 0, o.optString("name").removePrefix("Thuis ").trim(), best?.second ?: "")
+            return Latest(best?.first ?: 0, o.optString("name").removePrefix("Sjuul TV ").removePrefix("telefoon ").trim(), best?.second ?: "")
         }
     }
 

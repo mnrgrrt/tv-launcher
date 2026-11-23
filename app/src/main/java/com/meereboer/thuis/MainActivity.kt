@@ -88,7 +88,8 @@ class MainActivity : Activity() {
         web.addJavascriptInterface(Bridge(this, web), "Native")
         setContentView(web)
         Prefs(this).wipeOldSecrets()
-        web.loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
+        // Tv en telefoon delen de kern (kern.js), maar hebben elk een eigen scherm.
+        web.loadUrl("https://appassets.androidplatform.net/assets/web/" + if (BuildConfig.TELEFOON) "telefoon.html" else "index.html")
         // HDMI-apparaat in- of uitgeplugd: de rij Kijken bijwerken.
         inputWatch = Inputs.watch(this) { web.evaluateJavascript("window.__inputs && window.__inputs()", null) }
         web.requestFocus()
@@ -96,6 +97,8 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     private fun hideSystemUi() {
+        // Op de telefoon blijven de klok en de knoppen van Android gewoon zichtbaar.
+        if (BuildConfig.TELEFOON) { window.statusBarColor = Color.BLACK; window.navigationBarColor = Color.BLACK; return }
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
             or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
             or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
@@ -163,7 +166,7 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != 78) return
-        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) listenNow() else voiceDone(false, "Thuis mag de microfoon niet gebruiken")
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) listenNow() else voiceDone(false, "Sjuul TV mag de microfoon niet gebruiken")
     }
 
     private fun listenNow() {
@@ -179,7 +182,7 @@ class MainActivity : Activity() {
             override fun onError(error: Int) {
                 voiceDone(false, when (error) {
                     SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Geen geluid gehoord"
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Thuis mag de microfoon niet gebruiken"
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Sjuul TV mag de microfoon niet gebruiken"
                     SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Geen verbinding met de spraakherkenning"
                     else -> "Inspreken lukt niet ($error)"
                 })

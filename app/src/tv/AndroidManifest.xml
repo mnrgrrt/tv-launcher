@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alleen voor de tv: startscherm (Home-knop), tv-menu, schermbeveiliging en alles liggend. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Na hoeveel minuten de schermbeveiliging komt (alleen als dit eenmalig is toegestaan). -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
+    <application>
+        <activity android:name=".MainActivity" android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".VodActivity" android:screenOrientation="landscape" />
+        <activity android:name=".PlayerActivity" android:screenOrientation="landscape" />
+
+        <!-- De schermbeveiliging van Sjuul TV (Android-dagdroom). -->
+        <service
+            android:name=".Saver"
+            android:exported="true"
+            android:label="Sjuul TV"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

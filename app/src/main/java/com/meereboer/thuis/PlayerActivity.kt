@@ -210,6 +210,8 @@ class PlayerActivity : Activity() {
         root.addView(guide, 1, FrameLayout.LayoutParams(-1, -1))
 
         setContentView(root)
+        // Aanraken (telefoon): tikken toont de balk met knoppen, nog eens tikken haalt hem weg.
+        playerView.setOnClickListener { if (bar.visibility == View.VISIBLE && menuOpen) hideBarNow() else showBar(true) }
         loadChannels()
     }
 
@@ -531,7 +533,7 @@ class PlayerActivity : Activity() {
         if (replay == null && canRestart(ch)) l += "↺  Vanaf begin" to { nowProg?.let { playReplay(index, it, it.start) }; Unit }
         if (replay != null) l += "●  Terug naar live" to { play(index) }
         l += "Zenders" to { hideBarNow(); showList() }
-        l += "Gids" to { hideBarNow(); openGuide() }
+        if (!BuildConfig.TELEFOON) l += "Gids" to { hideBarNow(); openGuide() }   // telefoon: de gids staat in de app zelf (Live › zender)
         l += "Geluid" to { nextAudio() }
         l += "Ondertitels" to { nextSubs() }
         return l
@@ -543,12 +545,14 @@ class PlayerActivity : Activity() {
             val on = i == btnSel
             btnRow.addView(text(19f, true, if (on) 0xFF05070A.toInt() else Color.WHITE).apply {
                 text = b.first
+                // Aanraken (telefoon): meteen uitvoeren.
+                setOnClickListener { btnSel = i; b.second(); if (menuOpen) { buttons = menuItems(); renderButtons() } }
                 setPadding(dp(16), dp(7), dp(16), dp(7))
                 background = GradientDrawable().apply { setColor(if (on) Color.WHITE else 0x26FFFFFF); cornerRadius = dp(999).toFloat() }
             }, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(8) })
         }
         btnRow.addView(text(16f, false, 0x99FFFFFF.toInt()).apply {
-            text = if (replay != null) "↑ ↓ zappen   ·   ← → spoelen (vasthouden = sneller)" else "↑ ↓ zappen   ·   terug = balk weg"
+            text = if (BuildConfig.TELEFOON) "" else if (replay != null) "↑ ↓ zappen   ·   ← → spoelen (vasthouden = sneller)" else "↑ ↓ zappen   ·   terug = balk weg"
             gravity = Gravity.END
         }, LinearLayout.LayoutParams(0, -2, 1f))
     }

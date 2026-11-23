@@ -37,6 +37,21 @@ android {
         }
     }
 
+    // Twee varianten uit dezelfde code: de tv (startscherm) en de telefoon (eigen app naast de tv-versie).
+    flavorDimensions += "vorm"
+    productFlavors {
+        create("tv") {
+            dimension = "vorm"
+            buildConfigField("boolean", "TELEFOON", "false")
+        }
+        create("telefoon") {
+            dimension = "vorm"
+            applicationIdSuffix = ".telefoon"
+            buildConfigField("boolean", "TELEFOON", "true")
+        }
+    }
+    buildFeatures { buildConfig = true }
+
     buildTypes {
         release {
             isMinifyEnabled = false

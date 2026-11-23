@@ -2,7 +2,10 @@
    Bediening: pijltjes, OK en terug. OK ingedrukt houden is een snelkoppeling, nooit de enige weg. */
 (function () {
   'use strict';
-  var N = window.Native || null;               // Android-brug; null in een gewone browser
+  // Gedeelde kern (kern.js): server, afspelen, kijkstand. Hier alleen het tv-scherm.
+  var K = window.Kern, N = K.N, S = K.S, esc = K.esc, h = K.h, pad = K.pad, clock = K.clock, dayName = K.dayName, native = K.native, api = K.api, get = K.get,
+    img = K.img, bg = K.bg, me = K.me, setProfile = K.setProfile, position = K.position, start = K.start, playPlex = K.playPlex, playMovie = K.playMovie,
+    playEpisode = K.playEpisode, resume = K.resume, playLive = K.playLive, playCatchup = K.playCatchup, setWatched = K.setWatched, rating = K.rating, whereFrom = K.whereFrom, nextUp = K.nextUp, hideCont = K.hideCont;
   var $app = document.getElementById('app');
   // Alles is ontworpen op 1920x1080; op een tv met een ander aantal css-pixels schalen we het geheel.
   // Weergave per apparaat: compact tekent op een groter vlak (meer tegels), ruim op een kleiner vlak (alles groter).
@@ -22,56 +25,11 @@
   // Pas na het opbouwen weet de tv hoe groot het scherm is: daarom ook later nog eens rekenen.
   fit(); window.addEventListener('resize', fit); window.addEventListener('load', fit); setTimeout(fit, 300); setTimeout(fit, 1500);
 
-  // ---------- hulpjes ----------
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function h(tag, attrs, html) {
-    var e = document.createElement(tag);
-    if (attrs) for (var k in attrs) { if (k === 'class') e.className = attrs[k]; else if (k === 'style') e.style.cssText = attrs[k]; else e.setAttribute(k, attrs[k]); }
-    if (html != null) e.innerHTML = html;
-    return e;
-  }
-  function pad(n) { return (n < 10 ? '0' : '') + n; }
-  function clock(t) { var d = new Date(t); return d.getHours() + ':' + pad(d.getMinutes()); }
-  function dayName(t) {
-    var d = new Date(t), today = new Date(); today.setHours(0, 0, 0, 0);
-    var diff = Math.round((new Date(d).setHours(0, 0, 0, 0) - today) / 864e5);
-    if (diff === 0) return 'Vandaag'; if (diff === 1) return 'Morgen'; if (diff === -1) return 'Gisteren';
-    return d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' });
-  }
   var toastT = 0;
   function toast(msg, ms) {
     var t = document.getElementById('toast'); t.textContent = msg; t.hidden = false;
     clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, ms || 3500);
   }
-
-  // ---------- server ----------
-  var cbs = {}, cbId = 0;
-  window.__nativeCb = function (id, ok, data) { var c = cbs[id]; delete cbs[id]; if (!c) return; if (ok) c.res(data); else c.rej(new Error(data)); };
-  function native(fn) { var args = [].slice.call(arguments, 1); return new Promise(function (res, rej) { var id = ++cbId; cbs[id] = { res: res, rej: rej }; N[fn].apply(N, [id].concat(args)); }); }
-  // In een browser (testen op de pc): rechtstreeks met een sleutel uit localStorage.
-  function api(method, path, body) {
-    if (N) return native('srv', method, path, body ? JSON.stringify(body) : '').then(function (t) { return t ? JSON.parse(t) : {}; }, onApiError);
-    var key = ''; try { key = localStorage.getItem('thuis-key') || ''; } catch (e) {}
-    return fetch(path, { method: method, headers: { 'X-Thuis-Key': key, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
-      .then(function (r) { if (r.status === 401) throw new Error('NIET_GEKOPPELD'); return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
-  }
-  function onApiError(e) { if (e.message === 'NIET_GEKOPPELD') { if (N) N.srvUnpair(); go('pair', {}, 'root'); } throw e; }
-  var get = function (p) { return api('GET', p); };
-  // Plaatjes: van de server (pad met /) via de app, https rechtstreeks, http via de app (anders blokkeert de pagina ze).
-  function img(u) {
-    if (!u) return '';
-    if (u.charAt(0) === '/') return N ? 'https://appassets.androidplatform.net/srv' + u : u;
-    if (u.indexOf('http://') === 0) return N ? 'https://appassets.androidplatform.net/proxy?u=' + encodeURIComponent(u) : u;
-    return u;
-  }
-  function bg(u) { return u ? "background-image:url('" + img(u).replace(/'/g, '%27') + "')" : ''; }
-
-  // ---------- toestand ----------
-  var S = { profile: 0, profiles: [], device: null, svcList: [], apps: null, cats: null, ov: {}, art: {}, reminders: {} };
-
-  try { S.reminders = JSON.parse(localStorage.getItem('thuis-herinneringen') || '{}'); } catch (e) {}
-  function me() { for (var i = 0; i < S.profiles.length; i++) if (S.profiles[i].id === S.profile) return S.profiles[i]; return S.profiles[0] || { id: 1, name: 'Samen', avatarUrl: '' }; }
-  function setProfile(id) { S.profile = id; if (N) N.srvSetProfile(id); }
 
   // ---------- focus en bediening ----------
   var root = null, cur = null;
@@ -160,6 +118,8 @@
   function manyProfiles() { return S.profiles && S.profiles.length > 1 && !(S.device && S.device.locked); }
   function wakeWho() { if (manyProfiles()) whoDialog(true); }
 
+  K.ui.toast = toast; K.ui.askWho = askWho; K.ui.unpaired = function () { go('pair', {}, 'root'); };
+
   function F(el, ok, opts) { el.classList.add('f'); el._ok = ok; if (opts) { el._long = opts.long; el._onfocus = opts.focus; el._move = opts.move; if (opts.group) el.dataset.group = opts.group; } return el; }
 
   // ---------- schermen en terug ----------
@@ -236,7 +196,7 @@
     item('who', me().name, '<img class="av" alt="" src="' + esc(img(me().avatarUrl)) + '">', function () { whoDialog(); }, '<span class="clock">' + clock(Date.now()) + '</span>').classList.add('me');
     nav.appendChild(h('div', { class: 'gap' }));
     item('search', 'Zoeken', NAVICON.search, function () { if (here === 'search') closeOverlay(); else go('search'); });
-    item('home', 'Thuis', NAVICON.home, function () { go('home', {}, 'root'); });
+    item('home', 'Home', NAVICON.home, function () { go('home', {}, 'root'); });
     item('live', 'Live tv', NAVICON.live, function () { if (here === 'live') closeOverlay(); else go('live'); });
     item('films', 'Films', NAVICON.films, function () { if (here === 'films') closeOverlay(); else go('films'); });
     item('series', 'Series', NAVICON.series, function () { if (here === 'series') closeOverlay(); else go('series'); });
@@ -311,8 +271,6 @@
     return '<div class="badges">' + b.join('') + '</div>';
   }
   // Eén titel uit de catalogus (Plex en IPTV samen).
-  function rating(o) { var r = o.imdbRating || o.vote || 0; return r ? '★ ' + r.toFixed(1).replace('.', ',') : ''; }
-  function whereFrom(o) { return (o.sources || []).map(function (s) { return s === 'plex' ? 'Plex' : 'IPTV'; }).join(', '); }
   function titleTile(o, kind, onfocus) {
     return poster({ focus: onfocus, title: o.title, sub: o.soon ? o.year + ' · ' + o.soon : [o.year, rating(o)].filter(Boolean).join(' · '), img: o.poster, badges: srcBadges(o), ok: function () { openTitle(o, kind); },
       long: function () { if (kind === 'movie' && o.plex) playPlex(o.plex.key, o.plex); else if (kind === 'movie' && o.vod) playMovie(o.vod); } });
@@ -346,7 +304,6 @@
     items.push(['Uit Verder kijken halen', function () { hideCont(c).then(after); }]);
     menu(c.title, items);
   }
-  function hideCont(c) { return api('POST', '/api/continue/hide', { profile: S.profile, key: c.key }).then(function () { toast('Weggehaald uit Verder kijken'); }, function (e) { toast(e.message); }); }
   function menu(title, items) {
     var d = h('div', { class: 'dialog' }, '<h2>' + esc(title) + '</h2>'), bt = h('div', { style: 'display:flex;gap:16px;flex-wrap:wrap;justify-content:center' });
     items.forEach(function (it) { bt.appendChild(F(h('button', { class: 'btn' }, esc(it[0])), function () { closeOverlay(); it[1](); })); });
@@ -377,17 +334,6 @@
   }
   function loading(text) { return h('div', { class: 'spinner' }, esc(text || 'Laden…')); }
 
-  // ---------- afspelen ----------
-  // Waar was je? Ook als je dezelfde titel via de andere bron (Plex of IPTV) aan het kijken was.
-  function position(key, tmdb, season, episode) {
-    if (S.fromStart) { S.fromStart = false; return Promise.resolve({ pos: 0, via: '', fresh: true }); }
-    return get('/api/position?profile=' + S.profile + '&key=' + encodeURIComponent(key) + '&tmdb=' + (tmdb || 0) + '&s=' + (season || 0) + '&e=' + (episode || 0))
-      .then(function (r) { return { pos: r.pos || 0, via: r.via || '' }; }, function () { return { pos: 0, via: '' }; });
-  }
-  function start(item) {
-    item.server = true; item.profile = S.profile;
-    if (N) N.playItem(JSON.stringify(item)); else toast('Afspelen kan alleen op de tv');
-  }
   // Kijkt iemand anders deze titel al? Dan vragen of je bij die verder wilt. (Wie er kijkt, vraagt Thuis al bij het aanzetten.)
   function askWho(key) {
     if (S.device && S.device.locked) return Promise.resolve();
@@ -418,46 +364,6 @@
       });
     }, function () {});
   }
-  function playPlex(key, meta) {
-    var k = 'plex:' + key;
-    return askWho(k).then(function () { return get('/api/plex/play/' + key); }).then(function (it) {
-      return position(k, it.tmdb, it.season, it.episode).then(function (p) {
-        if (p.fresh) it.offsetMs = 0; else if (p.pos > 0) it.offsetMs = p.pos;
-        it.resumeVia = p.via;
-        it.meta = Object.assign({ title: it.title, sub: it.sub, img: it.img, plexKey: key }, meta || {});
-        start(it);
-      });
-    }).catch(function (e) { toast('Afspelen lukt niet: ' + e.message); });
-  }
-  function playMovie(m) {   // IPTV-film uit de catalogus
-    var k = 'movie:' + m.id;
-    return askWho(k).then(function () { return Promise.all([m.url ? Promise.resolve({ url: m.url }) : get('/api/vod/movie/url/' + m.id + '?ext=' + (m.ext || 'mp4')), position(k, m.tmdb)]); }).then(function (r) {
-      start({ kind: 'movie', key: k, url: r[0].url, title: m.name || m.title, sub: m.year || '', tmdb: m.tmdb || 0, offsetMs: r[1].pos, resumeVia: r[1].via,
-        meta: { title: m.name || m.title, sub: 'Film', img: m.backdrop || m.icon || m.img || '', id: m.id, ext: m.ext, tmdb: m.tmdb || 0 } });
-    }).catch(function (e) { toast('Afspelen lukt niet: ' + e.message); });
-  }
-  function playEpisode(series, season, ep) {   // IPTV-aflevering
-    var k = 'series:' + ep.id, sk = 'series:' + series.id;
-    return askWho(sk).then(function () { return position(k, series.tmdb, season, ep.num); }).then(function (p) {
-      start({ kind: 'series', key: k, seriesKey: sk, url: ep.url, title: series.name, sub: 'S' + season + ' · afl. ' + ep.num + (ep.title ? ' · ' + ep.title : ''),
-        season: +season, episode: ep.num, tmdb: series.tmdb || 0, offsetMs: p.pos, resumeVia: p.via,
-        meta: { title: series.name, sub: 'S' + season + ' · afl. ' + ep.num, img: ep.img || series.backdrop || series.icon || '', id: ep.id, ext: ep.ext, seriesId: series.id, tmdb: series.tmdb || 0 } });
-    }).catch(function (e) { toast('Afspelen lukt niet: ' + e.message); });
-  }
-  function resume(c) {      // tegel uit Verder kijken
-    var key = String(c.key || '');
-    if (key.indexOf('plex:') === 0) return playPlex(key.slice(5), c);
-    if (key.indexOf('movie:') === 0) return playMovie({ id: c.id || key.slice(6), ext: c.ext, name: c.title, img: c.img, tmdb: c.tmdb });
-    if (key.indexOf('series:') === 0) {
-      var id = c.id || key.slice(7);
-      return Promise.all([get('/api/vod/series/url/' + id + '?ext=' + (c.ext || 'mkv')), position(key, c.tmdb, c.season, c.episode)]).then(function (r) {
-        start({ kind: 'series', key: key, seriesKey: 'series:' + c.seriesId, url: r[0].url, title: c.title, sub: c.sub, season: c.season, episode: c.episode, tmdb: c.tmdb || 0, offsetMs: r[1].pos, resumeVia: r[1].via, meta: c });
-      });
-    }
-  }
-  // Live en terugkijken gaan allebei naar de live-speler (daar kun je ook spoelen, pauzeren en zappen).
-  function playLive(catId, ch) { if (N) N.playLive(catId || 'alle', ch.id, 0, 0, ''); else toast('Live tv kan alleen op de tv'); }
-  function playCatchup(ch, p, catId) { if (N) N.playLive(catId || 'alle', ch.id, p.start, p.end, p.title || ''); else toast('Terugkijken kan alleen op de tv'); }
   function loadApps() { if (S.apps) return Promise.resolve(S.apps); if (!N) return Promise.resolve([]); return native('getApps').then(function (t) { S.apps = JSON.parse(t); return S.apps; }); }
   // Diensten waarvan de app op dit apparaat staat, plus HDMI-ingangen waar iets op zit: [{svc, app}]
   function installedServices() {
@@ -536,7 +442,7 @@
     var st = { field: 'code', url: info.url, code: '', name: info.device || 'tv' };
     var el = h('div', { class: 'screen' });
     el.innerHTML = '<div style="position:absolute;left:160px;top:120px;width:760px;display:flex;flex-direction:column;gap:22px">' +
-      '<h1 style="font-size:60px">Thuis koppelen</h1><div class="dim" style="font-size:24px;line-height:1.5">Open de beheerpagina van tv-serverr op je pc of telefoon, kies <b>Nieuwe code</b> en vul die hier in. Daarna haalt deze tv alles van de server.</div>' +
+      '<h1 style="font-size:60px">Sjuul TV koppelen</h1><div class="dim" style="font-size:24px;line-height:1.5">Open de beheerpagina van tv-serverr op je pc of telefoon, kies <b>Nieuwe code</b> en vul die hier in. Daarna haalt deze tv alles van de server.</div>' +
       '<div class="dim" style="font-size:20px;margin-top:10px">Adres van tv-serverr</div><div class="field f" id="fu"></div>' +
       '<div class="dim" style="font-size:20px">Koppelcode (6 cijfers)</div><div class="field f" id="fc" style="letter-spacing:10px"></div>' +
       '<div class="dim" style="font-size:20px">Naam van dit apparaat</div><div class="field f" id="fn"></div>' +
@@ -691,7 +597,7 @@
       fold([slots.svc, slots.foryou]);
       hb.setSlides([photoSlide].concat(d.now.filter(function (o) { return o.tmdb; }).slice(0, 5).map(function (o) { return slideOf(o, o.kind); })));
       if (d.later.length) slots.later.appendChild(rowSection('Populair, niet bij jou', d.later.map(tile)));
-    }).catch(function (e) { slots.foryou.innerHTML = '<div class="empty">Thuis kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
+    }).catch(function (e) { slots.foryou.innerHTML = '<div class="empty">Sjuul TV kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
     // Favoriet genre van dit profiel (Mijn profiel › Voorkeuren): de beste titels die je kunt kijken.
     var fav = (me().prefs || {}).favGenre;
     if (fav) get('/api/catalog/movie/browse?' + q + '&genre=' + encodeURIComponent(fav) + '&sort=beste').then(function (r) {
@@ -1111,20 +1017,6 @@
     }).catch(function (e) { grid.innerHTML = '<div class="empty" style="padding:0">' + esc(e.message) + '</div>'; });
     return el;
   };
-  // Wat er nu aan de beurt is: een aflevering die half gekeken is, anders de eerste na de laatst geziene.
-  function nextUp(show) {
-    var all = []; show.seasons.forEach(function (s) { s.episodes.forEach(function (e) { all.push({ s: s, e: e }); }); });
-    if (!all.length) return null;
-    var busy = all.filter(function (x) { return !x.e.watched && x.e.progress > 0.03; })[0];
-    if (busy) return { s: busy.s, e: busy.e, label: 'Verder' };
-    var last = -1; all.forEach(function (x, i) { if (x.e.watched) last = i; });
-    if (last < 0) return { s: all[0].s, e: all[0].e, label: 'Begin' };
-    if (last + 1 < all.length) return { s: all[last + 1].s, e: all[last + 1].e, label: 'Volgende' };
-    return { s: all[0].s, e: all[0].e, label: 'Opnieuw' };
-  }
-  function setWatched(items, on) {
-    return api('POST', '/api/watched', { profile: S.profile, items: items, on: on }).then(function () { S.ov = {}; }, function (e) { toast(e.message); throw e; });
-  }
   // Opnames uit de filmbibliotheek ("Rondo - S08E15") per seizoen.
   function groupEps(eps) {
     var by = {}; eps.forEach(function (e) { (by[e.season] = by[e.season] || []).push({ key: e.key, num: e.num, title: 'Aflevering ' + e.num, img: e.img, progress: e.progress }); });
@@ -1292,7 +1184,7 @@
     var el = h('div', { class: 'screen' }), p = me(), tab = a.tab || 'list';
     var side = h('div', { class: 'side' });
     side.appendChild(h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:14px;padding:10px 0 26px' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '" style="width:170px;height:170px;border-radius:50%;object-fit:cover"><h1 style="font-size:42px">' + esc(p.name) + '</h1>'));
-    [['list', 'Mijn lijst'], ['cont', 'Verder kijken'], ['seen', 'Bekeken'], ['apps', 'Apps op Thuis'], ['skip', 'Genres overslaan'], ['avatar', 'Avatar kiezen'], ['prefs', 'Voorkeuren'], ['switch', 'Wissel van profiel']].forEach(function (t) {
+    [['list', 'Mijn lijst'], ['cont', 'Verder kijken'], ['seen', 'Bekeken'], ['apps', 'Apps op Home'], ['skip', 'Genres overslaan'], ['avatar', 'Avatar kiezen'], ['prefs', 'Voorkeuren'], ['switch', 'Wissel van profiel']].forEach(function (t) {
       side.appendChild(F(h('button', { class: 'listrow' + (t[0] === tab ? ' on' : '') }, esc(t[1])), function () {
         if (t[0] === 'switch') return whoDialog();
         a.tab = t[0]; go('profile', a, true);
@@ -1336,7 +1228,7 @@
       });
     } else if (tab === 'apps') {
       // Volgorde en zichtbaarheid van de apps in de rij Kijken en in de zijbalk. Alleen voor dit profiel.
-      main.appendChild(h('h2', { style: 'font-size:36px' }, 'Apps op Thuis'));
+      main.appendChild(h('h2', { style: 'font-size:36px' }, 'Apps op Home'));
       main.appendChild(h('div', { class: 'dim', style: 'font-size:20px;margin-bottom:10px' }, 'OK zet een app aan of uit. Met "Hoger" schuift hij een plek naar boven.'));
       var box2 = h('div', { class: 'scroll-inner', style: 'display:flex;flex-direction:column;gap:10px' }); main.appendChild(box2);
       installedServices().then(function (l) {
@@ -1345,7 +1237,7 @@
         var save = function (focusId) { api('POST', '/api/profiles/' + p.id + '/prefs', { appOrder: order, appHide: hide }).then(function () { p.prefs = Object.assign(pr, { appOrder: order, appHide: hide }); a._focus = focusId; go('profile', a, true); }); };
         l.forEach(function (x, i) {
           var k = x.svc.key, sid = k.replace(/[^\w-]/g, '_'), off = hide.indexOf(k) >= 0, row = h('div', { style: 'display:flex;gap:10px' });
-          row.appendChild(F(h('button', { class: 'listrow', id: 'app-' + sid, style: 'flex:1' }, '<b>' + esc(x.svc.name) + '</b><span class="dim">' + (off ? 'Verborgen' : 'Op Thuis') + '</span>'), function () {
+          row.appendChild(F(h('button', { class: 'listrow', id: 'app-' + sid, style: 'flex:1' }, '<b>' + esc(x.svc.name) + '</b><span class="dim">' + (off ? 'Verborgen' : 'Op Home') + '</span>'), function () {
             if (off) hide.splice(hide.indexOf(k), 1); else hide.push(k); save('#app-' + sid);
           }));
           if (x.app.input) row.appendChild(F(h('button', { class: 'listrow', id: 'nm-' + sid, style: 'width:150px;justify-content:center' }, 'Naam'), function () {
@@ -1360,7 +1252,7 @@
       });
     } else if (tab === 'skip') {
       main.appendChild(h('h2', { style: 'font-size:36px' }, 'Genres overslaan'));
-      main.appendChild(h('div', { class: 'dim', style: 'font-size:20px;margin-bottom:10px' }, 'Wat je overslaat, zie je niet meer bij Thuis, Films en Series. Bij Zoeken blijft alles te vinden. OK zet aan of uit.'));
+      main.appendChild(h('div', { class: 'dim', style: 'font-size:20px;margin-bottom:10px' }, 'Wat je overslaat, zie je niet meer bij Home, Films en Series. Bij Zoeken blijft alles te vinden. OK zet aan of uit.'));
       var skip = (p.prefs && p.prefs.skipGenres) || [];
       var gbox = h('div', { style: 'display:flex;flex-wrap:wrap;gap:12px' }); main.appendChild(gbox);
       GENRES.forEach(function (g) {
@@ -1395,7 +1287,7 @@
       }));
       // Favoriet genre: een eigen rij op Thuis met de beste titels in dat genre.
       var favs = [''].concat(GENRES), fv = prefs.favGenre || '';
-      main.appendChild(F(h('button', { class: 'listrow' }, '<b>Favoriet genre op Thuis</b><span class="dim">' + esc(fv || 'Geen') + ' ›</span>'), function () {
+      main.appendChild(F(h('button', { class: 'listrow' }, '<b>Favoriet genre op Home</b><span class="dim">' + esc(fv || 'Geen') + ' ›</span>'), function () {
         var next = favs[(favs.indexOf(fv) + 1) % favs.length];
         api('POST', '/api/profiles/' + p.id + '/prefs', { favGenre: next }).then(function () { p.prefs = Object.assign(prefs, { favGenre: next }); a._focus = null; go('profile', a, true); });
       }));
@@ -1411,7 +1303,7 @@
   };
 
   // ---------- schermbeveiliging (Android-dagdroom van Thuis, instellingen op het apparaat) ----------
-  var SAVERSRC = [['film', 'Filmart', 'Beelden van je eigen films en series'], ['album1', "Eigen foto's 1", 'Ook bovenaan Thuis'], ['album2', "Eigen foto's 2", ''],
+  var SAVERSRC = [['film', 'Filmart', 'Beelden van je eigen films en series'], ['album1', "Eigen foto's 1", 'Ook bovenaan Home'], ['album2', "Eigen foto's 2", ''],
     ['album3', "Eigen foto's 3", ''], ['kunst', 'Kunst', 'Schilderijen uit het Art Institute of Chicago'], ['klok', 'Alleen klok en weer', 'Rustig scherm zonder foto\'s']];
   function saverPrefs() { try { return JSON.parse(N.saverGet()); } catch (e) { return null; } }
   function saverRows(row, redo) {
@@ -1466,7 +1358,7 @@
   screens.settings = function (a) {
     var el = h('div', { class: 'screen' }), tab = a.tab || 'device';
     var side = h('div', { class: 'side' }, '<h1 style="font-size:44px;margin-bottom:24px">Instellingen</h1>');
-    [['device', 'Dit apparaat'], ['profile', 'Profiel op dit apparaat'], ['conn', 'Verbinding'], ['about', 'Over Thuis']].forEach(function (t) {
+    [['device', 'Dit apparaat'], ['profile', 'Profiel op dit apparaat'], ['conn', 'Verbinding'], ['about', 'Over Sjuul TV']].forEach(function (t) {
       side.appendChild(F(h('button', { class: 'listrow' + (t[0] === tab ? ' on' : '') }, esc(t[1])), function () { a.tab = t[0]; go('settings', a, true); }, { group: 'side' }));
     });
     el.appendChild(side);
@@ -1511,15 +1403,15 @@
         dd.appendChild(bt); openOverlay(dd);
       });
     } else {
-      main.appendChild(h('h2', { style: 'font-size:36px;margin-bottom:10px' }, 'Over Thuis'));
-      main.appendChild(h('div', { class: 'listrow' }, '<b>Versie</b><span class="dim">Thuis ' + esc(N ? N.appVersion() : 'browser') + '</span>'));
+      main.appendChild(h('h2', { style: 'font-size:36px;margin-bottom:10px' }, 'Over Sjuul TV'));
+      main.appendChild(h('div', { class: 'listrow' }, '<b>Versie</b><span class="dim">Sjuul TV ' + esc(N ? N.appVersion() : 'browser') + '</span>'));
       row('Zoeken naar een nieuwe versie', '', function () {
         if (!N) return;
         toast('Even kijken…');
         native('checkUpdate').then(function (t) {
           var u = JSON.parse(t);
           if (!u.newer) return toast('Je hebt de nieuwste versie (' + u.current + ')');
-          toast('Thuis ' + u.latest + ' wordt gedownload…', 8000);
+          toast('Sjuul TV ' + u.latest + ' wordt gedownload…', 8000);
           native('installUpdate').then(function (r) {
             if (r === 'permission') toast('Sta het installeren van apps toe en kies daarna opnieuw', 6000);
             else toast('Klaar. Kies Installeren in het scherm dat nu opent.', 6000);

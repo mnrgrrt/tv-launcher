@@ -41,12 +41,15 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: thuis
-        run: gradle :app:assembleRelease --no-daemon --stacktrace
+        run: gradle :app:assembleTvRelease :app:assembleTelefoonRelease --no-daemon --stacktrace
 
       - name: APK hernoemen
         run: |
-          cp app/build/outputs/apk/release/app-release.apk "thuis-${GITHUB_RUN_NUMBER}.apk"
-          cp app/build/outputs/apk/release/app-release.apk thuis.apk
+          # Tv: oude bestandsnaam houden, zodat geïnstalleerde versies hun update blijven vinden.
+          cp app/build/outputs/apk/tv/release/app-tv-release.apk "thuis-${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/apk/tv/release/app-tv-release.apk thuis.apk
+          cp app/build/outputs/apk/telefoon/release/app-telefoon-release.apk "sjuul-telefoon-${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/apk/telefoon/release/app-telefoon-release.apk sjuul-telefoon.apk
 
       - name: Samsung-pakket (Tizen) maken
         run: |
@@ -64,7 +67,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: thuis-apk
-          path: thuis-*.apk
+          path: |
+            thuis-*.apk
+            sjuul-telefoon-*.apk
 
       - name: Versienummer bepalen
         run: |
@@ -80,7 +85,7 @@ jobs:
         run: |
           gh release delete laatste --yes --cleanup-tag || true
           gh release create laatste "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk thuis-samsung-ongesigneerd.wgt \
-            --title "Thuis $VERSIE" \
+            --title "Sjuul TV $VERSIE" \
             --notes "Automatisch gebouwd uit ${GITHUB_SHA::7}." \
             --latest
 
@@ -91,5 +96,15 @@ jobs:
         run: |
           gh release delete test --yes --cleanup-tag || true
           gh release create test "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk --target "$GITHUB_SHA" --prerelease \
-            --title "Thuis $VERSIE (test)" \
+            --title "Sjuul TV $VERSIE (test)" \
             --notes "Testversie uit tak ${GITHUB_REF_NAME}, ${GITHUB_SHA::7}. Niet voor gewoon gebruik."
+
+      - name: Telefoon-app (release "telefoon" of "telefoon-test") bijwerken
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_NAME" = "main" ]; then TAG=telefoon; TITEL="Sjuul TV telefoon $VERSIE"; PRE=""; else TAG=telefoon-test; TITEL="Sjuul TV telefoon $VERSIE (test)"; PRE="--prerelease"; fi
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" "sjuul-telefoon-${GITHUB_RUN_NUMBER}.apk" sjuul-telefoon.apk --target "$GITHUB_SHA" $PRE --latest=false \
+            --title "$TITEL" \
+            --notes "Sjuul TV voor Android-telefoons. Installeren: open sjuul-telefoon.apk op je telefoon."
