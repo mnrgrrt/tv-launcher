@@ -104,6 +104,8 @@ on('POST', '/api/device', 'device', ({ dev, b }) => {
   auth.setDevice(dev.id, { profile: b.profile, ask: b.ask, view: b.view }); return { ok: true };
 });
 on('GET', '/api/avatars', 'device', () => JSON.parse(fs.readFileSync(path.join(PUBLIC, 'avatars/index.json'), 'utf8')));
+// Foto's bovenaan Thuis
+on('GET', '/api/photos', 'device', () => JSON.parse(fs.readFileSync(path.join(PUBLIC, 'achtergrond/index.json'), 'utf8')).photos.map(p => ({ url: '/achtergrond/' + p.file, by: p.by })));
 on('POST', '/api/profiles/:id/avatar', 'device', ({ dev, p, b }) => {
   if (dev.locked && +p.id !== dev.profile) throw Object.assign(new Error('Niet toegestaan op dit apparaat'), { status: 403 });
   profiles.setAvatar(p.id, b.avatar); return profiles.list();
@@ -248,7 +250,7 @@ const server = http.createServer(async (req, res) => {
       if (!f || !auth.verify(req.url) || !fs.existsSync(f)) return send(res, 404, { error: 'Onbekend' });
       return file(res, path.dirname(f), path.basename(f));
     }
-    if (u.pathname.startsWith('/avatars/') && file(res, PUBLIC, u.pathname)) return;
+    if ((u.pathname.startsWith('/avatars/') || u.pathname.startsWith('/achtergrond/')) && file(res, PUBLIC, u.pathname)) return;
     if (u.pathname === '/beheer' || u.pathname === '/') { res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"); if (file(res, PUBLIC, 'beheer.html')) return; }
     if (u.pathname.startsWith('/app/') && file(res, WEB, u.pathname.slice(5) || 'index.html')) return;
     send(res, 404, 'Niet gevonden', 'text/plain; charset=utf-8');

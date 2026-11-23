@@ -63,8 +63,7 @@
 
   // ---------- toestand ----------
   var S = { profile: 0, profiles: [], device: null, svcList: [], apps: null, cats: null, ov: {}, art: {}, reminders: {} };
-  // De foto bovenaan Thuis (Unsplash-licentie). Later wordt dit een vaste set die rustig wisselt.
-  var PHOTO = { url: 'https://images.unsplash.com/photo-1768684160371-566aadb7785e?fm=jpg&q=80&w=2560&fit=crop', by: 'Filip Kvasnak' };
+
   try { S.reminders = JSON.parse(localStorage.getItem('thuis-herinneringen') || '{}'); } catch (e) {}
   function me() { for (var i = 0; i < S.profiles.length; i++) if (S.profiles[i].id === S.profile) return S.profiles[i]; return S.profiles[0] || { id: 1, name: 'Samen', avatarUrl: '' }; }
   function setProfile(id) { S.profile = id; if (N) N.srvSetProfile(id); }
@@ -484,7 +483,8 @@
   // ---------- thuis ----------
   screens.home = function () {
     var el = h('div', { class: 'screen' }); el.appendChild(topbar('home', function () { showPhoto(); }));
-    var sc = h('div', { class: 'scroll' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
+    // De foto loopt door tot achter de bovenbalk.
+    var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
     var hero = h('div', { class: 'hero first' }, '<div class="bg on"></div><div class="bg"></div><div class="txt uit"><img class="logo" alt=""><h1></h1><div class="meta"></div></div><div class="credit"></div>');
     inner.appendChild(hero);
     var layers = hero.querySelectorAll('.bg'), txt = hero.querySelector('.txt'), credit = hero.querySelector('.credit'), shown = '', heroT = 0;
@@ -493,10 +493,20 @@
       var nxt = layers[0].classList.contains('on') ? layers[1] : layers[0], old = nxt === layers[0] ? layers[1] : layers[0];
       var pic = new Image(); pic.onload = function () { if (shown !== u) return; nxt.style.backgroundImage = "url('" + pic.src + "')"; nxt.classList.add('on'); old.classList.remove('on'); }; pic.src = img(u);
     }
-    // Rust: de foto, zonder tekst.
-    function showPhoto() { clearTimeout(heroT); setBg(PHOTO.url); txt.classList.add('uit'); credit.style.opacity = 1; }
-    credit.textContent = 'Foto: ' + PHOTO.by + ' · Unsplash';
-    showPhoto();
+    // Rust: een foto uit de vaste set, zonder tekst. Elke keer een andere, en elke minuut een nieuwe zolang je bovenin staat.
+    var photo = null, resting = true;
+    function nextPhoto() {
+      var l = S.photos || []; if (!l.length) return;
+      var cand = l.filter(function (p) { return p !== photo; }); photo = cand[Math.floor(Math.random() * cand.length)] || l[0];
+    }
+    function showPhoto() {
+      clearTimeout(heroT); resting = true; if (!photo) return;
+      setBg(photo.url); txt.classList.add('uit'); credit.textContent = 'Foto: ' + photo.by + ' · Unsplash'; credit.style.opacity = 1;
+    }
+    (S.photos ? Promise.resolve(S.photos) : get('/api/photos').then(function (l) { S.photos = l; return l; }, function () { return []; }))
+      .then(function () { nextPhoto(); showPhoto(); });
+    clearInterval(S.photoTimer);
+    S.photoTimer = setInterval(function () { if (!document.body.contains(hero)) return clearInterval(S.photoTimer); if (resting && cur && (cur.closest('.top') || cur.closest('.first'))) { nextPhoto(); showPhoto(); } }, 60000);
     // Een tegel met een mooie achtergrond: zacht overfaden, met het titellogo (of de titel). Anders blijft wat er staat.
     function showArt(it) {
       clearTimeout(heroT);
@@ -505,6 +515,7 @@
           : Promise.resolve({ backdrop: it.img || '' });
         art.then(function (a) {
           if (!a.backdrop) return;
+          resting = false;
           setBg(a.backdrop); credit.style.opacity = 0;
           var lg = hero.querySelector('.logo'); lg.classList.toggle('on', !!a.logo); if (a.logo) lg.src = img(a.logo);
           hero.querySelector('h1').textContent = a.logo ? '' : it.title || '';

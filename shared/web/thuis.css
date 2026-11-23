@@ -56,16 +56,16 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .scroll { position: absolute; left: 0; right: 0; top: 120px; bottom: 0; overflow: hidden; }
 .scroll-inner { transition: transform .25s var(--ease); padding-bottom: 120px; }
 /* Grote afbeelding op Thuis: eerst een rustige foto, bij een tegel met een mooie achtergrond faden we over. */
-.hero { position: relative; height: 680px; margin-top: -120px; margin-bottom: -170px; padding: 0 80px; overflow: hidden; }
+.hero { position: relative; height: 780px; margin-bottom: -200px; padding: 0 80px; overflow: hidden; }
 .hero .bg { position: absolute; inset: 0; background-size: cover; background-position: center 35%; opacity: 0; transition: opacity 1.2s var(--ease); animation: drift 40s ease-in-out infinite alternate; }
 .hero .bg.on { opacity: 1; }
 .hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(5,7,10,.75) 0%, rgba(5,7,10,.2) 45%, rgba(5,7,10,0) 70%), linear-gradient(0deg, var(--bg) 4%, rgba(5,7,10,.55) 30%, rgba(5,7,10,0) 60%), linear-gradient(180deg, rgba(5,7,10,.6) 0%, rgba(5,7,10,0) 22%); z-index: 1; }
 @keyframes drift { from { transform: scale(1.02); } to { transform: scale(1.09) translateX(-1%); } }
-.hero .txt { position: absolute; left: 80px; bottom: 230px; width: 760px; display: flex; flex-direction: column; gap: 14px; z-index: 2; transition: opacity .6s; }
+.hero .txt { position: absolute; left: 80px; bottom: 260px; width: 760px; display: flex; flex-direction: column; gap: 14px; z-index: 2; transition: opacity .6s; }
 .hero .txt.uit { opacity: 0; }
 .hero .logo { max-width: 520px; max-height: 170px; object-fit: contain; object-position: left bottom; display: none; filter: drop-shadow(0 4px 18px rgba(0,0,0,.6)); }
 .hero .logo.on { display: block; }
-.hero .credit { position: absolute; right: 80px; bottom: 200px; z-index: 2; font-size: 15px; color: rgba(255,255,255,.55); transition: opacity .6s; }
+.hero .credit { position: absolute; right: 80px; bottom: 230px; z-index: 2; font-size: 15px; color: rgba(255,255,255,.55); transition: opacity .6s; }
 .hero ~ div { position: relative; z-index: 2; }
 .kicker { font-size: 20px; font-weight: 600; letter-spacing: 2px; color: var(--ink-2); text-transform: uppercase; }
 .hero h1 { font-size: 58px; line-height: 1; text-shadow: 0 2px 20px rgba(0,0,0,.5); }
