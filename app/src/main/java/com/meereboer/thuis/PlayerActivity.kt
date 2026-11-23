@@ -205,6 +205,7 @@ class PlayerActivity : Activity() {
         val renderers = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
+            .setMediaCodecSelector(Decoders.selector)
         val p = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
             .build()
@@ -230,6 +231,9 @@ class PlayerActivity : Activity() {
         // Geluid: Nederlands eerst, dan Engels; geen audiodescriptie als er een gewoon spoor is.
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .setPreferredAudioLanguages("nl", "nld", "dut", "en")
+            // Ook proberen als de chip zegt dat een spoor zwaar is (4K-remux, hoog niveau)
+            .setExceedVideoConstraintsIfNecessary(true)
+            .setExceedRendererCapabilitiesIfNecessary(true)
             .setPreferredAudioRoleFlags(C.ROLE_FLAG_MAIN)
             .build()
         p.addListener(object : Player.Listener {

@@ -285,6 +285,7 @@ class VodActivity : Activity() {
         val renderers = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
+            .setMediaCodecSelector(Decoders.selector)
         val p = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http)))
             .setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(30_000)
@@ -292,6 +293,9 @@ class VodActivity : Activity() {
         // Nederlands geluid eerst; Nederlandse ondertitels aan als ze er zijn (ook bij anderstalig geluid).
         p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
             .setPreferredAudioLanguages("nl", "nld", "dut", "en")
+            // Ook proberen als de chip zegt dat een spoor zwaar is (4K-remux, hoog niveau)
+            .setExceedVideoConstraintsIfNecessary(true)
+            .setExceedRendererCapabilitiesIfNecessary(true)
             .setPreferredAudioRoleFlags(C.ROLE_FLAG_MAIN)
             .setPreferredTextLanguages("nl", "nld", "dut")
             .setSelectUndeterminedTextLanguage(false)
