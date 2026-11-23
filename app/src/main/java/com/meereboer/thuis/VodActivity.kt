@@ -79,10 +79,38 @@ class VodActivity : Activity() {
     }
 
     /** Eerder of later zetten: herlaadt het bestand op dezelfde plek. */
-    private fun nudge(label: String, delta: Long) {
+    private fun nudge(label: String, delta: Long) = setOffset(label, subOffset() + delta)
+
+    // ---------- gelijkzetten op één zin ----------
+    private var syncLabel: String? = null
+    private var syncStart = 0L
+
+    private fun cues(f: java.io.File): List<Pair<Long, String>> {
+        val re = Regex("(\\d{2}):(\\d{2}):(\\d{2})[,.](\\d{3})\\s*-->")
+        return f.readText().replace("\r", "").split(Regex("\n\\s*\n")).mapNotNull { b ->
+            val m = re.find(b) ?: return@mapNotNull null
+            val (h, mi, sec, x) = m.destructured
+            val t = (((h.toLong() * 60) + mi.toLong()) * 60 + sec.toLong()) * 1000 + x.toLong()
+            val text = b.substring(b.indexOf('\n', m.range.last).coerceAtLeast(0)).trim().replace(Regex("<[^>]+>"), "")
+            if (text.isEmpty()) null else t to text
+        }
+    }
+
+    /** Toont de eerstvolgende zin; jij drukt OK zodra je hem hoort. */
+    private fun startSync(label: String) {
         val orig = subFiles[label] ?: return
         val p = player ?: return
-        val ofs = subOffset() + delta
+        val ofs = subOffset()
+        val next = cues(orig).firstOrNull { it.first + ofs > p.currentPosition + 2500 } ?: run { flash("Geen volgende zin gevonden"); return }
+        syncLabel = label; syncStart = next.first
+        p.playWhenReady = true
+        center.text = "Druk op OK zodra je dit hoort:\n\n\u201c" + next.second.take(120) + "\u201d\n\n(Terug = stoppen)"
+        center.visibility = View.VISIBLE
+    }
+
+    private fun setOffset(label: String, ofs: Long) {
+        val orig = subFiles[label] ?: return
+        val p = player ?: return
         getSharedPreferences("vod", MODE_PRIVATE).edit().putLong(offsetKey(), ofs).apply()
         val f = shifted(orig, ofs)
         val i = extraSubs.indexOfFirst { it.label == label }
@@ -93,7 +121,7 @@ class VodActivity : Activity() {
         val pos = p.currentPosition
         p.setMediaItem(mediaItem(extraSubs), pos)
         p.prepare()
-        flash("Ondertitels " + (if (ofs == 0L) "op de oorspronkelijke tijd" else (if (ofs < 0) "%.1f s eerder" else "%.1f s later").format(Math.abs(ofs) / 1000.0)))
+        flash("Ondertitels staan gelijk" + (if (ofs == 0L) "" else (if (ofs < 0) " (%.1f s naar voren)" else " (%.1f s naar achteren)").format(Math.abs(ofs) / 1000.0)))
     }
 
     /** Losse ondertitel toevoegen (OpenSubtitles) en meteen kiezen. */
@@ -148,9 +176,10 @@ class VodActivity : Activity() {
         val cur = groups.firstOrNull { it.isSelected }?.getTrackFormat(0)?.label
         if (!off && cur != null && subFiles.containsKey(cur)) {
             val o = subOffset()
-            val now = if (o == 0L) "nu op tijd" else (if (o < 0) "nu %.1f s eerder" else "nu %.1f s later").format(Math.abs(o) / 1000.0)
-            labels.add("    ⏪ Ondertitels 0,5 s eerder ($now)"); acts.add { nudge(cur, -500) }
-            labels.add("    ⏩ Ondertitels 0,5 s later"); acts.add { nudge(cur, 500) }
+            labels.add("    \u25ce Gelijkzetten op een zin (makkelijkst)"); acts.add { startSync(cur) }
+            labels.add("    Tekst komt te vroeg (al in beeld v\u00f3\u00f3r het praten)"); acts.add { nudge(cur, 500) }
+            labels.add("    Tekst komt te laat (pas in beeld n\u00e1 het praten)"); acts.add { nudge(cur, -500) }
+            if (o != 0L) { labels.add("    Timing terugzetten zoals hij was"); acts.add { setOffset(cur, 0L) } }
         }
         val prefs = Prefs(this)
         val sel = if (off) 0 else groups.indexOfFirst { it.isSelected } + 1
@@ -218,6 +247,7 @@ class VodActivity : Activity() {
     private val tick = object : Runnable {
         override fun run() {
             updateOsd()
+            if (syncLabel != null) center.visibility = View.VISIBLE
             val now = System.currentTimeMillis()
             if (now - lastReport > 10_000) { lastReport = now; report(if (player?.isPlaying == true) "playing" else "paused") }
             ui.postDelayed(this, 1000)
@@ -430,6 +460,17 @@ class VodActivity : Activity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val p = player ?: return super.onKeyDown(keyCode, event)
+        syncLabel?.let { label ->
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    syncLabel = null; center.visibility = View.GONE
+                    // 0,2 s eraf: je drukt altijd net na het horen
+                    setOffset(label, p.currentPosition - syncStart - 200)
+                }
+                KeyEvent.KEYCODE_BACK -> { syncLabel = null; center.visibility = View.GONE; flash("Gelijkzetten gestopt") }
+            }
+            return true
+        }
         if (menu.visibility == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_DPAD_LEFT) { closeMenu(); return true }
             return super.onKeyDown(keyCode, event)
