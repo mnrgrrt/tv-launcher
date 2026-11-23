@@ -776,11 +776,12 @@
       bgEl.style.backgroundImage = "url('" + img(d.backdrop || (show && show.backdrop) || (a.plex && a.plex.art) || (a.vod && a.vod.backdrop)) + "')";
       if (d.cast && d.cast.length) castLine.innerHTML = '<span class="dim">Met </span>' + esc(d.cast.slice(0, 3).map(function (c) { return c.name; }).join(', '));
       var nSeasons = show ? show.seasons.length : (d.seasons || []).length;
-      var imdb = d.ratings && d.ratings.imdb ? 'IMDb ' + String(d.ratings.imdb).replace('.', ',') : d.rating ? '★ ' + d.rating.toFixed(1).replace('.', ',') : '';
+      var imdb = (d.ratings && d.ratings.imdb ? 'IMDb ' + String(d.ratings.imdb).replace('.', ',') : d.rating ? '★ ' + d.rating.toFixed(1).replace('.', ',') : '') +
+        (d.ratings && d.ratings.rt ? ' · Rotten Tomatoes ' + d.ratings.rt : '');
       var meta = [d.year || (a.vod && a.vod.year), nSeasons ? nSeasons + ' seizoen' + (nSeasons > 1 ? 'en' : '') : d.runtime ? d.runtime + ' min' : '',
         d.age ? '<span class="tag">' + esc(d.age) + '</span>' : '', imdb, (d.genres || []).slice(0, 3).join(' · ')].filter(Boolean);
       // Waar te zien: eerst de diensten die je hebt, dan Plex en IPTV. Diensten die je niet hebt staan er grijs bij.
-      var svc = d.services || [], have = svc.filter(function (x) { return x.key && mine.indexOf(x.key) >= 0; }), other = svc.filter(function (x) { return have.indexOf(x) < 0; });
+      var svc = d.services || [], have = svc.filter(function (x) { return x.key && mine.indexOf(x.key) >= 0; }), other = svc.filter(function (x) { return have.indexOf(x) < 0 && !/channel|with ads|met reclame/i.test(x.name); });
       var chip = function (x, dim) { return '<span class="where' + (dim ? ' dim' : '') + '">' + (x.logo ? '<i style="' + bg(x.logo) + '"></i>' : '') + esc(x.name) + '</span>'; };
       var where = have.map(function (x) { return chip(x); }).concat(a.plex ? [chip({ name: 'Plex' })] : [], a.vod ? [chip({ name: 'IPTV' })] : []);
       txt.innerHTML = '<h1>' + esc(d.title || a.title) + '</h1><div class="meta">' + meta.map(function (m) { return '<span>' + (m.indexOf('<span') === 0 ? m : esc(m)) + '</span>'; }).join('') + '</div>' +
@@ -847,8 +848,44 @@
         };
         paint();
       }
+      // Onder het beeld: extra's uit Plex, trailers, gerelateerde titels en wie erin speelt.
+      var more = h('div'); lower.appendChild(more);
+      var plexKey = a.plex && a.plex.key;
+      if (plexKey) get('/api/plex/extras/' + plexKey).then(function (l) {
+        if (l.length) more.insertBefore(rowSection("Extra's", l.map(function (x) {
+          return wide({ title: x.title, sub: [EXTRA[x.sub] || 'Extra', x.minutes ? x.minutes + ' min' : ''].filter(Boolean).join(' · '), img: x.img, ok: function () { playPlex(x.key, { title: x.title, sub: d.title || a.title }); } });
+        })), more.firstChild);
+      }, function () {});
+      if ((d.videos || []).length) more.appendChild(rowSection('Trailers en meer', d.videos.map(function (v) {
+        return wide({ title: v.name, sub: EXTRA[v.type] || v.type, img: v.img, ok: function () { if (N) N.openUrl('https://www.youtube.com/watch?v=' + v.key); } });
+      })));
+      if ((d.related || []).length) more.appendChild(rowSection('Gerelateerd', d.related.map(function (x) {
+        var type = x.id.indexOf('tv') === 0 ? 'tv' : 'movie';
+        return poster({ title: x.title, sub: x.year, img: x.poster, badges: x.sources ? srcBadges(x) : '', ok: function () { go('info', { type: type, tmdb: x.tmdb, title: x.title, plex: x.plex || null, vod: x.vod || null, vodKind: type === 'tv' ? 'series' : 'movie' }); } });
+      })));
+      if ((d.cast || []).length) more.appendChild(rowSection('Cast en crew', d.cast.map(function (c) {
+        return F(h('button', { class: 'row-item cast' }, '<div class="ph" style="' + bg(c.photo) + '"></div><b>' + esc(c.name) + '</b><span class="dim">' + esc(c.role || '') + '</span>'), function () { go('person', { id: c.id, name: c.name }); });
+      })));
       focus(bt.firstChild);
     });
+    return el;
+  };
+  var EXTRA = { Trailer: 'Trailer', Teaser: 'Teaser', Featurette: 'Achter de schermen', 'Behind the Scenes': 'Achter de schermen', Clip: 'Fragment',
+    trailer: 'Trailer', behindTheScenes: 'Achter de schermen', deletedScene: 'Verwijderde scène', featurette: 'Achter de schermen', interview: 'Interview', sceneOrSample: 'Fragment', short: 'Kort', extra: 'Extra' };
+  // Iemand uit de cast: waar die verder in speelde. Wat we zelf hebben krijgt een label.
+  screens.person = function (a) {
+    var el = h('div', { class: 'screen' });
+    el.appendChild(h('div', { style: 'position:absolute;left:80px;top:46px' }, '<h1 style="font-size:44px">' + esc(a.name) + '</h1>'));
+    var sc = h('div', { class: 'scroll', style: 'top:130px' }), inner = h('div', { class: 'scroll-inner' }), grid = h('div', { class: 'grid' });
+    inner.appendChild(grid); sc.appendChild(inner); el.appendChild(sc); grid.appendChild(loading());
+    get('/api/person/' + a.id).then(function (d) {
+      grid.innerHTML = '';
+      d.items.forEach(function (x) {
+        var type = x.id.indexOf('tv') === 0 ? 'tv' : 'movie';
+        grid.appendChild(poster({ title: x.title, sub: [x.year, type === 'tv' ? 'Serie' : 'Film'].filter(Boolean).join(' · '), img: x.poster, ok: function () { go('info', { type: type, tmdb: x.tmdb, title: x.title }); } }));
+      });
+      focus(grid.firstChild);
+    }).catch(function (e) { grid.innerHTML = '<div class="empty" style="padding:0">' + esc(e.message) + '</div>'; });
     return el;
   };
   // Wat er nu aan de beurt is: een aflevering die half gekeken is, anders de eerste na de laatst geziene.

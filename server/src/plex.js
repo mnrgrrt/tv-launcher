@@ -70,10 +70,16 @@ export async function playItem(key) {
     .map(s => ({ url: sign(`/stream/plex?p=${enc(s.key)}`), lang: s.languageCode || '', label: s.displayTitle || '', codec: s.codec || '' }));
   let tmdb = tmdbOf(m);
   if (ep) tmdb = tmdbOf((await get(`/library/metadata/${m.grandparentRatingKey}`).catch(() => ({}))).Metadata?.[0]) || 0;
-  return { kind: ep ? 'series' : 'movie', key: 'plex:' + key, plexKey: key, url: sign(`/stream/plex?p=${enc(part.key)}`),
+  return { kind: m.type === 'clip' ? 'clip' : ep ? 'series' : 'movie', key: 'plex:' + key, plexKey: key, url: sign(`/stream/plex?p=${enc(part.key)}`),
     title: ep ? m.grandparentTitle : m.title, sub: ep ? `S${m.parentIndex} · afl. ${m.index} · ${m.title}` : String(m.year || ''),
     seriesKey: ep ? 'plex:' + m.grandparentRatingKey : '', season: ep ? m.parentIndex : 0, episode: ep ? m.index : 0,
     tmdb, offsetMs: m.viewOffset || 0, subs, img: img(ep ? m.thumb : m.art, 1280, 720) };
+}
+
+/** Extra's bij een titel in Plex (trailers, achter de schermen). Spelen direct af via de gewone speler. */
+export async function extras(key) {
+  const c = await get(`/library/metadata/${key}/extras`).catch(() => ({}));
+  return (c.Metadata || []).slice(0, 20).map(m => ({ key: String(m.ratingKey), title: m.title, sub: m.subtype || 'extra', img: img(m.thumb, 640, 360), minutes: Math.round((m.duration || 0) / 60000) }));
 }
 
 export function timeline(key, state, pos, dur) {

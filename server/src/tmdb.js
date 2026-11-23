@@ -96,6 +96,17 @@ export function byService(type, provider) {
       (type === 'tv' ? '&without_genres=10762,10751' : '&without_genres=10751,16'))
       .then(o => (o.results || []).filter(x => x.backdrop_path || x.poster_path).map(x => item({ ...x, _type: type }, ''))));
 }
+/** Waar iemand in speelde of wat iemand maakte: de bekendste titels eerst. Een dag bewaard. */
+export function person(id) {
+  return cached(`tmdb:p:${id}`, 24 * 3600e3, async () => {
+    const d = await tmdb(`/person/${id}?language=nl-NL&append_to_response=combined_credits`);
+    const seen = new Set(), list = [...(d.combined_credits?.cast || []), ...(d.combined_credits?.crew || []).filter(c => c.job === 'Director')]
+      .filter(x => (x.media_type === 'movie' || x.media_type === 'tv') && x.poster_path && !seen.has(x.media_type + x.id) && seen.add(x.media_type + x.id))
+      .sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0)).slice(0, 60);
+    return { name: d.name || '', photo: d.profile_path ? TIMG + 'w342' + d.profile_path : '', items: list.map(x => item({ ...x, _type: x.media_type }, '')) };
+  });
+}
+
 /** Logo's van de diensten (vierkante icoontjes van TMDB), per sleutel uit services.json. Een week bewaard. */
 export function logos() {
   return cached('tmdb:logos', 7 * 86400e3, async () => {
@@ -135,9 +146,15 @@ export async function search(q) {
 /** Alles voor de informatiepagina: details, acteurs, trailer, vergelijkbaar, diensten. */
 export function details(type, id) {
   return cached(`tmdb:d:${type}:${id}`, 24 * 3600e3, async () => {
-    const d = await tmdb(`/${type}/${id}?language=nl-NL&append_to_response=credits,videos,similar,release_dates,content_ratings,external_ids,watch/providers&include_video_language=nl,en`);
+    const d = await tmdb(`/${type}/${id}?language=nl-NL&append_to_response=credits,videos,similar,recommendations,release_dates,content_ratings,external_ids,watch/providers&include_video_language=nl,en`);
     const tv = type === 'tv', mine = new Map(streamingServices().map(s => [s.provider, s.key]));
-    const trailer = (d.videos?.results || []).find(v => v.site === 'YouTube' && v.type === 'Trailer');
+    const yt = (d.videos?.results || []).filter(v => v.site === 'YouTube');
+    const trailer = yt.find(v => v.type === 'Trailer');
+    // Trailers en extra's (achter de schermen, fragmenten): trailers eerst, Nederlands voor Engels.
+    const ORDER = ['Trailer', 'Teaser', 'Featurette', 'Behind the Scenes', 'Clip'];
+    const videos = yt.filter(v => ORDER.includes(v.type)).sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type) || (b.iso_639_1 === 'nl') - (a.iso_639_1 === 'nl'))
+      .slice(0, 12).map(v => ({ key: v.key, name: v.name, type: v.type, img: `https://i.ytimg.com/vi/${v.key}/hqdefault.jpg` }));
+    const related = (d.recommendations?.results || []).length ? d.recommendations.results : (d.similar?.results || []);
     let age = '';
     if (tv) age = (d.content_ratings?.results || []).find(r => r.iso_3166_1 === 'NL')?.rating || '';
     else age = ((d.release_dates?.results || []).find(r => r.iso_3166_1 === 'NL')?.release_dates || []).map(x => x.certification).find(Boolean) || '';
@@ -148,11 +165,12 @@ export function details(type, id) {
       genres: (d.genres || []).map(g => g.name),
       backdrop: d.backdrop_path ? TIMG + 'original' + d.backdrop_path : '', poster: d.poster_path ? TIMG + 'w500' + d.poster_path : '',
       director: tv ? (d.created_by || []).map(c => c.name).join(', ') : (d.credits?.crew || []).filter(c => c.job === 'Director').map(c => c.name).join(', '),
-      cast: (d.credits?.cast || []).slice(0, 15).map(c => ({ id: c.id, name: c.name, role: c.character, photo: c.profile_path ? TIMG + 'w185' + c.profile_path : '' })),
+      cast: (d.credits?.cast || []).slice(0, 15).map(c => ({ id: c.id, name: c.name, role: c.character, photo: c.profile_path ? TIMG + 'w185' + c.profile_path : '' }))
+        .concat((d.credits?.crew || []).filter(c => c.job === 'Director').slice(0, 2).map(c => ({ id: c.id, name: c.name, role: 'Regie', photo: c.profile_path ? TIMG + 'w185' + c.profile_path : '' }))),
       trailer: trailer ? trailer.key : '',
       seasons: tv ? (d.seasons || []).filter(s => s.season_number > 0).map(s => ({ n: s.season_number, episodes: s.episode_count, year: (s.air_date || '').slice(0, 4) })) : [],
       tvdb: d.external_ids?.tvdb_id || 0, imdb: d.external_ids?.imdb_id || '',
-      similar: (d.similar?.results || []).slice(0, 12).map(x => item({ ...x, _type: type }, '')),
+      videos, related: related.filter(x => x.poster_path).slice(0, 16).map(x => item({ ...x, _type: type }, '')),
       // Alle diensten met een abonnement in Nederland; key is gezet als Thuis de dienst kent.
       services: (d['watch/providers']?.results?.NL?.flatrate || []).map(p => ({ key: mine.get(p.provider_id) || '', name: p.provider_name, logo: p.logo_path ? TIMG + 'w92' + p.logo_path : '' })),
       ratings: await ratings(d.external_ids?.imdb_id || '').catch(() => null)
