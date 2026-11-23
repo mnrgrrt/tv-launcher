@@ -848,28 +848,42 @@
         };
         paint();
       }
-      // Onder het beeld: extra's uit Plex, trailers, gerelateerde titels en wie erin speelt.
-      var more = h('div'); lower.appendChild(more);
-      var plexKey = a.plex && a.plex.key;
-      if (plexKey) get('/api/plex/extras/' + plexKey).then(function (l) {
-        if (l.length) more.insertBefore(rowSection("Extra's", l.map(function (x) {
-          return wide({ title: x.title, sub: [EXTRA[x.sub] || 'Extra', x.minutes ? x.minutes + ' min' : ''].filter(Boolean).join(' · '), img: x.img, ok: function () { playPlex(x.key, { title: x.title, sub: d.title || a.title }); } });
-        })), more.firstChild);
-      }, function () {});
-      if ((d.videos || []).length) more.appendChild(rowSection('Trailers en meer', d.videos.map(function (v) {
-        return wide({ title: v.name, sub: EXTRA[v.type] || v.type, img: v.img, ok: function () { if (N) N.openUrl('https://www.youtube.com/watch?v=' + v.key); } });
-      })));
-      if ((d.related || []).length) more.appendChild(rowSection('Gerelateerd', d.related.map(function (x) {
+      // Onder het beeld: meer zoals dit, cast, extra's, trailers, beelden en alles over de titel. Scrollen mag.
+      var slot = {}; ['rel', 'cast', 'extras', 'vid', 'img', 'over'].forEach(function (k) { slot[k] = h('div'); lower.appendChild(slot[k]); });
+      if ((d.related || []).length) slot.rel.appendChild(rowSection('Meer zoals dit', d.related.map(function (x) {
         var type = x.id.indexOf('tv') === 0 ? 'tv' : 'movie';
         return poster({ title: x.title, sub: x.year, img: x.poster, badges: x.sources ? srcBadges(x) : '', ok: function () { go('info', { type: type, tmdb: x.tmdb, title: x.title, plex: x.plex || null, vod: x.vod || null, vodKind: type === 'tv' ? 'series' : 'movie' }); } });
       })));
-      if ((d.cast || []).length) more.appendChild(rowSection('Cast en crew', d.cast.map(function (c) {
+      if ((d.cast || []).length) slot.cast.appendChild(rowSection('Cast en crew', d.cast.map(function (c) {
         return F(h('button', { class: 'row-item cast' }, '<div class="ph" style="' + bg(c.photo) + '"></div><b>' + esc(c.name) + '</b><span class="dim">' + esc(c.role || '') + '</span>'), function () { go('person', { id: c.id, name: c.name }); });
       })));
+      var plexKey = a.plex && a.plex.key;
+      if (plexKey) get('/api/plex/extras/' + plexKey).then(function (l) {
+        if (l.length) slot.extras.appendChild(rowSection("Extra's", l.map(function (x) {
+          return wide({ title: x.title, sub: [EXTRA[x.sub] || 'Extra', x.minutes ? x.minutes + ' min' : ''].filter(Boolean).join(' · '), img: x.img, ok: function () { playPlex(x.key, { title: x.title, sub: d.title || a.title }); } });
+        })));
+      }, function () {});
+      if ((d.videos || []).length) slot.vid.appendChild(rowSection('Trailers en meer', d.videos.map(function (v) {
+        return wide({ title: v.name, sub: EXTRA[v.type] || v.type, img: v.img, ok: function () { if (N) N.openUrl('https://www.youtube.com/watch?v=' + v.key); } });
+      })));
+      // Beelden: OK zet het beeld groot bovenaan.
+      if ((d.images || []).length) slot.img.appendChild(rowSection('Beelden', d.images.map(function (u) {
+        return wide({ title: '', img: u, ok: function () { bgEl.style.backgroundImage = "url('" + img(u.replace('/w780/', '/original/')) + "')"; reveal(bt.firstChild); focus(bt.firstChild); } });
+      })));
+      // Over: het hele verhaal en de gegevens op een rij.
+      var facts = [['Regie', d.director], ['Schrijvers', d.writers], ['Verschenen', d.date ? new Date(d.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''],
+        ['Duur', d.runtime ? Math.floor(d.runtime / 60) + ' u ' + (d.runtime % 60) + ' min' : ''], ['Taal', d.language ? langName(d.language) : ''], ['Land', (d.countries || []).join(', ')],
+        ['Gemaakt door', d.companies], ['Originele titel', d.original && d.original !== d.title ? d.original : ''], ['Leeftijd', d.age]].filter(function (f) { return f[1]; });
+      if (d.overview || facts.length) {
+        var card = F(h('button', { class: 'about' }, '<div class="l">' + (d.tagline ? '<i>' + esc(d.tagline) + '</i>' : '') + '<p>' + esc(d.overview || '') + '</p></div>' +
+          '<dl>' + facts.map(function (f) { return '<dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd>'; }).join('') + '</dl>'), function () {});
+        var sec = h('div', { class: 'section' }, '<h2>Over ' + esc(d.title || a.title) + '</h2>'); sec.appendChild(card); slot.over.appendChild(sec);
+      }
       focus(bt.firstChild);
     });
     return el;
   };
+  function langName(c) { try { return new Intl.DisplayNames(['nl'], { type: 'language' }).of(c); } catch (e) { return c; } }
   var EXTRA = { Trailer: 'Trailer', Teaser: 'Teaser', Featurette: 'Achter de schermen', 'Behind the Scenes': 'Achter de schermen', Clip: 'Fragment',
     trailer: 'Trailer', behindTheScenes: 'Achter de schermen', deletedScene: 'Verwijderde scène', featurette: 'Achter de schermen', interview: 'Interview', sceneOrSample: 'Fragment', short: 'Kort', extra: 'Extra' };
   // Iemand uit de cast: waar die verder in speelde. Wat we zelf hebben krijgt een label.
