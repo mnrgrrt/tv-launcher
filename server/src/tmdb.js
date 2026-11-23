@@ -59,6 +59,18 @@ export function trending(type) {
   });
 }
 
+/** Mooiste achtergrond (zonder tekst erin) en het titellogo, voor de grote afbeelding op Thuis. Een week bewaard. */
+export function art(type, id) {
+  return cached(`tmdb:art:${type}:${id}`, 7 * 86400e3, async () => {
+    const r = await tmdb(`/${type}/${id}/images?include_image_language=nl,en,null`);
+    const bds = (r.backdrops || []).filter(b => b.width >= 1920);
+    const bd = bds.filter(b => !b.iso_639_1).sort((a, b) => b.vote_average - a.vote_average)[0] || bds[0];
+    const logos = r.logos || [];
+    const logo = logos.find(l => l.iso_639_1 === 'nl') || logos.find(l => l.iso_639_1 === 'en') || logos[0];
+    return { backdrop: bd ? TIMG + 'original' + bd.file_path : '', logo: logo ? TIMG + 'w500' + logo.file_path : '' };
+  });
+}
+
 /** Genres, cijfer, stemmen en IMDb-nummer van één titel. */
 export async function info(type, id) {
   const d = await tmdb(`/${type}/${id}?language=en-US&append_to_response=external_ids`);

@@ -55,23 +55,29 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .screen { position: absolute; inset: 0; }
 .scroll { position: absolute; left: 0; right: 0; top: 120px; bottom: 0; overflow: hidden; }
 .scroll-inner { transition: transform .25s var(--ease); padding-bottom: 120px; }
-.hero.leeg { height: 120px; }
-.hero.leeg .txt { display: none; }
-.hero { position: relative; height: 430px; margin-top: -120px; padding: 150px 80px 0; }
-.hero .bg { position: absolute; inset: 0; background-size: cover; background-position: center top; }
-.hero .bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(5,7,10,.94) 0%, rgba(5,7,10,.45) 55%, rgba(5,7,10,0) 100%), linear-gradient(0deg, var(--bg) 0%, rgba(5,7,10,0) 45%); }
-.hero .txt { position: relative; width: 820px; display: flex; flex-direction: column; gap: 12px; }
+/* Grote afbeelding op Thuis: eerst een rustige foto, bij een tegel met een mooie achtergrond faden we over. */
+.hero { position: relative; height: 680px; margin-top: -120px; margin-bottom: -170px; padding: 0 80px; overflow: hidden; }
+.hero .bg { position: absolute; inset: 0; background-size: cover; background-position: center 35%; opacity: 0; transition: opacity 1.2s var(--ease); animation: drift 40s ease-in-out infinite alternate; }
+.hero .bg.on { opacity: 1; }
+.hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(5,7,10,.75) 0%, rgba(5,7,10,.2) 45%, rgba(5,7,10,0) 70%), linear-gradient(0deg, var(--bg) 4%, rgba(5,7,10,.55) 30%, rgba(5,7,10,0) 60%), linear-gradient(180deg, rgba(5,7,10,.6) 0%, rgba(5,7,10,0) 22%); z-index: 1; }
+@keyframes drift { from { transform: scale(1.02); } to { transform: scale(1.09) translateX(-1%); } }
+.hero .txt { position: absolute; left: 80px; bottom: 230px; width: 760px; display: flex; flex-direction: column; gap: 14px; z-index: 2; transition: opacity .6s; }
+.hero .txt.uit { opacity: 0; }
+.hero .logo { max-width: 520px; max-height: 170px; object-fit: contain; object-position: left bottom; display: none; filter: drop-shadow(0 4px 18px rgba(0,0,0,.6)); }
+.hero .logo.on { display: block; }
+.hero .credit { position: absolute; right: 80px; bottom: 200px; z-index: 2; font-size: 15px; color: rgba(255,255,255,.55); transition: opacity .6s; }
+.hero ~ div { position: relative; z-index: 2; }
 .kicker { font-size: 20px; font-weight: 600; letter-spacing: 2px; color: var(--ink-2); text-transform: uppercase; }
-.hero h1 { font-size: 58px; line-height: 1; }
+.hero h1 { font-size: 58px; line-height: 1; text-shadow: 0 2px 20px rgba(0,0,0,.5); }
 .meta { font-size: 22px; color: var(--ink-2); display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
 .desc { font-size: 20px; line-height: 1.5; color: var(--ink-2); margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.section { padding: 16px 0 4px; }
+.section { padding: 28px 0 6px; }
 .section h2 { font-size: 24px; font-weight: 600; padding: 0 80px 12px; }
 .section h2 small { font-size: 17px; font-weight: 500; color: var(--ink-3); }
-.row { display: flex; gap: 30px; padding: 0 80px; transition: transform .25s var(--ease); }
+.row { display: flex; gap: 36px; padding: 0 80px; transition: transform .25s var(--ease); }
 .row-clip { overflow: hidden; padding: 18px 0 12px; }
 .row-item, .poster, .listrow { text-align: left; }
-.row-item { width: 320px; flex: none; display: flex; flex-direction: column; gap: 12px; }
+.row-item { width: 280px; flex: none; display: flex; flex-direction: column; gap: 12px; }
 .thumb { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 14px; background: var(--card) center/cover no-repeat; transition: transform .15s var(--ease), box-shadow .15s; }
 .thumb .badge { position: absolute; top: 10px; left: 10px; padding: 3px 9px; border-radius: 6px; background: rgba(0,0,0,.6); font-size: 14px; font-weight: 700; }
 .badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; }
@@ -87,16 +93,16 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .bar i { display: block; height: 100%; border-radius: 3px; background: var(--ink); }
 .t1 { font-size: 19px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .t2 { font-size: 16px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -4px; }
-.poster { width: 170px; flex: none; display: flex; flex-direction: column; gap: 11px; }
-.pimg { width: 170px; height: 255px; border-radius: 10px; background: var(--card) center/cover no-repeat; transition: transform .15s var(--ease), box-shadow .15s; position: relative; }
+.poster { width: 150px; flex: none; display: flex; flex-direction: column; gap: 11px; }
+.pimg { width: 150px; height: 225px; border-radius: 10px; background: var(--card) center/cover no-repeat; transition: transform .15s var(--ease), box-shadow .15s; position: relative; }
 .app-tile .thumb { background-size: contain; background-color: #0e1218; }
-.app-tile { width: 240px; }
+.app-tile { width: 220px; }
 /* Genre- en collectietegel: vier posters naast elkaar */
 .mosaic { display: flex; gap: 6px; padding: 10px; background: var(--panel); }
 .mosaic i { flex: 1; border-radius: 6px; background: var(--card) center/cover no-repeat; }
 
 /* Raster (bladeren) */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, 170px); gap: 30px 26px; padding: 18px 80px 10px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, 150px); gap: 34px 30px; padding: 18px 80px 10px; }
 .filters { position: absolute; left: 80px; right: 80px; top: 130px; display: flex; gap: 10px; align-items: center; }
 .filters .count { margin-left: auto; font-size: 20px; color: var(--ink-3); }
 
