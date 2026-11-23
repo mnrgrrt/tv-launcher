@@ -40,7 +40,7 @@ import java.util.concurrent.Executors
 /**
  * Speler voor films en afleveringen van de IPTV-server.
  * OK = pauze, links/rechts = 10 s terug / 30 s vooruit, omhoog/omlaag = 5 min,
- * groene knop = geluidsspoor, gele knop = ondertitels, Terug = stoppen (positie wordt onthouden).
+ * omlaag = opties (ondertitels, geluid), Terug = stoppen (positie wordt onthouden).
  */
 @OptIn(UnstableApi::class)
 class VodActivity : Activity() {
@@ -224,6 +224,14 @@ class VodActivity : Activity() {
         }
     }
 
+    private fun optionsMenu() {
+        showOsd()
+        openMenu("Opties", listOf("Ondertitels", "Geluid", "Spoel 5 minuten vooruit", "Spoel 5 minuten terug"),
+            listOf({ subtitleMenu() }, { audioMenu() },
+                { player?.let { it.seekTo(it.currentPosition + 300_000) } },
+                { player?.let { it.seekTo((it.currentPosition - 300_000).coerceAtLeast(0)) } }), 0)
+    }
+
     /** Groene knop: geluidssporen. */
     private fun audioMenu() {
         val p = player ?: return
@@ -252,7 +260,7 @@ class VodActivity : Activity() {
                 val p = player ?: return@post
                 if (f == null) { if (manual) flash("Geen Nederlandse ondertitels gevonden"); return@post }
                 addExternal(f, "nl", "Nederlands · OpenSubtitles")
-                flash("Nederlandse ondertitels geladen (geel = andere kiezen)")
+                flash("Nederlandse ondertitels geladen (omlaag = andere kiezen)")
             }
         }
     }
@@ -512,8 +520,9 @@ class VodActivity : Activity() {
             }
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> { p.seekBack(); showOsd() }
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { p.seekForward(); showOsd() }
-            KeyEvent.KEYCODE_DPAD_UP -> { p.seekTo(p.currentPosition + 300_000); showOsd() }
-            KeyEvent.KEYCODE_DPAD_DOWN -> { p.seekTo((p.currentPosition - 300_000).coerceAtLeast(0)); showOsd() }
+            // Omlaag: het optiemenu (ondertitels, geluid). Zo is alles bereikbaar met pijltjes en OK, ook zonder kleurknoppen.
+            KeyEvent.KEYCODE_DPAD_DOWN -> optionsMenu()
+            KeyEvent.KEYCODE_DPAD_UP -> showOsd()
             KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK, KeyEvent.KEYCODE_PROG_GREEN, KeyEvent.KEYCODE_A -> audioMenu()
             KeyEvent.KEYCODE_CAPTIONS, KeyEvent.KEYCODE_PROG_YELLOW, KeyEvent.KEYCODE_S, KeyEvent.KEYCODE_MENU -> subtitleMenu()
             KeyEvent.KEYCODE_INFO -> showOsd()
