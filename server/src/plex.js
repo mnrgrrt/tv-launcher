@@ -82,6 +82,8 @@ export function timeline(key, state, pos, dur) {
 }
 
 /** Uit "Verder kijken" van Plex halen. */
+/** Gezien of niet gezien zetten in Plex zelf (van het Plex-account van de server). */
+export function setWatched(key, yes) { if (on()) get(`/:/${yes ? 'scrobble' : 'unscrobble'}?identifier=com.plexapp.plugins.library&key=${enc(key)}`).catch(() => {}); }
 export function removeFromDeck(key) { if (on()) get(`/actions/removeFromContinueWatching?ratingKey=${enc(key)}`, 'PUT').catch(() => {}); }
 
 export async function deck() {

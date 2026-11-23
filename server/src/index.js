@@ -9,7 +9,6 @@ import { build as categories } from './categories.js';
 import * as epg from './epg.js';
 import * as tmdb from './tmdb.js';
 import * as plex from './plex.js';
-import * as vod from './vod.js';
 import * as subs from './subs.js';
 import * as profiles from './profiles.js';
 import * as catalog from './catalog.js';
@@ -172,14 +171,8 @@ on('GET', '/api/catalog/:kind/browse', 'device', async ({ p, q }) => {
   return { ...o, items: o.items.map(withSources(p.kind)) };
 });
 on('GET', '/api/streaming/:kind', 'device', ({ p, q }) => tmdb.serviceRows(kindOf(p.kind) === 'series' ? 'tv' : 'movie', (q.get('services') || '').split(',').filter(Boolean)));
-on('GET', '/api/vod/:kind/info/:id', 'device', async ({ p }) => {
-  const kind = kindOf(p.kind), o = await vod.info(kind, p.id);
-  if (kind === 'series') o.seasons.forEach(s => s.episodes.forEach(e => { e.url = auth.sign(`/stream/series/${+e.id}.${safeExt(e.ext)}`); }));
-  return o;
-});
 on('GET', '/api/vod/:kind/url/:id', 'device', ({ p, q }) => ({ url: auth.sign(`/stream/${kindOf(p.kind)}/${+p.id}.${safeExt(q.get('ext'))}`) }));
 
-on('GET', '/api/plex/show/:key', 'device', ({ p }) => plex.show(+p.key));
 on('GET', '/api/plex/play/:key', 'device', ({ p }) => plex.playItem(+p.key));
 
 // Zoeken: de gids (zenders, nu, straks, terug) en films en series. Dezelfde titel uit Plex, IPTV en
@@ -210,6 +203,13 @@ on('POST', '/api/progress', 'device', ({ b }) => { profiles.progress(+b.profile 
 on('GET', '/api/position', 'device', ({ q }) => ({ pos: profiles.position(+q.get('profile') || 1, q.get('key') || '') }));
 on('GET', '/api/continue', 'device', async ({ q }) => (await profiles.continueWatching(+q.get('profile') || 1)).map(withUrl));
 on('POST', '/api/continue/hide', 'device', ({ b }) => { profiles.hide(+b.profile || 1, String(b.key || '')); return { ok: true }; });
+on('POST', '/api/watched', 'device', ({ b }) => { profiles.setWatched(+b.profile || 1, Array.isArray(b.items) ? b.items : [], !!b.on); return { ok: true }; });
+on('GET', '/api/watched', 'device', ({ q }) => q.get('key') ? { on: profiles.isWatched(+q.get('profile') || 1, q.get('key')) } : profiles.watchedList(+q.get('profile') || 1));
+on('GET', '/api/show', 'device', ({ q }) => {
+  const plexKey = +q.get('plex') || 0, vodId = +q.get('vod') || 0;
+  if (!plexKey && !vodId) throw Object.assign(new Error('Geen serie opgegeven'), { status: 400 });
+  return profiles.showState(+q.get('profile') || 1, plexKey ? { plex: plexKey } : { vod: vodId });
+});
 on('GET', '/api/mylist', 'device', ({ q }) => profiles.mylist(+q.get('profile') || 1));
 on('POST', '/api/mylist', 'device', ({ b }) => ({ inList: profiles.toggleList(+b.profile || 1, b.key, b.meta) }));
 on('GET', '/api/favorites', 'device', ({ q }) => profiles.favorites(+q.get('profile') || 1));
