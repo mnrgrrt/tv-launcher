@@ -8,6 +8,10 @@ import { sign } from './auth.js';
 
 // Avatar per profiel: een nummer uit de vaste set (public/avatars) of een eigen foto.
 try { db.exec("ALTER TABLE profiles ADD COLUMN avatar TEXT DEFAULT ''"); } catch {}
+db.exec('CREATE TABLE IF NOT EXISTS history (profile INTEGER, title TEXT, type TEXT, tmdb INTEGER, genres TEXT, PRIMARY KEY (profile, title))');
+db.exec('CREATE TABLE IF NOT EXISTS searches (profile INTEGER, q TEXT, n INTEGER, last INTEGER, PRIMARY KEY (profile, q))');
+// Opnames als "Rondo - S08E15" uit een filmbibliotheek zijn afleveringen.
+const EPISODE = /\bS\d{1,2}E\d{1,3}\b/i;
 // Verder kijken: zelf weggehaalde titels komen pas terug als je ze opnieuw kijkt.
 try { db.exec('ALTER TABLE progress ADD COLUMN hidden INTEGER DEFAULT 0'); } catch {}
 // Terugkijken loopt via de live-speler en heeft geen kijkstand meer.
@@ -33,7 +37,8 @@ export function savePhoto(id, b64) {
   db.prepare("UPDATE profiles SET avatar = 'photo' WHERE id = ?").run(+id);
 }
 
-export const list = () => db.prepare('SELECT id, name, color, admin, plex_user, prefs, avatar FROM profiles ORDER BY sort, id').all()
+export const list = () => db.prepare(`SELECT id, name, color, admin, plex_user, prefs, avatar,
+    (SELECT COUNT(*) FROM history h WHERE h.profile = profiles.id) history FROM profiles ORDER BY sort, id`).all()
   .map(p => ({ ...p, admin: !!p.admin, prefs: JSON.parse(p.prefs || '{}'), avatarUrl: avatarUrl(p) }));
 /** Profiel een plek omhoog (-1) of omlaag (+1). Samen blijft altijd vooraan. */
 export function move(id, dir) {
@@ -44,6 +49,8 @@ export function move(id, dir) {
   db.prepare('UPDATE profiles SET sort = 0 WHERE id = 1').run();
   ids.forEach((x, k) => db.prepare('UPDATE profiles SET sort = ? WHERE id = ?').run(k + 1, x));
 }
+/** "Mag alles" aan of uit. */
+export const setAdmin = (id, on) => db.prepare('UPDATE profiles SET admin = ? WHERE id = ?').run(on ? 1 : 0, +id);
 export function setAvatar(id, avatar) {
   const v = String(avatar) === 'photo' ? 'photo' : String(Math.max(1, Math.min(73, +avatar || 1)));
   db.prepare('UPDATE profiles SET avatar = ? WHERE id = ?').run(v, +id);
@@ -56,7 +63,7 @@ export function save(p) {
 }
 export const remove = id => {
   if (+id === 1) return;                     // Samen blijft altijd
-  for (const t of ['profiles', 'progress', 'mylist', 'favorites']) db.prepare(`DELETE FROM ${t} WHERE ${t === 'profiles' ? 'id' : 'profile'} = ?`).run(+id);
+  for (const t of ['profiles', 'progress', 'mylist', 'favorites', 'history', 'searches']) db.prepare(`DELETE FROM ${t} WHERE ${t === 'profiles' ? 'id' : 'profile'} = ?`).run(+id);
   const f = photoFile(id); if (f) fs.rmSync(path.join(PHOTOS, f));
   db.prepare('UPDATE devices SET profile = 0, locked = 0 WHERE profile = ?').run(+id);
 };
@@ -85,7 +92,7 @@ export async function continueWatching(profile) {
   for (const r of rows) {
     const group = r.series_key || r.key; if (seen.has(group)) continue; seen.add(group); seen.add(r.key);
     if (r.hidden) continue;
-    const meta = JSON.parse(r.meta || '{}'), kind = r.kind === 'movie' ? 'movie' : 'series';
+    const meta = JSON.parse(r.meta || '{}'), kind = r.kind === 'movie' && !EPISODE.test(meta.title || '') ? 'movie' : 'series';
     if (!r.watched && r.pos > 30000) { out.push({ ...meta, kind, key: r.key, progress: r.dur ? r.pos / r.dur : 0, left: r.dur ? Math.round((r.dur - r.pos) / 60000) : -1, when: r.updated, resume: true }); continue; }
     if (r.watched && r.series_key && r.series_key.startsWith('series:')) {
       const next = await nextEpisode(profile, r.series_key).catch(() => null);
@@ -96,7 +103,7 @@ export async function continueWatching(profile) {
   try {
     (await plex.deck()).slice(0, 8).forEach(p => {
       if (seen.has('plex:' + p.key) || (p.show && seen.has('plex:' + p.show))) return;
-      out.push({ ...p, kind: p.type === 'movie' ? 'movie' : 'series', key: 'plex:' + p.key, when: p.added, resume: true });
+      out.push({ ...p, kind: p.type === 'movie' && !EPISODE.test(p.title) ? 'movie' : 'series', key: 'plex:' + p.key, when: p.added, resume: true });
     });
   } catch {}
   return out.sort((a, b) => (b.when || 0) - (a.when || 0)).slice(0, 20);

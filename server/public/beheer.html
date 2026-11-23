@@ -65,13 +65,14 @@ select{padding:7px 8px;border-radius:8px;border:1px solid var(--line);background
   <button id="pwgo">Wijzigen</button><div class="err" id="pwerr"></div></div>
  <div class="card"><h2>Logboek</h2><div id="log"></div></div>
 </div>
-<div id="picker" hidden><div><h2 id="pkt">Kies een avatar</h2><div id="pkg"></div><p class="dim" id="pkc"></p><button class="ghost" id="pkx">Sluiten</button></div></div><input type="file" id="photo" accept="image/jpeg,image/png,image/webp" hidden>
+<div id="picker" hidden><div><h2 id="pkt">Kies een avatar</h2><div id="pkg"></div><p class="dim" id="pkc"></p><button class="ghost" id="pkx">Sluiten</button></div></div><input type="file" id="photo" accept="image/jpeg,image/png,image/webp" hidden><input type="file" id="hist" accept=".csv,text/csv" hidden>
 <script>
 const $=id=>document.getElementById(id);
 const F={server:'Dispatcharr-adres',user:'Dispatcharr-gebruiker',pass:'Dispatcharr-wachtwoord (XC)',format:'Streamformaat (ts/m3u8)',tmdbToken:'TMDB-sleutel',
 plexUrl:'Plex-adres',plexToken:'Plex-token',osKey:'OpenSubtitles-sleutel',osUser:'OpenSubtitles-gebruiker',osPass:'OpenSubtitles-wachtwoord',
-radarrUrl:'Radarr-adres',radarrKey:'Radarr-sleutel',sonarrUrl:'Sonarr-adres',sonarrKey:'Sonarr-sleutel',categories:'Zenderregels (url)',haWebhook:'HA-webhook'};
-const SECRET=['pass','tmdbToken','plexToken','osKey','osPass','radarrKey','sonarrKey'];
+radarrUrl:'Radarr-adres',radarrKey:'Radarr-sleutel',sonarrUrl:'Sonarr-adres',sonarrKey:'Sonarr-sleutel',categories:'Zenderregels (url)',haWebhook:'HA-webhook',
+omdbKey:'OMDb-sleutel (IMDb-cijfers)',youtubeKey:'YouTube-sleutel (live zoeken)'};
+const SECRET=['pass','tmdbToken','plexToken','osKey','osPass','radarrKey','sonarrKey','omdbKey','youtubeKey'];
 const NAMES={dispatcharr:'Dispatcharr (live tv, films, series)',plex:'Plex',radarr:'Radarr',sonarr:'Sonarr',tmdb:'TMDB (voorstellen, info)'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const when=t=>t?new Date(t).toLocaleString('nl-NL',{dateStyle:'short',timeStyle:'short'}):'nooit';
@@ -103,16 +104,18 @@ async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/se
   <label style="margin:0;display:flex;align-items:center;gap:4px"><input type="checkbox" data-dev="${x.id}" data-f="locked" ${x.locked?'checked':''} ${x.profile?'':'disabled'}> Vast</label>
   <select data-dev="${x.id}" data-f="ask">${[['altijd','Altijd vragen'],['samen','Vragen bij Samen'],['nooit','Nooit vragen']].map(([v,t])=>`<option value="${v}" ${v===x.ask?'selected':''}>${t}</option>`).join('')}</select>
   <button class="ghost" data-unpair="${x.id}">Ontkoppelen</button></div></div>`).join('')||'<div class="dim">Nog geen apparaten.</div>';
- $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div class="pl"><img class="av" src="${esc(p.avatarUrl)}" alt="" data-pick="${p.id}">${esc(p.name)} ${p.admin?'<span class="dim">&nbsp;· mag alles</span>':''}</div><div class="acts">
+ $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div class="pl"><img class="av" src="${esc(p.avatarUrl)}" alt="" data-pick="${p.id}">${esc(p.name)} <label class="dim" style="margin-left:10px;display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-admin="${p.id}" ${p.admin?'checked':''}> mag alles</label></div><div class="acts">
   ${p.id>1?`<button class="ghost" data-move="${p.id}" data-dir="-1" aria-label="Omhoog">↑</button><button class="ghost" data-move="${p.id}" data-dir="1" aria-label="Omlaag">↓</button>`:''}
-  <button class="ghost" data-pick="${p.id}">Avatar kiezen</button><button class="ghost" data-upload="${p.id}">Eigen foto</button>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div></div>`).join('');
+  <button class="ghost" data-pick="${p.id}">Avatar kiezen</button><button class="ghost" data-upload="${p.id}">Eigen foto</button><button class="ghost" data-hist="${p.id}" title="Kijkactiviteit van Netflix (csv), voor de smaak van dit profiel">Kijkgeschiedenis${p.history?' ('+p.history+')':''}</button>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div></div>`).join('');
  $('settings').innerHTML=Object.keys(F).map(k=>`<div><label>${F[k]}</label><input data-k="${k}" ${SECRET.includes(k)?'type="password" autocomplete="off" placeholder="'+(d.settings[k]?'••••':'')+'"':'value="'+esc(d.settings[k])+'"'}></div>`).join('');
  const e=d.epg;$('epg').textContent=e.at?`${e.count} programma's bewaard`+(e.oldest?`, terug tot ${when(e.oldest)}`:'')+`. Laatst bijgewerkt ${when(e.at)}.`+(e.error?` Laatste poging mislukt: ${e.error}`:''):(e.error?'Fout: '+e.error:'Nog niet geladen');
  $('users').innerHTML=d.users.map(u=>`<div class="row"><div>${esc(u.name)}<div class="dim">laatst ingelogd ${when(u.last_login)}</div></div><button class="ghost" data-deluser="${u.id}">Verwijderen</button></div>`).join('');
  $('log').innerHTML=d.log.map(l=>`<div class="row"><div>${esc(l.what)}</div><div class="dim">${esc(l.who)} · ${when(l.at)}</div></div>`).join('')||'<div class="dim">Nog niets.</div>'}
 
 let PROF=[],AV=null,PICK=0;
-document.addEventListener('change',async e=>{const t=e.target.dataset;if(!t.dev)return;const v=e.target.type==='checkbox'?e.target.checked:e.target.value;
+document.addEventListener('change',async e=>{const t=e.target.dataset;
+ if(t.admin){try{await api('POST','/api/admin/profiles/'+t.admin+'/admin',{admin:e.target.checked});load()}catch(x){alert(x.message)}return}
+ if(!t.dev)return;const v=e.target.type==='checkbox'?e.target.checked:e.target.value;
  try{await api('POST','/api/admin/devices/'+t.dev,{[t.f]:t.f==='profile'?+v:v});load()}catch(x){alert(x.message)}});
 async function picker(id){PICK=id;if(!AV)AV=await (await fetch('/avatars/index.json')).json();const p=PROF.find(x=>x.id==id);$('pkt').textContent='Avatar voor '+(p?p.name:'');
  const grp=g=>AV.avatars.filter(a=>a.group===g).map(a=>`<img src="/avatars/${a.id}.svg" title="${esc(a.name)}" data-set="${a.id}">`).join('');
@@ -121,11 +124,15 @@ $('pkx').onclick=()=>$('picker').hidden=true;
 $('photo').onchange=async()=>{const f=$('photo').files[0];if(!f)return;if(f.size>3*1024*1024){alert('Foto te groot (max 3 MB)');return}
  const data=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)});
  try{await api('POST','/api/admin/profiles/'+PICK+'/photo',{data});load()}catch(x){alert(x.message)}$('photo').value=''};
+// Kijkgeschiedenis (Netflix: Account › profiel › Kijkactiviteit › Alles downloaden). Alleen titels gaan naar de server.
+$('hist').onchange=async()=>{const f=$('hist').files[0];if(!f)return;if(f.size>4*1024*1024){alert('Bestand te groot');return}
+ try{const r=await api('POST','/api/admin/profiles/'+PICK+'/history',{csv:await f.text()});alert(r.titles+' titels gevonden. De server zoekt ze nu op; dat duurt een paar minuten.');load()}catch(x){alert(x.message)}$('hist').value=''};
 document.addEventListener('click',async e=>{const t=e.target.dataset;
  if(t.move){await api('POST','/api/admin/profiles/'+t.move+'/move',{dir:+t.dir});load();return}
  if(t.pick){picker(t.pick);return}
  if(t.set){await api('POST','/api/admin/profiles/'+PICK+'/avatar',{avatar:+t.set});$('picker').hidden=true;load();return}
  if(t.upload){PICK=t.upload;$('photo').click();return}
+ if(t.hist){PICK=t.hist;$('hist').click();return}
  if(t.unpair&&confirm('Deze tv ontkoppelen?')){await api('DELETE','/api/admin/devices/'+t.unpair);load()}
  if(t.delprofile&&confirm('Profiel en kijkstand verwijderen?')){await api('DELETE','/api/admin/profiles/'+t.delprofile);load()}
  if(t.deluser&&confirm('Deze beheerder verwijderen?')){try{await api('DELETE','/api/admin/users/'+t.deluser);load()}catch(x){alert(x.message)}}});

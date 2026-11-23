@@ -7,6 +7,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS devices (id INTEGER PRIMARY KEY AUTOINCREMEN
 try { db.exec('ALTER TABLE devices ADD COLUMN profile INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE devices ADD COLUMN locked INTEGER DEFAULT 0'); } catch {}
 try { db.exec("ALTER TABLE devices ADD COLUMN ask TEXT DEFAULT 'samen'"); } catch {}   // vraag bij starten: altijd | samen | nooit
+try { db.exec("ALTER TABLE devices ADD COLUMN view TEXT DEFAULT ''"); } catch {}        // weergave: normaal | compact | ruim ('' = standaard van het apparaat)
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const same = (a, b) => { const x = Buffer.from(a || ''), y = Buffer.from(b || ''); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
@@ -34,16 +35,17 @@ export function pair(code, name, ip) {
 
 export function deviceFor(key, ip) {
   if (!key) return null;
-  const d = db.prepare('SELECT id, name, profile, locked, ask FROM devices WHERE key_hash = ?').get(sha(key));
+  const d = db.prepare('SELECT id, name, profile, locked, ask, view FROM devices WHERE key_hash = ?').get(sha(key));
   if (d) db.prepare('UPDATE devices SET last_seen = ?, last_ip = ? WHERE id = ?').run(Date.now(), ip, d.id);
   return d || null;
 }
 export const devices = () => db.prepare('SELECT id, name, created, last_seen, last_ip, profile, locked, ask FROM devices ORDER BY created').all().map(d => ({ ...d, locked: !!d.locked }));
 export function setDevice(id, o) {
-  const cur = db.prepare('SELECT name, profile, locked, ask FROM devices WHERE id = ?').get(+id); if (!cur) return;
+  const cur = db.prepare('SELECT name, profile, locked, ask, view FROM devices WHERE id = ?').get(+id); if (!cur) return;
   const ask = ['altijd', 'samen', 'nooit'].includes(o.ask) ? o.ask : cur.ask;
-  db.prepare('UPDATE devices SET name = ?, profile = ?, locked = ?, ask = ? WHERE id = ?').run(
-    o.name != null ? String(o.name).slice(0, 40) : cur.name, o.profile != null ? +o.profile : cur.profile, o.locked != null ? (o.locked ? 1 : 0) : cur.locked, ask, +id);
+  const view = ['normaal', 'compact', 'ruim'].includes(o.view) ? o.view : cur.view;
+  db.prepare('UPDATE devices SET name = ?, profile = ?, locked = ?, ask = ?, view = ? WHERE id = ?').run(
+    o.name != null ? String(o.name).slice(0, 40) : cur.name, o.profile != null ? +o.profile : cur.profile, o.locked != null ? (o.locked ? 1 : 0) : cur.locked, ask, view, +id);
 }
 export const unpair = id => db.prepare('DELETE FROM devices WHERE id = ?').run(+id);
 

@@ -121,9 +121,11 @@ export async function searchGuide(q) {
       start: r.start, end: r.stop, score: score(r), more: 0 };
     seen.set(k, item); groups[live ? 'live' : later ? 'later' : 'past'].push(item);
   }
+  // Alleen in de omschrijving genoemd: weglaten als er genoeg echte treffers zijn.
+  for (const k of Object.keys(groups)) if (groups[k].filter(x => x.score > 1).length >= 5) groups[k] = groups[k].filter(x => x.score > 1);
   groups.live.sort((a, b) => b.score - a.score || a.num - b.num);
-  groups.later.sort((a, b) => b.score - a.score || a.start - b.start);
-  groups.past.sort((a, b) => b.score - a.score || b.start - a.start);
+  groups.later.sort((a, b) => a.start - b.start);         // straks: eerstvolgende bovenaan
+  groups.past.sort((a, b) => b.start - a.start);          // terugkijken: meest recente bovenaan
   const chans = all.filter(ch => plain(ch.name).includes(lit)).slice(0, 30)
     .map(ch => ({ channel: ch.id, num: ch.num, name: ch.name, icon: ch.icon, archive: ch.archive }));
   return { channels: chans, live: groups.live.slice(0, 60), later: groups.later.slice(0, 60), past: groups.past.slice(0, 60) };

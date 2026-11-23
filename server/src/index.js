@@ -10,10 +10,12 @@ import * as epg from './epg.js';
 import * as tmdb from './tmdb.js';
 import * as plex from './plex.js';
 import * as vod from './vod.js';
-import * as arr from './arr.js';
 import * as subs from './subs.js';
 import * as profiles from './profiles.js';
 import * as catalog from './catalog.js';
+import * as taste from './taste.js';
+import * as youtube from './youtube.js';
+import * as searches from './searches.js';
 import { pipe, target } from './proxy.js';
 import { pool } from './http.js';
 import { status } from './status.js';
@@ -70,8 +72,13 @@ on('POST', '/api/admin/code', 'admin', ({ me }) => { auth.audit(me.name, 'koppel
 on('DELETE', '/api/admin/devices/:id', 'admin', ({ p, me }) => { auth.unpair(p.id); auth.audit(me.name, 'tv ontkoppeld #' + p.id); return { ok: true }; });
 on('POST', '/api/admin/devices/:id', 'admin', ({ p, b, me }) => { auth.setDevice(p.id, b); auth.audit(me.name, 'apparaat aangepast #' + p.id); return auth.devices(); });
 on('POST', '/api/admin/profiles/:id/move', 'admin', ({ p, b }) => { profiles.move(p.id, +b.dir); return profiles.list(); });
+on('POST', '/api/admin/profiles/:id/admin', 'admin', ({ p, b, me }) => { profiles.setAdmin(p.id, !!b.admin); auth.audit(me.name, `"mag alles" ${b.admin ? 'aan' : 'uit'} voor profiel #${p.id}`); return profiles.list(); });
 on('POST', '/api/admin/profiles/:id/avatar', 'admin', ({ p, b }) => { profiles.setAvatar(p.id, b.avatar); return profiles.list(); });
 on('POST', '/api/admin/profiles/:id/photo', 'admin', ({ p, b, me }) => { profiles.savePhoto(p.id, b.data); auth.audit(me.name, 'foto geüpload voor profiel #' + p.id); return profiles.list(); });
+// Kijkgeschiedenis (Netflix-export) voor de smaak van een profiel. Alleen titels worden bewaard.
+on('POST', '/api/admin/profiles/:id/history', 'admin', ({ p, b, me }) => {
+  const n = taste.importCsv(p.id, b.csv); auth.audit(me.name, `kijkgeschiedenis toegevoegd voor profiel #${p.id} (${n} titels)`); return { titles: n };
+});
 on('POST', '/api/admin/profiles', 'admin', ({ b, me }) => { profiles.save(b); auth.audit(me.name, 'profiel opgeslagen: ' + b.name); return profiles.list(); });
 on('DELETE', '/api/admin/profiles/:id', 'admin', ({ p, me }) => { profiles.remove(p.id); auth.audit(me.name, 'profiel verwijderd #' + p.id); return profiles.list(); });
 on('POST', '/api/admin/users', 'admin', ({ b, me }) => { auth.addUser(b.name, b.password); auth.audit(me.name, 'beheerder toegevoegd: ' + b.name); return auth.users(); });
@@ -89,11 +96,12 @@ on('POST', '/api/admin/update', 'admin', ({ me }) => { fs.writeFileSync(FLAG, St
 on('GET', '/api/admin/status', 'admin', () => status(true));
 
 // Gekoppelde tv's
-on('GET', '/api/whoami', 'device', ({ dev }) => ({ device: dev.name, version: VERSION, profile: dev.profile || 0, locked: !!dev.locked, ask: dev.ask || 'samen' }));
+on('GET', '/api/whoami', 'device', ({ dev }) => ({ device: dev.name, version: VERSION, profile: dev.profile || 0, locked: !!dev.locked, ask: dev.ask || 'samen', view: dev.view || '' }));
 // Op de tv zelf: standaardprofiel en vraag-instelling kiezen, behalve als het apparaat vastgezet is.
 on('POST', '/api/device', 'device', ({ dev, b }) => {
-  if (dev.locked) throw Object.assign(new Error('Dit apparaat is vastgezet op een profiel'), { status: 403 });
-  auth.setDevice(dev.id, { profile: b.profile, ask: b.ask }); return { ok: true };
+  // Weergave mag altijd; profiel en vragen alleen als het apparaat niet vastgezet is.
+  if (dev.locked && (b.profile != null || b.ask != null)) throw Object.assign(new Error('Dit apparaat is vastgezet op een profiel'), { status: 403 });
+  auth.setDevice(dev.id, { profile: b.profile, ask: b.ask, view: b.view }); return { ok: true };
 });
 on('GET', '/api/avatars', 'device', () => JSON.parse(fs.readFileSync(path.join(PUBLIC, 'avatars/index.json'), 'utf8')));
 on('POST', '/api/profiles/:id/avatar', 'device', ({ dev, p, b }) => {
@@ -133,20 +141,30 @@ on('GET', '/api/live/url/:id', 'device', ({ p }) => ({ url: auth.sign(`/stream/l
 // services = de diensten van dit profiel (de tv weet welke er op het apparaat staan); leeg = alle diensten.
 on('GET', '/api/home', 'device', async ({ q }) => {
   const prof = +q.get('profile') || 1;
-  const [picks, cont, films, series] = await Promise.all([
-    tmdb.home((q.get('services') || '').split(',').filter(Boolean)).catch(() => ({})), profiles.continueWatching(prof).catch(() => []),
-    arr.upcoming('movie').catch(() => []), arr.upcoming('series').catch(() => [])]);
-  return { picks, continue: cont.map(withUrl), upcoming: [...films, ...series].sort((a, b) => a.when - b.when).slice(0, 30) };
+  const [picks, cont] = await Promise.all([
+    tmdb.home(svcOf(q)).catch(() => ({})), profiles.continueWatching(prof).catch(() => [])]);
+  return { picks, continue: cont.map(withUrl) };
+});
+// Nieuw voor jou: nieuw uit alle bronnen, wat bij de smaak van dit profiel past bovenaan.
+on('GET', '/api/foryou', 'device', async ({ q }) => {
+  const prof = +q.get('profile') || 1;
+  const l = await catalog.forYou(svcOf(q), catalog.prefsOf(profileOf(prof)), taste.forProfile(prof, taste.lookup));
+  return l.map(o => withSources(o.kind)(o));
 });
 on('GET', '/api/info/:type/:id', 'device', ({ p }) => tmdb.details(p.type === 'tv' ? 'tv' : 'movie', +p.id));
 
 // Films en series: Plex en IPTV samen (richting C: slimme rijen, genres, collecties en een raster met filters).
 const withSources = kind => o => ({ ...o, vod: o.vod ? withVod(kind, o.vod) : null });
-on('GET', '/api/catalog/:kind/overview', 'device', async ({ p }) => {
-  const o = await catalog.overview(kindOf(p.kind)); return { ...o, newest: o.newest.map(withSources(p.kind)) };
+// services = de diensten van het profiel (de tv weet welke apps er staan); de voorkeuren (minimumcijfer, genres overslaan) komen uit het profiel.
+const svcOf = q => (q.get('services') || '').split(',').filter(Boolean);
+const profileOf = id => profiles.list().find(x => x.id === id);
+on('GET', '/api/catalog/:kind/overview', 'device', async ({ p, q }) => {
+  const o = await catalog.overview(kindOf(p.kind), svcOf(q), catalog.prefsOf(profileOf(+q.get('profile'))));
+  return { ...o, newest: o.newest.map(withSources(p.kind)) };
 });
 on('GET', '/api/catalog/:kind/browse', 'device', async ({ p, q }) => {
-  const o = await catalog.browse(kindOf(p.kind), { genre: q.get('genre'), src: q.get('src'), cat: q.get('cat'), sort: q.get('sort'), offset: q.get('offset') });
+  const f = Object.fromEntries(['genre', 'src', 'cat', 'sort', 'alles', 'offset'].map(k => [k, q.get(k) || '']));
+  const o = await catalog.browse(kindOf(p.kind), f, svcOf(q), catalog.prefsOf(profileOf(+q.get('profile'))));
   return { ...o, items: o.items.map(withSources(p.kind)) };
 });
 on('GET', '/api/streaming/:kind', 'device', ({ p, q }) => tmdb.serviceRows(kindOf(p.kind) === 'series' ? 'tv' : 'movie', (q.get('services') || '').split(',').filter(Boolean)));
@@ -164,7 +182,8 @@ on('GET', '/api/plex/play/:key', 'device', ({ p }) => plex.playItem(+p.key));
 // streamingdiensten wordt één regel met alle plekken waar hij staat.
 on('GET', '/api/search', 'device', async ({ q }) => {
   const s = (q.get('q') || '').trim(); if (s.length < 2) return {};
-  const [own, guide, web] = await Promise.all([catalog.search(s).catch(() => []), epg.searchGuide(s).catch(() => ({})), tmdb.search(s).catch(() => [])]);
+  const [own, guide, web, yt] = await Promise.all([catalog.search(s).catch(() => []), epg.searchGuide(s).catch(() => ({})), tmdb.search(s).catch(() => []),
+    youtube.search(s).catch(() => ({ live: [], upcoming: [] }))]);
   const titles = own.map(o => ({ ...withSources(o.kind)(o), services: [] }));
   const byTmdb = new Map(titles.filter(t => t.tmdb).map(t => [(t.kind === 'series' ? 'tv' : 'movie') + t.tmdb, t]));
   // Bij welke dienst staat het? Alleen voor de bovenste treffers, anders wordt het traag.
@@ -173,8 +192,12 @@ on('GET', '/api/search', 'device', async ({ q }) => {
     if (have) { have.services = services; if (!have.poster) have.poster = tmdb.item(h, '').poster; return; }
     if (services.length) titles.push({ ...tmdb.item(h, ''), kind: h.media_type === 'tv' ? 'series' : 'movie', sources: [], services });
   });
-  return { guide, titles };
+  return { guide, titles, youtube: yt };
 });
+// Laatst gezocht (per profiel)
+on('GET', '/api/searches', 'device', ({ q }) => searches.list(+q.get('profile') || 1));
+on('POST', '/api/searches', 'device', ({ b }) => { searches.add(+b.profile || 1, b.q); return { ok: true }; });
+on('DELETE', '/api/searches', 'device', ({ q }) => { searches.remove(+q.get('profile') || 1, q.get('q') || ''); return searches.list(+q.get('profile') || 1); });
 
 on('GET', '/api/subs/search', 'device', ({ q }) => subs.search(Object.fromEntries(q)));
 on('GET', '/api/subs/file/:id', 'device', async ({ res, p }) => { send(res, 200, await subs.download(+p.id), 'application/x-subrip; charset=utf-8'); });
@@ -238,7 +261,8 @@ server.listen(PORT, () => console.log(`tv-serverr ${VERSION} luistert op poort $
 // Gids bij start en elke 6 uur verversen.
 setTimeout(() => epg.refresh(), 5000);
 setInterval(() => epg.refresh(), 6 * 3600e3);
-// Genres voor IPTV-titels zonder genre: rustig op de achtergrond.
+// TMDB-gegevens (genres, cijfers) voor alle titels: rustig op de achtergrond.
+// Daarna elk uur, tot alles binnen is; ook de IMDb-cijfers (binnen de daglimiet van OMDb).
 setTimeout(() => catalog.enrich().catch(() => {}), 120e3);
-setInterval(() => catalog.enrich().catch(() => {}), 6 * 3600e3);
+setInterval(() => catalog.enrich().catch(() => {}), 3600e3);
 process.on('SIGTERM', () => { server.close(); db.close(); process.exit(0); });
