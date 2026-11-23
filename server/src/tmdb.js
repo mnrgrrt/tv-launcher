@@ -96,6 +96,14 @@ export function byService(type, provider) {
       (type === 'tv' ? '&without_genres=10762,10751' : '&without_genres=10751,16'))
       .then(o => (o.results || []).filter(x => x.backdrop_path || x.poster_path).map(x => item({ ...x, _type: type }, ''))));
 }
+/** Logo's van de diensten (vierkante icoontjes van TMDB), per sleutel uit services.json. Een week bewaard. */
+export function logos() {
+  return cached('tmdb:logos', 7 * 86400e3, async () => {
+    const l = (await Promise.all(['movie', 'tv'].map(t => tmdb(`/watch/providers/${t}?watch_region=NL`).then(r => r.results || [], () => [])))).flat();
+    const byId = new Map(l.map(p => [p.provider_id, p.logo_path]));
+    return Object.fromEntries(streamingServices().filter(s => byId.get(s.provider)).map(s => [s.key, TIMG + 'w92' + byId.get(s.provider)]));
+  });
+}
 const streamingServices = () => services().filter(s => s.provider > 0 && s.key !== 'plex');
 
 /** Voor jou: om en om van de gekozen diensten (of alle diensten als er niets gekozen is). */

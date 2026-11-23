@@ -173,7 +173,10 @@ export async function forYou(services, prefs, taste) {
     .sort((a, b) => b.s - a.s).map(x => x.o);
   // Wat nergens te zien is (niet in Plex, IPTV of je diensten) apart, zodat je niet denkt dat je het kunt kijken.
   const can = o => o.sources.length || o.services.length;
-  return { now: l.filter(can).slice(0, 40), later: l.filter(o => !can(o)).slice(0, 20) };
+  // Om en om: eerst wat op je diensten staat, dan wat in Plex of IPTV staat. Zo overheerst je eigen bibliotheek niet.
+  const svc = l.filter(o => o.services.length), own = l.filter(o => !o.services.length && o.sources.length), mix = [];
+  for (let i = 0; mix.length < 40 && (i < svc.length || i < own.length); i++) { if (svc[i]) mix.push(svc[i]); if (own[i]) mix.push(own[i]); }
+  return { now: mix.slice(0, 40), later: l.filter(o => !can(o)).slice(0, 20) };
 }
 
 // ---------- aanvullen op de achtergrond ----------

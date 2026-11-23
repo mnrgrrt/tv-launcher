@@ -80,7 +80,8 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.5px; }
 .row-item { width: 280px; flex: none; display: flex; flex-direction: column; gap: 12px; }
 .thumb { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 14px; background: var(--card) center/cover no-repeat; transition: transform .15s var(--ease), box-shadow .15s; }
 .thumb .badge { position: absolute; top: 10px; left: 10px; padding: 3px 9px; border-radius: 6px; background: rgba(0,0,0,.6); font-size: 14px; font-weight: 700; }
-.badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; }
+.badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 4px; align-items: center; }
+.badges .ic { width: 26px; height: 26px; border-radius: 6px; background: center/cover no-repeat; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
 .badges span { padding: 2px 7px; border-radius: 5px; background: rgba(0,0,0,.66); font-size: 13px; font-weight: 700; }
 .badges .plex { background: #C58A0A; } .badges .iptv { background: #3A4A5C; } .badges .nog { background: rgba(20,24,30,.85); color: #F2C94C; }
 .badge.right { left: auto; right: 10px; }

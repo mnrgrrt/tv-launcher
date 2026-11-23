@@ -223,9 +223,12 @@
     return F(el, o.ok, { long: o.long, focus: o.focus });
   }
   // Waar staat een titel: Plex, IPTV en/of streamingdiensten.
+  // Waar je het kunt zien: eerst je diensten (icoontje), dan Plex en IPTV. Hooguit drie, kort gehouden.
   function srcBadges(o) {
-    var b = (o.sources || []).map(function (s) { return '<span class="' + s + '">' + (s === 'plex' ? 'Plex' : 'IPTV') + '</span>'; })
-      .concat((o.services || []).slice(0, 2).map(function (k) { return '<span>' + esc(serviceName(k)) + '</span>'; }));
+    var b = (o.services || []).map(function (k) {
+      var u = S.logos && S.logos[k];
+      return u ? '<i class="ic" title="' + esc(serviceName(k)) + '" style="' + bg(u) + '"></i>' : '<span>' + esc(serviceName(k).slice(0, 7)) + '</span>';
+    }).concat((o.sources || []).map(function (s) { return '<span class="' + s + '">' + (s === 'plex' ? 'Plex' : 'IPTV') + '</span>'; })).slice(0, 3);
     // Nergens te zien (nog niet uit, of nergens die je hebt): dat meteen op de tegel.
     if (!b.length) b = ['<span class="nog">Nog niet te zien</span>'];
     return '<div class="badges">' + b.join('') + '</div>';
@@ -1118,6 +1121,7 @@
     Promise.all([get('/api/whoami'), get('/api/profiles'), svc]).then(function (r) {
       S.device = r[0]; S.profiles = r[1]; S.svcList = r[2];
       S.view = r[0].view || 'normaal'; fit();
+      get('/api/services/logos').then(function (l) { S.logos = l; }, function () {});
       if (S.device.profile) setProfile(S.device.profile);                         // standaardprofiel van dit apparaat
       if (!S.profiles.some(function (p) { return p.id === S.profile; })) S.profile = 0;
       if (!S.profile) return go('who', {}, true);

@@ -153,6 +153,7 @@ on('GET', '/api/foryou', 'device', async ({ q }) => {
   const l = await catalog.forYou(svcOf(q), catalog.prefsOf(profileOf(prof)), taste.forProfile(prof, taste.lookup));
   return { now: l.now.map(o => withSources(o.kind)(o)), later: l.later };
 });
+on('GET', '/api/services/logos', 'device', () => tmdb.logos().catch(() => ({})));
 on('GET', '/api/art/:type/:id', 'device', ({ p }) => tmdb.art(p.type === 'tv' ? 'tv' : 'movie', +p.id).catch(() => ({})));
 on('GET', '/api/info/:type/:id', 'device', ({ p }) => tmdb.details(p.type === 'tv' ? 'tv' : 'movie', +p.id));
 
