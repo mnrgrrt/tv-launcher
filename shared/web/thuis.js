@@ -530,9 +530,9 @@
     var el = h('div', { class: 'screen' }); el.appendChild(topbar('home'));
     // De foto loopt door tot achter de bovenbalk.
     var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
-    var hero = h('div', { class: 'hero first' }, '<div class="bg on"></div><div class="bg"></div><div class="txt uit"><img class="logo" alt=""><h1></h1><div class="meta"></div></div><div class="credit"></div>');
+    var hero = h('div', { class: 'hero first' }, '<div class="bg on"></div><div class="bg"></div><div class="txt uit"><img class="logo" alt=""><h1></h1><div class="meta"></div></div>');
     inner.appendChild(hero);
-    var layers = hero.querySelectorAll('.bg'), txt = hero.querySelector('.txt'), credit = hero.querySelector('.credit'), shown = '', heroT = 0;
+    var layers = hero.querySelectorAll('.bg'), txt = hero.querySelector('.txt'), shown = '', heroT = 0;
     function setBg(u) {
       if (u === shown) return; shown = u;
       var nxt = layers[0].classList.contains('on') ? layers[1] : layers[0], old = nxt === layers[0] ? layers[1] : layers[0];
@@ -546,7 +546,7 @@
     }
     function showPhoto() {
       clearTimeout(heroT); resting = true; if (!photo) return;
-      setBg(photo.url); txt.classList.add('uit'); credit.textContent = 'Foto: ' + photo.by + ' · Unsplash'; credit.style.opacity = 1;
+      setBg(photo.url); txt.classList.add('uit');
     }
     (S.photos ? Promise.resolve(S.photos) : get('/api/photos').then(function (l) { S.photos = l; return l; }, function () { return []; }))
       .then(function () { nextPhoto(); showPhoto(); });
@@ -561,7 +561,7 @@
         art.then(function (a) {
           if (!a.backdrop) return;
           resting = false;
-          setBg(a.backdrop); credit.style.opacity = 0;
+          setBg(a.backdrop);
           var lg = hero.querySelector('.logo'); lg.classList.toggle('on', !!a.logo); if (a.logo) lg.src = img(a.logo);
           hero.querySelector('h1').textContent = a.logo ? '' : it.title || '';
           hero.querySelector('.meta').textContent = it.meta || '';

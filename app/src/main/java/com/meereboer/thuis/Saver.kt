@@ -84,9 +84,8 @@ class SaverView(ctx: Context) : FrameLayout(ctx) {
     private val clock = TextView(ctx)
     private val date = TextView(ctx)
     private val weather = TextView(ctx)
-    private val credit = TextView(ctx)
     private val clockOnly = SaverPrefs.sources(ctx) == listOf("klok")
-    private var images: List<Pair<String, String>> = emptyList()
+    private var images: List<String> = emptyList()
     private var n = 0
     private val tf = SimpleDateFormat("HH:mm", Locale("nl", "NL"))
     private val df = SimpleDateFormat("EEEE d MMMM", Locale("nl", "NL"))
@@ -102,13 +101,10 @@ class SaverView(ctx: Context) : FrameLayout(ctx) {
         Fonts.style(clock, if (clockOnly) 96f else 56f, 400, Color.WHITE)
         Fonts.style(date, if (clockOnly) 22f else 17f, 500, 0xE6FFFFFF.toInt())
         Fonts.style(weather, if (clockOnly) 20f else 15f, 400, 0xCCFFFFFF.toInt())
-        Fonts.style(credit, 11f, 400, 0x99FFFFFF.toInt())
         listOf(clock, date, weather).forEach { it.setShadowLayer(dp(6).toFloat(), 0f, dp(1).toFloat(), 0x99000000.toInt()) }
         box.addView(clock); box.addView(date, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(2) })
         box.addView(weather, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(6) })
         addView(box, if (clockOnly) LayoutParams(-2, -2, Gravity.CENTER) else LayoutParams(-2, -2, Gravity.START or Gravity.BOTTOM).apply { setMargins(dp(56), 0, 0, dp(44)) })
-        credit.maxWidth = dp(420); credit.gravity = Gravity.END
-        addView(credit, LayoutParams(-2, -2, Gravity.END or Gravity.BOTTOM).apply { setMargins(0, 0, dp(56), dp(48)) })
     }
 
     private val tick = object : Runnable {
@@ -129,9 +125,9 @@ class SaverView(ctx: Context) : FrameLayout(ctx) {
         bg.execute {
             val o = try { JSONObject(Server.call(context, "GET", "/api/saver?src=" + src.ifEmpty { "none" })) } catch (_: Exception) { null } ?: return@execute
             val a = o.optJSONArray("images")
-            var l = (0 until (a?.length() ?: 0)).map { a!!.getJSONObject(it).let { j -> j.optString("url") to j.optString("by") } }
+            var l = (0 until (a?.length() ?: 0)).map { a!!.getJSONObject(it).optString("url") }
             val fixed = SaverPrefs.fixed(context)
-            if (fixed.isNotEmpty()) l.filter { it.first.substringBefore("?") == fixed }.takeIf { it.isNotEmpty() }?.let { l = it }
+            if (fixed.isNotEmpty()) l.filter { it.substringBefore("?") == fixed }.takeIf { it.isNotEmpty() }?.let { l = it }
             val w = o.optJSONObject("weather")
             ui.post {
                 weather.text = w?.let { "${it.optString("place")}  ·  ${it.optInt("temp")}°  ${it.optString("text")}  ·  ${it.optInt("min")}° / ${it.optInt("max")}°" } ?: ""
@@ -145,7 +141,7 @@ class SaverView(ctx: Context) : FrameLayout(ctx) {
 
     private fun showNext() {
         if (images.isEmpty()) return
-        val (url, by) = images[n++ % images.size]
+        val url = images[n++ % images.size]
         bg.execute {
             val bmp = fetch(url) ?: return@execute
             ui.post {
@@ -158,7 +154,6 @@ class SaverView(ctx: Context) : FrameLayout(ctx) {
                     android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.06f),
                     android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.06f))
                     .setDuration(SaverPrefs.speed(context) * 1000L + 1500).start()
-                credit.text = by
             }
         }
     }

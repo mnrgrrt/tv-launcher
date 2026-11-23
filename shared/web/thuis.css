@@ -93,7 +93,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .hero .txt.uit { opacity: 0; }
 .hero .logo { max-width: 520px; max-height: 170px; object-fit: contain; object-position: left bottom; display: none; filter: drop-shadow(0 4px 18px rgba(0,0,0,.6)); }
 .hero .logo.on { display: block; }
-.hero .credit { position: absolute; right: 80px; bottom: 230px; z-index: 2; font-size: 15px; color: rgba(255,255,255,.7); text-shadow: 0 1px 8px rgba(0,0,0,.6); transition: opacity .6s; }
 .hero ~ div { position: relative; z-index: 2; }
 .kicker { font-size: 20px; font-weight: 600; letter-spacing: 2px; color: var(--ink-2); text-transform: uppercase; }
 .hero h1 { font-size: 64px; letter-spacing: -.03em; line-height: 1; text-shadow: 0 2px 20px rgba(0,0,0,.5); }

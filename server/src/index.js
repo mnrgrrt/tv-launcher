@@ -81,7 +81,7 @@ on('POST', '/api/admin/profiles/:id/history', 'admin', ({ p, b, me }) => {
   const n = taste.importCsv(p.id, b.csv); auth.audit(me.name, `kijkgeschiedenis toegevoegd voor profiel #${p.id} (${n} titels)`); return { titles: n };
 });
 on('GET', '/api/admin/photos', 'admin', ({ q }) => photos.list(q.get('album') || 1));
-on('POST', '/api/admin/photos', 'admin', ({ b, me }) => { const l = photos.add(b.album || 1, b.data, b.by); auth.audit(me.name, `foto toegevoegd aan album ${+b.album || 1}`); return l; });
+on('POST', '/api/admin/photos', 'admin', ({ b, me }) => { const l = photos.add(b.album || 1, b.data); auth.audit(me.name, `foto toegevoegd aan album ${+b.album || 1}`); return l; });
 on('DELETE', '/api/admin/photos/:album/:file', 'admin', ({ p, me }) => { const l = photos.remove(p.album, p.file); auth.audit(me.name, `foto weggehaald uit album ${p.album}: ${p.file}`); return l; });
 on('POST', '/api/admin/profiles', 'admin', ({ b, me }) => { profiles.save(b); auth.audit(me.name, 'profiel opgeslagen: ' + b.name); return profiles.list(); });
 on('DELETE', '/api/admin/profiles/:id', 'admin', ({ p, me }) => { profiles.remove(p.id); auth.audit(me.name, 'profiel verwijderd #' + p.id); return profiles.list(); });
