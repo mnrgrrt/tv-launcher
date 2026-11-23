@@ -94,25 +94,23 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .hero { position: relative; height: 780px; margin-bottom: -200px; padding: 0 80px; }
 .hero-bg { position: absolute; inset: 0; transition: opacity .6s var(--ease); }
 .screen.down .hero-bg, .hero-bg.dim { opacity: .32; }
-.hero-bg .bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.2s var(--ease); animation: drift 40s ease-in-out infinite alternate; }
-.hero-bg .bg.on { opacity: 1; }
+.hero-bg .bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; visibility: hidden; transition: opacity 1.2s var(--ease), visibility 0s 1.2s; }
+.hero-bg .bg.on { opacity: 1; visibility: visible; transition: opacity 1.2s var(--ease); }
 /* Onderkant van de foto zelf laten wegvloeien: ook bij inzoomen en scrollen geen harde rand */
-.hero-bg .bg { -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 98%); mask-image: linear-gradient(180deg, #000 55%, transparent 98%); }
 .hero-bg::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg, var(--bg) 0%, rgba(14,14,16,.6) 22%, rgba(14,14,16,0) 50%), linear-gradient(90deg, rgba(14,14,16,.55) 0%, rgba(14,14,16,0) 45%), linear-gradient(180deg, rgba(14,14,16,.45) 0%, rgba(14,14,16,0) 18%); }
 /* Eerste blok vult het scherm; een zacht pijltje onderin wijst naar wat eronder staat */
 .fold { position: relative; }
-.lsearch { position: absolute; right: 80px; top: 40px; z-index: 5; display: flex; align-items: center; gap: 10px; font-size: 20px; background: rgba(20,20,24,.45); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.lsearch { position: absolute; right: 80px; top: 40px; z-index: 5; display: flex; align-items: center; gap: 10px; font-size: 20px; background: rgba(20,20,24,.55); }
 .lsearch svg { width: 22px; height: 22px; }
 .lsearch.focus { background: var(--ink); color: #111; }
 .fold > .more { position: absolute; left: 50%; bottom: 18px; width: 40px; margin-left: -20px; color: rgba(255,255,255,.38); transition: opacity .3s; pointer-events: none; }
 .fold > .more svg { display: block; width: 40px; height: 20px; animation: bob 2.8s ease-in-out infinite; }
 .scroll-inner.down .fold > .more { opacity: 0; }
 @keyframes bob { 50% { transform: translateY(6px); opacity: .7; } }
-@keyframes drift { from { transform: scale(1); } to { transform: scale(1.04); } }
 .hero .txt { position: absolute; left: 80px; bottom: 260px; width: 760px; display: flex; flex-direction: column; gap: 14px; z-index: 2; transition: opacity .6s; }
 .hero .txt.uit { opacity: 0; }
 /* Bolletjes van de carrousel: welke dia je ziet. Focus: links/rechts bladeren, OK opent de titel. */
-.hero .dots { position: absolute; left: 50%; bottom: 300px; z-index: 3; display: flex; align-items: center; gap: 9px; padding: 9px 14px; border-radius: 999px; background: rgba(20,20,24,.35); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); transform: translateX(-50%); }
+.hero .dots { position: absolute; left: 50%; bottom: 300px; z-index: 3; display: flex; align-items: center; gap: 9px; padding: 9px 14px; border-radius: 999px; background: rgba(20,20,24,.5); transform: translateX(-50%); }
 .hero .dots.none { display: none; }
 .hero .dots i { width: 8px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.4); transition: width .3s var(--ease), background .3s; }
 .hero .dots i.on { width: 26px; background: #fff; }

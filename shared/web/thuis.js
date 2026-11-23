@@ -9,13 +9,16 @@
   var SCALE = 1, W = 1920, H = 1080, VIEWS = { normaal: 1, compact: 1.15, ruim: 0.9 };
   function fit() {
     var f = VIEWS[(S && S.view) || 'normaal'] || 1; W = Math.round(1920 * f); H = Math.round(1080 * f);
-    // Alleen de body wordt groter getekend en daarna verkleind; html blijft schermvullend (1920 breed),
-    // anders zoomt de WebView zelf ook nog uit en vult Thuis het scherm niet meer.
+    // De WebView schaalt zelf: de pagina zegt hoe breed hij is (viewport) en Android past dat op het scherm.
+    // Geen eigen vergroting of verkleining met transform: dat kost op tv's te veel grafisch geheugen (zwart beeld).
+    var vp = document.querySelector('meta[name=viewport]'); if (vp && vp.content !== 'width=' + W) vp.content = 'width=' + W;
     var de = document.documentElement, b = document.body;
-    b.style.width = W + 'px'; b.style.height = H + 'px';
+    de.style.width = b.style.width = W + 'px'; de.style.height = b.style.height = H + 'px';
     b.classList.toggle('view-compact', f > 1);
-    var w = window.innerWidth || de.clientWidth || 1920, hh = window.innerHeight || de.clientHeight || 1080;
-    SCALE = Math.min(w / W, hh / H); b.style.transformOrigin = '0 0'; b.style.transform = SCALE === 1 ? '' : 'scale(' + SCALE + ')'; }
+    // Alleen in een gewone browser (geen tv) nog verkleinen als het venster kleiner is.
+    var w = window.innerWidth || W, hh = window.innerHeight || H;
+    SCALE = N ? 1 : Math.min(1, w / W, hh / H); b.style.transformOrigin = '0 0'; b.style.transform = SCALE === 1 ? '' : 'scale(' + SCALE + ')';
+  }
   // Pas na het opbouwen weet de tv hoe groot het scherm is: daarom ook later nog eens rekenen.
   fit(); window.addEventListener('resize', fit); window.addEventListener('load', fit); setTimeout(fit, 300); setTimeout(fit, 1500);
 
