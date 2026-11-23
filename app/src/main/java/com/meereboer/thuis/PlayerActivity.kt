@@ -63,8 +63,6 @@ class PlayerActivity : Activity() {
     private lateinit var listTitle: TextView
     private lateinit var center: TextView
     private lateinit var root: FrameLayout
-    /** Gekoppeld aan tv-serverr? Dan komt alles via de server, anders rechtstreeks van Dispatcharr (oude manier). */
-    private val srv by lazy { Server.paired(this) }
     private lateinit var guide: GuideView
     private val epgCache = HashMap<Int, Pair<Long, List<Programme>>>()
     private val epgPool = Executors.newFixedThreadPool(6)
@@ -265,8 +263,8 @@ class PlayerActivity : Activity() {
     }
 
     private fun loadChannels() {
-        if (!srv && !prefs.configured) {
-            showCenter("Live tv is nog niet ingesteld.\nGa naar Instellingen op het startscherm.")
+        if (!Server.paired(this)) {
+            showCenter("Deze tv is nog niet gekoppeld aan tv-serverr.\nKoppel hem eerst op het startscherm.")
             ui.postDelayed({ finish() }, 3500)
             return
         }
@@ -274,12 +272,8 @@ class PlayerActivity : Activity() {
         bg.execute {
             try {
                 val cat = intent.getStringExtra("categoryId")
-                val (title, list) = if (srv) LiveSrv.load(this, cat) else {
-                    val all = Xtream.load(prefs)
-                    // Gestart vanuit een categorie: dan zap je binnen die categorie.
-                    val smart = if (!cat.isNullOrEmpty()) Categorizer.build(this, all).firstOrNull { it.id == cat } else null
-                    (smart?.name ?: "Alle zenders") to (smart?.channels?.ifEmpty { all } ?: all)
-                }
+                // Gestart vanuit een categorie: dan zap je binnen die categorie.
+                val (title, list) = LiveSrv.load(this, cat)
                 ui.post {
                     channels = list
                     if (list.isEmpty()) { showCenter("Geen zenders gevonden"); return@post }
@@ -290,7 +284,7 @@ class PlayerActivity : Activity() {
                     play(if (i >= 0) i else 0)
                 }
             } catch (e: Exception) {
-                ui.post { showCenter("Kan Dispatcharr niet bereiken\n${e.message}") }
+                ui.post { showCenter("Live tv is nu niet bereikbaar\n${e.message}") }
             }
         }
     }
@@ -309,11 +303,10 @@ class PlayerActivity : Activity() {
         loadEpg(ch)
     }
 
-    private fun startStream(ch: Channel) = startUrl(if (srv) LiveSrv.streamUrl(this, ch) else Xtream.streamUrl(prefs, ch))
+    private fun startStream(ch: Channel) = startUrl(LiveSrv.streamUrl(this, ch))
 
-    /** Terugkijken starten; via de server is dat een netwerkvraag, dus op de achtergrond. */
+    /** Terugkijken starten; de link komt van de server, dus op de achtergrond. */
     private fun startReplay(ch: Channel, prog: Programme) {
-        if (!srv) { startUrl(Xtream.timeshiftUrl(prefs, ch, prog)); return }
         bg.execute {
             val u = try { LiveSrv.catchupUrl(this, ch, prog) } catch (e: Exception) { ui.post { flash("Terugkijken lukt niet: ${e.message}") }; null }
             if (u != null) ui.post { startUrl(u) }
@@ -374,7 +367,7 @@ class PlayerActivity : Activity() {
         val missing = channels.filter { it.id !in guide.epg }
         if (missing.isEmpty()) return
         bg.execute {
-            val tasks = missing.map { c -> java.util.concurrent.Callable { c.id to (try { if (srv) LiveSrv.fullEpg(this, c) else Xtream.fullEpg(prefs, c) } catch (_: Exception) { emptyList() }) } }
+            val tasks = missing.map { c -> java.util.concurrent.Callable { c.id to (try { LiveSrv.fullEpg(this, c) } catch (_: Exception) { emptyList() }) } }
             val got = epgPool.invokeAll(tasks).map { it.get() }
             ui.post {
                 val t = System.currentTimeMillis()
@@ -467,7 +460,7 @@ class PlayerActivity : Activity() {
         nowProg = null
         progress.visibility = View.INVISIBLE
         bg.execute {
-            val epg = try { if (srv) LiveSrv.shortEpg(this, ch.id) else Xtream.shortEpg(prefs, ch.id, 2) } catch (_: Exception) { emptyList() }
+            val epg = try { LiveSrv.shortEpg(this, ch.id) } catch (_: Exception) { emptyList() }
             ui.post {
                 if (index < 0 || channels[index].id != ch.id) return@post
                 val now = epg.getOrNull(0)

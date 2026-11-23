@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, thuis-1]
     # Alleen een nieuwe Thuis als de app zelf verandert, niet bij wijzigingen aan tv-serverr.
-    paths: ['app/**', 'brug/**', 'shared/**', 'tizen/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml']
+    paths: ['app/**', 'shared/**', 'tizen/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml']
   workflow_dispatch:
 
 permissions:
@@ -41,13 +41,12 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: thuis
-        run: gradle :app:assembleRelease :brug:assembleRelease --no-daemon --stacktrace
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
 
       - name: APK hernoemen
         run: |
           cp app/build/outputs/apk/release/app-release.apk "thuis-${GITHUB_RUN_NUMBER}.apk"
           cp app/build/outputs/apk/release/app-release.apk thuis.apk
-          cp brug/build/outputs/apk/release/brug-release.apk thuis-brug.apk
 
       - name: Samsung-pakket (Tizen) maken
         run: |
@@ -80,7 +79,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete laatste --yes --cleanup-tag || true
-          gh release create laatste "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk thuis-brug.apk thuis-samsung-ongesigneerd.wgt \
+          gh release create laatste "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk thuis-samsung-ongesigneerd.wgt \
             --title "Thuis $VERSIE" \
             --notes "Automatisch gebouwd uit ${GITHUB_SHA::7}." \
             --latest

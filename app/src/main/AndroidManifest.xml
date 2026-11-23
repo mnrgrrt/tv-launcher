@@ -57,9 +57,6 @@
 
         <activity android:name=".VodActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboard|keyboardHidden|navigation"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
-        <activity android:name=".RemoteActivity" android:exported="false"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
-
         <activity
             android:name=".PlayerActivity"
             android:exported="false"

@@ -41,12 +41,12 @@ class MainActivity : Activity() {
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val u = request.url
-                // Plaatjes van Plex/Jellyfin (http op het thuisnetwerk) haalt de app zelf op,
+                // Plaatjes van http-adressen in het thuisnetwerk (zenderlogo's) haalt de app zelf op,
                 // anders blokkeert de https-pagina ze.
                 if (u.host == "appassets.androidplatform.net" && u.path == "/proxy") {
                     val target = u.getQueryParameter("u") ?: return null
                     return try {
-                        val r = Xtream.http.newCall(okhttp3.Request.Builder().url(target).build()).execute()
+                        val r = Server.http.newCall(okhttp3.Request.Builder().url(target).build()).execute()
                         if (!r.isSuccessful) { r.close(); return WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, null) }
                         val type = r.header("Content-Type", "image/jpeg")!!.substringBefore(";")
                         WebResourceResponse(type, null, 200, "OK", mapOf("Cache-Control" to "max-age=3600"), r.body!!.byteStream())
@@ -68,35 +68,9 @@ class MainActivity : Activity() {
         }
         web.addJavascriptInterface(Bridge(this, web), "Native")
         setContentView(web)
-        applyExtras(intent)
+        Prefs(this).wipeOldSecrets()
         web.loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
         web.requestFocus()
-    }
-
-    /** Instellingen op afstand zetten via adb: am start -n com.meereboer.thuis/.MainActivity --es tmdbToken ... */
-    private fun applyExtras(i: Intent?) {
-        val e = i?.extras ?: return
-        val p = Prefs(this)
-        e.getString("tmdbToken")?.let { p.tmdbToken = it }
-        e.getString("jblWebhook")?.let { p.jblWebhook = it }
-        e.getString("plexUrl")?.let { p.plexUrl = it }
-        e.getString("plexToken")?.let { p.plexToken = it }
-        e.getString("jellyfinUrl")?.let { p.jellyfinUrl = it }
-        e.getString("jellyfinKey")?.let { p.jellyfinKey = it }
-        e.getString("brugUrl")?.let { p.brugUrl = it }
-        e.getString("osKey")?.let { p.osKey = it }
-        e.getString("radarrUrl")?.let { p.radarrUrl = it }
-        e.getString("radarrKey")?.let { p.radarrKey = it }
-        e.getString("sonarrUrl")?.let { p.sonarrUrl = it }
-        e.getString("sonarrKey")?.let { p.sonarrKey = it }
-        e.getString("osUser")?.let { p.osUser = it }
-        e.getString("jblListUrl")?.let { p.jblListUrl = it }
-    }
-
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        applyExtras(intent)
-        if (intent?.extras?.isEmpty == false && ::web.isInitialized) web.reload()
     }
 
     @Suppress("DEPRECATION")

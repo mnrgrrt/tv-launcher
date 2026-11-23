@@ -3,49 +3,54 @@ package com.meereboer.thuis
 import android.content.Intent
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
 import org.json.JSONObject
-import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 
-/** Brug tussen het startscherm (HTML) en Android. In JavaScript heet dit object "Native". */
+/**
+ * Brug tussen het startscherm (HTML) en Android. In JavaScript heet dit object "Native".
+ * Alle gegevens komen van tv-serverr via srv(); de sleutel van dit apparaat blijft in Android.
+ */
 class Bridge(private val act: MainActivity, private val web: WebView) {
-    private val prefs = Prefs(act)
     private val pool = Executors.newFixedThreadPool(4)
-    private val epgPool = Executors.newFixedThreadPool(8)
 
     private fun reply(id: Int, ok: Boolean, data: String) {
-        web.post {
-            web.evaluateJavascript(
-                "window.__nativeCb && window.__nativeCb($id, $ok, ${JSONObject.quote(data)})", null
-            )
-        }
+        web.post { web.evaluateJavascript("window.__nativeCb && window.__nativeCb($id, $ok, ${JSONObject.quote(data)})", null) }
     }
 
     private fun async(id: Int, block: () -> String) {
         pool.execute {
-            try {
-                reply(id, true, block())
-            } catch (e: Exception) {
-                reply(id, false, e.message ?: e.javaClass.simpleName)
-            }
+            try { reply(id, true, block()) } catch (e: Exception) { reply(id, false, e.message ?: e.javaClass.simpleName) }
         }
     }
 
     @JavascriptInterface fun isApp(): Boolean = true
+    @JavascriptInterface fun appVersion(): String =
+        try { act.packageManager.getPackageInfo(act.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
 
     // ---------- tv-serverr ----------
     @JavascriptInterface fun srvInfo(): String = Server.info(act).toString()
     @JavascriptInterface fun srvPair(id: Int, url: String, code: String, name: String) = async(id) { Server.pair(act, url, code, name) }
     @JavascriptInterface fun srvUnpair() = Server.unpair(act)
     @JavascriptInterface fun srvSetProfile(p: Int) = Server.setProfile(act, p)
-    /** Elke API-aanroep van het startscherm loopt hierlangs; de sleutel van het apparaat blijft in Android. */
     @JavascriptInterface fun srv(id: Int, method: String, path: String, body: String) =
         async(id) { Server.call(act, method, path, body.ifEmpty { null }) }
-    @JavascriptInterface fun srvUrl(): String = Server.url(act)
-    @JavascriptInterface fun appVersion(): String = try { act.packageManager.getPackageInfo(act.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
+
+    // ---------- afspelen ----------
+    /** Live tv: zappen binnen de categorie waaruit je startte. */
+    @JavascriptInterface fun playLive(catId: String, streamId: Int) {
+        act.runOnUiThread {
+            act.startActivity(Intent(act, PlayerActivity::class.java).putExtra("categoryId", catId).putExtra("streamId", streamId))
+        }
+    }
+
+    /** Film of aflevering. json komt van tv-serverr (url, ondertitels, profiel, kijkstand-sleutels). */
+    @JavascriptInterface fun playItem(json: String) {
+        act.runOnUiThread { act.startActivity(Intent(act, VodActivity::class.java).putExtra("item", json)) }
+    }
+
+    // ---------- apps en apparaat ----------
+    @JavascriptInterface fun getApps(id: Int) = async(id) { AppList.load(act).toString() }
+    @JavascriptInterface fun launch(pkg: String) { act.runOnUiThread { AppList.launch(act, pkg) } }
 
     /** Android-instellingen openen: "all", "wifi", "bluetooth", "sound", "display", "apps", "home" (oorspronkelijk startscherm). */
     @JavascriptInterface fun openSystem(what: String) {
@@ -66,181 +71,7 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         }
     }
 
-    @JavascriptInterface fun getSettings(): String = prefs.toJson().toString()
-
-    @JavascriptInterface fun saveSettings(json: String) {
-        prefs.fromJson(JSONObject(json))
-        Xtream.channels = emptyList()
-    }
-
-    @JavascriptInterface fun testConnection(id: Int) = async(id) {
-        val ui = Xtream.test(prefs)
-        val n = Xtream.load(prefs, true).size
-        JSONObject().put("status", ui.optString("status")).put("channels", n).toString()
-    }
-
-    @JavascriptInterface fun getApps(id: Int) = async(id) { AppList.load(act).toString() }
-
-    @JavascriptInterface fun launch(pkg: String) {
-        act.runOnUiThread { AppList.launch(act, pkg) }
-    }
-
-    private fun channelJson(ch: Channel, epg: List<Programme>): JSONObject {
-        val o = JSONObject().put("id", ch.id).put("num", ch.num).put("name", ch.name)
-            .put("icon", ch.icon).put("cat", ch.categoryId)
-        epg.getOrNull(0)?.let {
-            o.put("now", JSONObject().put("title", it.title).put("desc", it.desc).put("start", it.start).put("end", it.end))
-        }
-        epg.getOrNull(1)?.let { o.put("next", JSONObject().put("title", it.title).put("start", it.start)) }
-        return o
-    }
-
-    /** Categorie-tegels voor de rij "Live tv": slimme categorieën uit categories.json. */
-    @JavascriptInterface fun liveCategories(id: Int) = async(id) {
-        if (!prefs.configured) return@async JSONObject().put("configured", false).toString()
-        val all = Xtream.load(prefs)
-        val cats = Categorizer.build(act, all)
-        Categorizer.export(act, all, cats)
-        Categorizer.exportVod(act, prefs)
-        val show = prefs.categories.lowercase().split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        val visible = cats.filter { c ->
-            c.parent == null && c.channels.isNotEmpty() && (show.isEmpty() || c.id == "alle" || show.any { c.name.lowercase().contains(it) || c.id == it })
-        }
-        val arr = JSONArray()
-        for (c in visible) {
-            arr.put(JSONObject().put("id", c.id).put("name", c.name).put("img", c.img).put("count", c.channels.size)
-                .put("sample", JSONArray(c.channels.take(4).map { it.name })))
-        }
-        JSONObject().put("configured", true).put("total", all.size).put("categories", arr).toString()
-    }
-
-    private fun withEpg(list: List<Channel>): Map<Int, List<Programme>> {
-        val tasks = list.distinctBy { it.id }.map { ch ->
-            Callable { ch.id to (try { Xtream.shortEpg(prefs, ch.id, 2) } catch (_: Exception) { emptyList() }) }
-        }
-        return epgPool.invokeAll(tasks).associate { it.get() }
-    }
-
-    /**
-     * Zenders van één categorie met nu/straks. Heeft de categorie subrijen (zoals Sport),
-     * dan komt er per subrij een groep terug.
-     */
-    @JavascriptInterface fun liveCategory(id: Int, catId: String) = async(id) {
-        val all = Xtream.load(prefs)
-        val cats = Categorizer.build(act, all)
-        val cat = cats.firstOrNull { it.id == catId }
-        val kids = cats.filter { it.parent == catId && it.channels.isNotEmpty() }.sortedBy { it.last }
-        val out = JSONObject().put("name", cat?.name ?: "")
-        if (kids.isNotEmpty()) {
-            val epg = withEpg(kids.flatMap { it.channels.take(60) })
-            val groups = JSONArray()
-            for (k in kids) {
-                val arr = JSONArray()
-                for (ch in k.channels.take(60)) arr.put(channelJson(ch, epg[ch.id] ?: emptyList()))
-                groups.put(JSONObject().put("id", k.id).put("name", k.name).put("channels", arr))
-            }
-            out.put("groups", groups)
-        } else {
-            val list = (cat?.channels ?: emptyList()).take(150)
-            val epg = withEpg(list)
-            val arr = JSONArray()
-            for (ch in list) arr.put(channelJson(ch, epg[ch.id] ?: emptyList()))
-            out.put("channels", arr)
-        }
-        out.toString()
-    }
-
-    @JavascriptInterface fun playInCategory(streamId: Int, catId: String) {
-        act.runOnUiThread {
-            act.startActivity(
-                Intent(act, PlayerActivity::class.java).putExtra("streamId", streamId).putExtra("categoryId", catId)
-            )
-        }
-    }
-
-    @JavascriptInterface fun playChannel(streamId: Int) {
-        act.runOnUiThread {
-            act.startActivity(Intent(act, PlayerActivity::class.java).putExtra("streamId", streamId))
-        }
-    }
-
-    @JavascriptInterface fun playLast() {
-        act.runOnUiThread { act.startActivity(Intent(act, PlayerActivity::class.java)) }
-    }
-
-    /** Voorstellen en achtergronden per dienst uit TMDB. */
-    @JavascriptInterface fun streamingHome(id: Int) = async(id) {
-        if (prefs.tmdbToken.isEmpty()) JSONObject().put("configured", false).toString()
-        else JSONObject(Tmdb.home(act, prefs.tmdbToken)).put("configured", true).toString()
-    }
-
-    @JavascriptInterface fun continueWatching(id: Int) = async(id) { Media.continueWatching(act, prefs) }
-
-    // ---------- eigen Plex-bibliotheek ----------
-    @JavascriptInterface fun plexSections(id: Int) = async(id) { PlexLib.sections(prefs) }
-    @JavascriptInterface fun plexLibrary(id: Int, section: String) = async(id) { PlexLib.library(prefs, section) }
-    @JavascriptInterface fun arrUpcoming(id: Int, kind: String) = async(id) { Arr.upcoming(prefs, kind) }
-    @JavascriptInterface fun plexShow(id: Int, key: String) = async(id) { PlexLib.show(prefs, key) }
-    @JavascriptInterface fun plexPlay(key: String) {
-        pool.execute {
-            try {
-                val item = PlexLib.playItem(prefs, key)
-                act.runOnUiThread { act.startActivity(android.content.Intent(act, VodActivity::class.java).putExtra("item", item.toString())) }
-            } catch (_: Exception) { act.runOnUiThread { Media.openPlex(act, key) } }
-        }
-    }
-
-    // ---------- films en series (IPTV) ----------
-    @JavascriptInterface fun vodOverview(id: Int, kind: String) = async(id) { Vod.overview(prefs, kind) }
-    @JavascriptInterface fun vodBrowse(id: Int, kind: String, by: String, value: String) = async(id) { Vod.browse(prefs, kind, by, value) }
-    @JavascriptInterface fun searchAll(id: Int, q: String) = async(id) { Search.all(act, prefs, q) }
-    @JavascriptInterface fun vodCategories(id: Int, kind: String) = async(id) { Vod.categories(prefs, kind) }
-    @JavascriptInterface fun vodList(id: Int, kind: String, cat: String) = async(id) { Vod.list(prefs, kind, cat, 40) }
-    @JavascriptInterface fun vodInfo(id: Int, kind: String, itemId: String) = async(id) { Vod.info(prefs, kind, itemId) }
-
-    /** Speelt een film of aflevering af. json: kind, id, ext, title, sub, img, backdrop, plot. */
-    @JavascriptInterface fun playVod(json: String) {
-        val o = JSONObject(json)
-        val kind = o.optString("kind")
-        o.put("url", Vod.url(prefs, kind, o.optString("id"), o.optString("ext")))
-        o.put("key", kind + ":" + o.optString("id"))
-        act.runOnUiThread { act.startActivity(android.content.Intent(act, VodActivity::class.java).putExtra("item", o.toString())) }
-    }
-
-    @JavascriptInterface fun openMedia(source: String, key: String) {
-        if (source == "iptv") {
-            Vod.last(act)?.let { l -> act.runOnUiThread { act.startActivity(android.content.Intent(act, VodActivity::class.java).putExtra("item", l.toString())) } }
-            return
-        }
-        when (source) {
-            "jbl" -> pool.execute { try { Media.openJbl(prefs, key) } catch (_: Exception) { } }
-            "plex" -> plexPlay(key)
-            else -> act.runOnUiThread { Media.openJellyfin(act) }
-        }
-    }
-
-    /** Start een app op de JBL via de Home Assistant-webhook. */
-    @JavascriptInterface fun jblLaunch(id: Int, pkg: String) = async(id) {
-        val url = prefs.jblWebhook
-        if (url.isEmpty()) throw RuntimeException("geen JBL-koppeling ingesteld")
-        val body = JSONObject().put("app", pkg).toString().toRequestBody("application/json".toMediaType())
-        Xtream.http.newCall(okhttp3.Request.Builder().url(url).post(body).build()).execute().use {
-            if (!it.isSuccessful) throw RuntimeException("Home Assistant gaf fout ${it.code}")
-        }
-        // Afstandsbediening van de Formuler doorsturen naar de JBL zolang de dienst daar speelt.
-        act.runOnUiThread { act.startActivity(android.content.Intent(act, RemoteActivity::class.java)) }
-        "ok"
-    }
-
+    // ---------- bijwerken ----------
     @JavascriptInterface fun checkUpdate(id: Int) = async(id) { Updater.check(act).toString() }
-
     @JavascriptInterface fun installUpdate(id: Int) = async(id) { Updater.downloadAndInstall(act) }
-
-    @JavascriptInterface fun openAndroidSettings() {
-        act.runOnUiThread {
-            try {
-                act.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            } catch (_: Exception) { }
-        }
-    }
 }

@@ -21,20 +21,23 @@ object Updater {
         return if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode.toInt() else pi.versionCode
     }
 
-    /** Versienummer van de nieuwste build, uit de releasenaam "Thuis 12". */
-    fun latestVersion(): Int {
+    /** Nieuwste build: intern nummer uit de bestandsnaam thuis-<nummer>.apk, zichtbare naam uit de release ("Thuis 1.03"). */
+    private fun latest(): Pair<Int, String> {
         val req = Request.Builder().url(API).header("Accept", "application/vnd.github+json").build()
-        Xtream.http.newCall(req).execute().use { r ->
+        Server.http.newCall(req).execute().use { r ->
             if (!r.isSuccessful) throw RuntimeException("GitHub gaf fout ${r.code}")
-            val name = JSONObject(r.body?.string() ?: "{}").optString("name")
-            return Regex("(\\d+)").find(name)?.value?.toInt() ?: 0
+            val o = JSONObject(r.body?.string() ?: "{}")
+            val assets = o.optJSONArray("assets")
+            val code = (0 until (assets?.length() ?: 0)).mapNotNull { Regex("^thuis-(\\d+)\\.apk$").find(assets!!.getJSONObject(it).optString("name"))?.groupValues?.get(1)?.toInt() }.maxOrNull() ?: 0
+            return code to o.optString("name").removePrefix("Thuis ").trim()
         }
     }
 
     fun check(ctx: Context): JSONObject {
+        val (code, name) = latest()
         val cur = installedVersion(ctx)
-        val latest = latestVersion()
-        return JSONObject().put("current", cur).put("latest", latest).put("newer", latest > cur)
+        val curName = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
+        return JSONObject().put("current", curName).put("latest", name).put("newer", code > cur)
     }
 
     /** Downloadt de APK en opent het installatiescherm van Android. */
@@ -47,7 +50,7 @@ object Updater {
         }
         val dir = File(ctx.cacheDir, "updates").apply { mkdirs() }
         val file = File(dir, "thuis.apk")
-        Xtream.http.newCall(Request.Builder().url(APK).build()).execute().use { r ->
+        Server.http.newCall(Request.Builder().url(APK).build()).execute().use { r ->
             if (!r.isSuccessful) throw RuntimeException("Download mislukt (${r.code})")
             file.outputStream().use { out -> r.body!!.byteStream().copyTo(out) }
         }

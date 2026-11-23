@@ -198,13 +198,11 @@ class VodActivity : Activity() {
             labels.add("    Tekst komt te laat (pas in beeld n\u00e1 het praten)"); acts.add { nudge(cur, -500) }
             if (o != 0L) { labels.add("    Timing terugzetten zoals hij was"); acts.add { setOffset(cur, 0L) } }
         }
-        val prefs = Prefs(this)
         val sel = if (off) 0 else groups.indexOfFirst { it.isSelected } + 1
-        if (prefs.osKey.isEmpty()) { openMenu("Ondertitels", labels, acts, sel); return }
         labels.add("    OpenSubtitles: zoeken…"); acts.add { }
         openMenu("Ondertitels", labels, acts, sel)
         bg.execute {
-            val res = try { Subs.search(prefs, item, "nl,en").take(10) } catch (e: Exception) { emptyList() }
+            val res = try { subsSearch() } catch (e: Exception) { emptyList() }
             ui.post {
                 if (menu.visibility != View.VISIBLE) return@post
                 labels.removeAt(labels.size - 1); acts.removeAt(acts.size - 1)
@@ -216,7 +214,7 @@ class VodActivity : Activity() {
                     acts.add {
                         flash("Ondertitel ophalen…")
                         bg.execute {
-                            val f = try { Subs.download(this, prefs, r.optInt("fileId")) } catch (e: Exception) { null }
+                            val f = try { subsDownload(r.optLong("fileId")) } catch (e: Exception) { null }
                             ui.post { if (f == null) flash("Ophalen lukt niet") else addExternal(f, r.optString("lang"), label) }
                         }
                     }
@@ -241,9 +239,7 @@ class VodActivity : Activity() {
     /** Geen Nederlandse ondertitels in het bestand en geen Nederlands geluid? Dan via OpenSubtitles. */
     private fun maybeFetchSubs(tracks: Tracks, manual: Boolean = false) {
         if (subsTried && !manual) return
-        val prefs = Prefs(this)
-        val viaServer = item.optBoolean("server")
-        if (!viaServer && prefs.osKey.isEmpty()) { if (manual) flash("Geen OpenSubtitles-sleutel ingesteld"); return }
+
         val nl = setOf("nl", "nld", "dut")
         val hasNlText = tracks.groups.any { g -> g.type == C.TRACK_TYPE_TEXT && (0 until g.length).any { g.getTrackFormat(it).language?.lowercase() in nl } }
         val nlAudio = tracks.groups.any { g -> g.type == C.TRACK_TYPE_AUDIO && g.isSelected && (0 until g.length).any { g.getTrackFormat(it).language?.lowercase() in nl } }
@@ -251,7 +247,7 @@ class VodActivity : Activity() {
         subsTried = true
         if (manual) flash("Ondertitels zoeken…")
         bg.execute {
-            val f = try { if (viaServer) serverSubs() else Subs.find(this, prefs, item) } catch (e: Exception) { ui.post { if (manual) flash("Ondertitels zoeken lukt niet: ${e.message?.take(60)}") }; null }
+            val f = try { subsSearch().firstOrNull { it.optString("lang") == "nl" }?.let { subsDownload(it.optLong("fileId")) } } catch (e: Exception) { ui.post { if (manual) flash("Ondertitels zoeken lukt niet: ${e.message?.take(60)}") }; null }
             ui.post {
                 val p = player ?: return@post
                 if (f == null) { if (manual) flash("Geen Nederlandse ondertitels gevonden"); return@post }
@@ -261,17 +257,16 @@ class VodActivity : Activity() {
         }
     }
 
-    /** Ondertitels via tv-serverr (de OpenSubtitles-sleutel staat op de server). */
-    private fun serverSubs(): java.io.File? {
+    /** Ondertitels zoeken via tv-serverr (de OpenSubtitles-sleutel staat op de server). */
+    private fun subsSearch(): List<JSONObject> {
         fun e(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
         val q = "/api/subs/search?kind=${e(item.optString("kind"))}&title=${e(item.optString("title"))}&tmdbId=${item.optInt("tmdb")}" +
             "&season=${item.optInt("season")}&episode=${item.optInt("episode")}"
-        val hits = org.json.JSONArray(Server.call(this, "GET", q))
-        if (hits.length() == 0) return null
-        val nl = (0 until hits.length()).map { hits.getJSONObject(it) }.firstOrNull { it.optString("lang") == "nl" } ?: return null
-        val txt = Server.call(this, "GET", "/api/subs/file/${nl.optLong("fileId")}")
-        return java.io.File(cacheDir, "os-${nl.optLong("fileId")}.srt").apply { writeText(txt) }
+        val a = org.json.JSONArray(Server.call(this, "GET", q))
+        return (0 until a.length()).map { a.getJSONObject(it) }
     }
+    private fun subsDownload(fileId: Long): java.io.File =
+        java.io.File(cacheDir, "os-$fileId.srt").apply { if (!exists()) writeText(Server.call(this@VodActivity, "GET", "/api/subs/file/$fileId")) }
 
     private val hideOsd = Runnable { osd.visibility = View.GONE; SubStyle.apply(this, pv.subtitleView, false) }
     private val tick = object : Runnable {
@@ -370,7 +365,7 @@ class VodActivity : Activity() {
                         center.visibility = View.GONE
                         if (!resumed) {
                             resumed = true
-                            val pos = if (item.has("offsetMs")) item.optLong("offsetMs") else Vod.position(this@VodActivity, item.optString("key"))
+                            val pos = item.optLong("offsetMs")
                             if (pos > 60_000 && (p.duration <= 0 || pos < p.duration * 0.95)) {
                                 p.seekTo(pos); flash("Verder vanaf ${fmt(pos)}")
                             }
@@ -424,23 +419,18 @@ class VodActivity : Activity() {
         return MediaItem.Builder().setUri(Server.abs(this, item.optString("url"))).setSubtitleConfigurations(subs).build()
     }
 
-    // Plex bijhouden waar je bent (elke 10 seconden en bij pauze/stop).
+    // Kijkstand bijhouden (elke 10 seconden en bij stoppen).
     private var lastReport = 0L
     private fun report(state: String) {
         val p = player ?: return
         val pos = p.currentPosition; val dur = p.duration
         if (dur <= 0) return
-        // Via tv-serverr: kijkstand per profiel; de server meldt het zelf aan Plex.
-        if (item.optBoolean("server")) {
-            val body = JSONObject().put("profile", item.optInt("profile", 1)).put("key", item.optString("key"))
-                .put("seriesKey", item.optString("seriesKey")).put("kind", item.optString("kind")).put("plexKey", item.optString("plexKey"))
-                .put("pos", pos).put("dur", dur).put("state", state).put("meta", item.optJSONObject("meta") ?: JSONObject()).toString()
-            bg.execute { try { Server.call(this, "POST", "/api/progress", body) } catch (_: Exception) {} }
-            return
-        }
-        val k = item.optString("plexKey"); if (k.isEmpty()) return
-        val prefs = Prefs(this)
-        Thread { PlexLib.timeline(prefs, k, state, pos, dur) }.start()
+        // Kijkstand per profiel naar tv-serverr; de server meldt het zelf aan Plex.
+        val body = JSONObject().put("profile", item.optInt("profile", 1)).put("key", item.optString("key"))
+            .put("seriesKey", item.optString("seriesKey")).put("kind", item.optString("kind")).put("plexKey", item.optString("plexKey"))
+            .put("pos", pos).put("dur", dur).put("state", state).put("meta", item.optJSONObject("meta") ?: JSONObject()).toString()
+        // Eigen thread: bij het stoppen wordt de achtergrondpool meteen afgesloten.
+        Thread { try { Server.call(this, "POST", "/api/progress", body) } catch (_: Exception) {} }.start()
     }
 
     private fun fmt(ms: Long): String {
@@ -536,8 +526,7 @@ class VodActivity : Activity() {
     private fun save() {
         val p = player ?: return
         if (p.duration <= 0) return
-        // Plex onthoudt zelf waar je was (en zet het in Verder kijken); IPTV onthoudt Thuis.
-        if (item.optBoolean("server") || item.optString("plexKey").isNotEmpty()) report("stopped") else Vod.save(this, item, p.currentPosition, p.duration)
+        report("stopped")
     }
 
     override fun onStop() {

@@ -14,4 +14,3 @@ dependencyResolutionManagement {
 }
 rootProject.name = "tv-launcher"
 include(":app")
-include(":brug")
