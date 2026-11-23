@@ -225,7 +225,11 @@ on('GET', '/api/subs/search', 'device', ({ q }) => subs.search(Object.fromEntrie
 on('GET', '/api/subs/file/:id', 'device', async ({ res, p }) => { send(res, 200, await subs.download(+p.id), 'application/x-subrip; charset=utf-8'); });
 
 on('POST', '/api/progress', 'device', ({ b }) => { profiles.progress(+b.profile || 1, b); return { ok: true }; });
-on('GET', '/api/position', 'device', ({ q }) => profiles.position(+q.get('profile') || 1, q.get('key') || '', +q.get('tmdb') || 0, +q.get('s') || 0, +q.get('e') || 0));
+on('GET', '/api/position', 'device', async ({ q }) => {
+  const prof = +q.get('profile') || 1;
+  await profiles.fillPlexIdent(prof).catch(() => {});
+  return profiles.position(prof, q.get('key') || '', +q.get('tmdb') || 0, +q.get('s') || 0, +q.get('e') || 0);
+});
 on('GET', '/api/continue', 'device', async ({ q }) => (await profiles.continueWatching(+q.get('profile') || 1)).map(withUrl));
 on('POST', '/api/continue/hide', 'device', ({ b }) => { profiles.hide(+b.profile || 1, String(b.key || '')); return { ok: true }; });
 on('POST', '/api/watched', 'device', ({ b }) => { profiles.setWatched(+b.profile || 1, Array.isArray(b.items) ? b.items : [], !!b.on); return { ok: true }; });
