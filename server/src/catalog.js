@@ -117,8 +117,8 @@ export async function overview(kind, services, prefs) {
   const coll = [], tile = (id, name, l) => l.length && coll.push({ id, name, count: l.length, posters: l.filter(o => o.poster).slice(0, 4).map(o => o.poster) });
   const soon = await upcoming(kind);
   tile('soon', 'Binnenkort', soon);
-  tile('src:plex', 'Pas toegevoegd aan Plex', own.filter(o => o.sources.includes('plex')));
-  tile('src:iptv', 'Nieuw bij IPTV', own.filter(o => o.sources.includes('iptv')));
+  tile('src:plex', 'Alles in Plex', own.filter(o => o.sources.includes('plex')));
+  tile('src:iptv', 'Alles op IPTV', own.filter(o => o.sources.includes('iptv')));
   const perCat = {}; own.forEach(o => (o.cats || []).forEach(x => { (perCat[x] = perCat[x] || []).push(o); }));
   c.cats.filter(x => (perCat[x.id] || []).length >= 5).forEach(x => tile('cat:' + x.id, x.name, perCat[x.id]));
   // Opnames (afleveringen in de filmbibliotheek, zoals Rondo) in een eigen rij, niet tussen de nieuwe series.
