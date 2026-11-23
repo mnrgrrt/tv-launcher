@@ -63,6 +63,7 @@ class PlayerActivity : Activity() {
     private lateinit var listTitle: TextView
     private lateinit var center: TextView
     private lateinit var root: FrameLayout
+    private var catTitle = "Alle zenders"
     private lateinit var guide: GuideView
     private val epgCache = HashMap<Int, Pair<Long, List<Programme>>>()
     private val epgPool = Executors.newFixedThreadPool(6)
@@ -278,7 +279,8 @@ class PlayerActivity : Activity() {
                     channels = list
                     if (list.isEmpty()) { showCenter("Geen zenders gevonden"); return@post }
                     listView.adapter = ChannelAdapter(list)
-                    listTitle.text = title
+                    catTitle = title
+                    listTitle.text = "$title   ·   rechts = gids"
                     val wanted = intent.getIntExtra("streamId", prefs.lastChannel)
                     val i = list.indexOfFirst { it.id == wanted }
                     play(if (i >= 0) i else 0)
@@ -350,7 +352,7 @@ class PlayerActivity : Activity() {
         if (channels.isEmpty()) return
         hideList()
         guide.channels = channels
-        guide.title = listTitle.text.toString()
+        guide.title = catTitle
         val now = System.currentTimeMillis()
         guide.epg = channels.mapNotNull { c -> epgCache[c.id]?.takeIf { now - it.first < 10 * 60_000L }?.let { c.id to it.second } }.toMap()
         guide.loading = guide.epg.size < channels.size
@@ -556,7 +558,9 @@ class PlayerActivity : Activity() {
         }
         if (listPanel.visibility == View.VISIBLE) {
             return when (keyCode) {
-                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_DPAD_RIGHT -> { hideList(); true }
+                KeyEvent.KEYCODE_BACK -> { hideList(); true }
+                // Rechts in de zenderlijst: de volledige gids (de JBL heeft geen gidsknop).
+                KeyEvent.KEYCODE_DPAD_RIGHT -> { hideList(); openGuide(); true }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                     val pos = listView.selectedItemPosition
                     hideList()
