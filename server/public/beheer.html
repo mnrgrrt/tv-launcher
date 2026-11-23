@@ -54,7 +54,7 @@ select{padding:7px 8px;border-radius:8px;border:1px solid var(--line);background
  <div class="card"><h2>Eigen foto's</h2><p class="dim">Drie albums voor de schermbeveiliging. Album 1 staat ook bovenaan Thuis. Liggende foto's werken het best; de pagina verkleint ze zelf.</p>
   <div class="row" style="justify-content:flex-start;gap:8px"><button class="ghost" data-album="1">Album 1</button><button class="ghost" data-album="2">Album 2</button><button class="ghost" data-album="3">Album 3</button></div>
   <div id="photos" style="display:flex;flex-wrap:wrap;gap:10px;margin:10px 0"></div>
-  <div class="row"><input id="phby" placeholder="Fotograaf (mag leeg)"><button class="ghost" id="phadd">Foto's toevoegen</button></div>
+  <div class="row"><button class="ghost" id="phadd">Foto's toevoegen</button></div>
   <input type="file" id="phfile" accept="image/*" multiple hidden></div>
  <div class="card"><h2>Profielen</h2><div id="profiles"></div>
   <div class="grid"><div><label>Naam</label><input id="pname"></div><div><label>Kleur</label><input id="pcolor" value="#3DDBB0"></div></div>
@@ -145,11 +145,11 @@ document.addEventListener('click',async e=>{const t=e.target.dataset;
 // Foto's voor Thuis: in de browser verkleinen tot 2560x1440 (bijsnijden tot 16:9), dan pas versturen.
 let ALBUM=1;
 async function drawPhotos(l){l=l||await api('GET','/api/admin/photos?album='+ALBUM);document.querySelectorAll('[data-album]').forEach(b=>b.style.fontWeight=+b.dataset.album===ALBUM?'700':'400');
- $('photos').innerHTML=l.map(p=>`<div style="position:relative"><img src="${esc(p.url)}" alt="" style="width:160px;height:90px;object-fit:cover;border-radius:6px"><button class="ghost" data-delphoto="${esc(p.file)}" style="position:absolute;right:4px;top:4px;padding:2px 8px">×</button><div class="dim" style="font-size:12px">${esc(p.by||'')}</div></div>`).join('')||'<div class="dim">Nog geen foto\'s in dit album.</div>'}
+ $('photos').innerHTML=l.map(p=>`<div style="position:relative"><img src="${esc(p.url)}" alt="" style="width:160px;height:90px;object-fit:cover;border-radius:6px"><button class="ghost" data-delphoto="${esc(p.file)}" style="position:absolute;right:4px;top:4px;padding:2px 8px">×</button></div>`).join('')||'<div class="dim">Nog geen foto\'s in dit album.</div>'}
 function shrink(f){return new Promise((ok,no)=>{const i=new Image();i.onload=()=>{const W=2560,H=1440,c=document.createElement('canvas');c.width=W;c.height=H;const r=Math.max(W/i.width,H/i.height),w=i.width*r,h=i.height*r;
  c.getContext('2d').drawImage(i,(W-w)/2,(H-h)/2,w,h);URL.revokeObjectURL(i.src);ok(c.toDataURL('image/jpeg',.85))};i.onerror=no;i.src=URL.createObjectURL(f)})}
 $('phadd').onclick=()=>$('phfile').click();
-$('phfile').onchange=async()=>{for(const f of $('phfile').files){try{await drawPhotos(await api('POST','/api/admin/photos',{album:ALBUM,data:await shrink(f),by:$('phby').value}))}catch(x){alert(x.message)}}$('phfile').value=''};
+$('phfile').onchange=async()=>{for(const f of $('phfile').files){try{await drawPhotos(await api('POST','/api/admin/photos',{album:ALBUM,data:await shrink(f)}))}catch(x){alert(x.message)}}$('phfile').value=''};
 document.addEventListener('click',async e=>{const a=e.target.dataset.album;if(a){ALBUM=+a;drawPhotos();return}
  const d=e.target.dataset.delphoto;if(d&&confirm('Deze foto weghalen?')){try{await drawPhotos(await api('DELETE','/api/admin/photos/'+ALBUM+'/'+encodeURIComponent(d)))}catch(x){alert(x.message)}}});
 $('newcode').onclick=async()=>{$('code').textContent=(await api('POST','/api/admin/code')).code;load()};

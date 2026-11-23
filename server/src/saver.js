@@ -17,25 +17,24 @@ async function film() {
   const out = await pool(pick, 4, async ({ o, type }) => {
     const big = o.tmdb && S('tmdbToken') ? (await art(type, o.tmdb).catch(() => ({}))).backdrop : '';
     const url = big || (o.plex && o.plex.art) || (o.vod && o.vod.backdrop) || '';
-    return url ? { url, by: o.title + (o.year ? ' (' + o.year + ')' : '') } : null;
+    return url ? { url } : null;
   });
   return out.filter(Boolean);
 }
 
 /** Schilderijen in het publieke domein (CC0). Liggende werken, zodat ze het scherm vullen. */
 function kunst() {
-  return cached('saver:kunst2', 86400e3, async () => {
+  return cached('saver:kunst3', 86400e3, async () => {
     const q = ['landscape', 'sea', 'garden', 'impressionism', 'river', 'city'], out = [];
     for (const term of q) {
       const r = await json('https://api.artic.edu/api/v1/artworks/search?q=' + enc(term) +
         '&query[bool][must][0][term][is_public_domain]=true&query[bool][must][1][term][artwork_type_title.keyword]=Painting' +
-        '&fields=title,artist_title,date_display,image_id,thumbnail&limit=60',
+        '&fields=image_id,thumbnail&limit=60',
         { headers: { 'AIC-User-Agent': 'tv-serverr (Thuis)' }, what: 'Art Institute of Chicago' }).catch(() => null);
       for (const a of (r && r.data) || []) {
         const t = a.thumbnail || {};
         if (!a.image_id || !t.width || t.width < t.height * 1.25) continue;
-        out.push({ url: `https://www.artic.edu/iiif/2/${a.image_id}/full/1686,/0/default.jpg`,
-          by: [a.artist_title, a.title, a.date_display].filter(Boolean).join('. ') + '. The Art Institute of Chicago' });
+        out.push({ url: `https://www.artic.edu/iiif/2/${a.image_id}/full/1686,/0/default.jpg` });
       }
     }
     return [...new Map(out.map(o => [o.url, o])).values()];
@@ -46,7 +45,7 @@ function kunst() {
 export async function images(srcs) {
   const want = [...new Set(String(srcs || 'film').split(','))].filter(s => SOURCES.includes(s));
   const lists = await Promise.all(want.map(s => (s === 'film' ? film() : s === 'kunst' ? kunst() : Promise.resolve(photos.list(+s.slice(5)))).catch(() => [])));
-  return shuffle(lists.flat().map(p => ({ url: p.url, by: p.by || '' }))).slice(0, 80);
+  return shuffle(lists.flat().map(p => ({ url: p.url }))).slice(0, 80);
 }
 
 // ---------- weer (Open-Meteo, geen sleutel nodig) ----------

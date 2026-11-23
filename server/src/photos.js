@@ -23,7 +23,7 @@ const read = n => JSON.parse(fs.readFileSync(index(n), 'utf8'));
 const write = (n, o) => fs.writeFileSync(index(n), JSON.stringify(o, null, 1));
 const safe = f => /^[\w.-]+\.jpg$/.test(f || '');
 
-export const list = (n = 1) => { n = album(n); return read(n).photos.map(p => ({ file: p.file, url: sign(`/foto/${n}/${p.file}`, 24), by: p.by })); };
+export const list = (n = 1) => { n = album(n); return read(n).photos.map(p => ({ file: p.file, url: sign(`/foto/${n}/${p.file}`, 24) })); };
 export const counts = () => Object.fromEntries(ALBUMS.map(n => [n, read(n).photos.length]));
 
 /** Pad van een foto voor /foto/<album>/<bestand>, of null. */
@@ -34,14 +34,14 @@ export function file(n, f) {
 }
 
 /** Nieuwe foto (jpg, al verkleind door de beheerpagina). */
-export function add(n, b64, by) {
+export function add(n, b64) {
   n = album(n);
   const buf = Buffer.from(String(b64 || '').replace(/^data:[^,]+,/, ''), 'base64');
   if (!buf.length || buf.length > 4 * 1024 * 1024) throw Object.assign(new Error('Foto te groot (max 4 MB)'), { status: 400 });
   if (!(buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)) throw Object.assign(new Error('Alleen jpg'), { status: 400 });
   const f = `f${Date.now()}.jpg`;
   fs.writeFileSync(path.join(dir(n), f), buf);
-  const o = read(n); o.photos.push({ file: f, by: String(by || '').trim().slice(0, 60) }); write(n, o);
+  const o = read(n); o.photos.push({ file: f }); write(n, o);
   return list(n);
 }
 export function remove(n, f) {
