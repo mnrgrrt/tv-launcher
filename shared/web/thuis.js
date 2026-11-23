@@ -180,11 +180,11 @@
   // ---------- bovenbalk ----------
   var TABS = [['home', 'thuis'], ['live', 'Live tv'], ['films', 'Films'], ['series', 'Series'], ['search', 'Zoeken']];
   function topbar(active, onfocus) {
-    var bar = h('div', { class: 'top' }), left = h('div', { class: 'left' });
+    var bar = h('div', { class: 'top' }), left = h('div', { class: 'left' }), nav = h('div', { class: 'nav' });
     TABS.forEach(function (t) {
       var p = F(h('button', { class: 'pill' + (t[0] === 'home' ? ' brand' : '') + (t[0] === active ? ' on' : '') }, t[1]), function () { go(t[0], {}, true); }, { group: 'top', focus: onfocus });
       if (t[0] === active) p.dataset.active = '1';
-      left.appendChild(p);
+      (t[0] === 'home' ? left : nav).appendChild(p);
     });
     var right = h('div', { class: 'right' });
     var tm = h('span', null, clock(Date.now())); right.appendChild(tm);
@@ -193,7 +193,7 @@
     // Wisselen in twee keer OK: avatar, dan het profiel. Mijn profiel staat in hetzelfde venster.
     var av = F(h('button', { class: 'avatar-btn', 'aria-label': 'Wie kijkt er' }, '<img class="avatar" alt="" src="' + esc(img(me().avatarUrl)) + '">'), function () { whoDialog(); }, { group: 'top' });
     right.appendChild(av);
-    bar.appendChild(left); bar.appendChild(right);
+    bar.appendChild(left); bar.appendChild(nav); bar.appendChild(right);
     return bar;
   }
   setInterval(function () { var t = document.querySelector('.top .right span'); if (t) t.textContent = clock(Date.now()); checkReminders(); }, 20000);
@@ -202,7 +202,7 @@
   function rowSection(title, items, sub) {
     if (!items.length) return document.createTextNode('');
     setTimeout(contentReady, 0);
-    var sec = h('div', { class: 'section' }, '<h2>' + esc(title) + (sub ? ' <small>· ' + esc(sub) + '</small>' : '') + '</h2>');
+    var sec = h('div', { class: 'section' }, title ? '<h2>' + esc(title) + (sub ? ' <small>· ' + esc(sub) + '</small>' : '') + '</h2>' : '');
     var clip = h('div', { class: 'row-clip' }), row = h('div', { class: 'row' });
     items.forEach(function (it) { row.appendChild(it); });
     clip.appendChild(row); sec.appendChild(clip);
@@ -756,12 +756,12 @@
   // Boven: poster, gegevens, waar je het kunt zien en de knoppen. Bij een serie daaronder meteen de seizoenen en afleveringen.
   screens.info = function (a) {
     var el = h('div', { class: 'screen' });
-    var bgEl = h('div', { class: 'info-bg' }); el.appendChild(bgEl);
-    var top = h('div', { style: 'position:absolute;left:80px;top:90px;display:flex;gap:48px' });
-    var post = h('div', { style: 'width:280px;height:420px;border-radius:16px;flex:none;background:#151922 center/cover' });
-    var txt = h('div', { style: 'width:1100px;display:flex;flex-direction:column;gap:16px' }, '<h1 style="font-size:64px;line-height:1">' + esc(a.title) + '</h1>');
-    top.appendChild(post); top.appendChild(txt); el.appendChild(top);
-    var lower = h('div', { style: 'position:absolute;left:0;right:0;top:560px' }); el.appendChild(lower);
+    // Groot beeld over de hele breedte, tekst linksonder op een zacht verloop; daaronder de seizoenen. Het geheel schuift mee.
+    var sc = h('div', { class: 'scroll', style: 'top:0' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
+    var hero = h('div', { class: 'ihero first' }), bgEl = h('div', { class: 'ibg' }); hero.appendChild(bgEl);
+    var txt = h('div', { class: 'itxt' }, '<h1>' + esc(a.title) + '</h1>'), castLine = h('div', { class: 'icast' });
+    hero.appendChild(txt); hero.appendChild(castLine); inner.appendChild(hero);
+    var lower = h('div'); inner.appendChild(lower);
     var series = a.type === 'tv';
     var src = a.plex ? 'plex:' + a.plex.key : a.vod ? (a.vodKind === 'movie' ? 'movie:' : 'series:') + a.vod.id : '';
     var showQ = series && (a.plex || a.vod) ? get('/api/show?profile=' + S.profile + (a.plex ? '&plex=' + a.plex.key : '&vod=' + a.vod.id)).catch(function () { return null; }) : Promise.resolve(null);
@@ -773,8 +773,8 @@
     }).then(function (r) {
       var d = r[0] || {}, mine = r[2], seen = !!r[3].on, show = r[4];
       var inList = r[1].some(function (x) { return x.key === (src || 'tmdb:' + a.type + a.tmdb); });
-      bgEl.style.cssText = bg(d.backdrop || (show && show.backdrop) || (a.plex && a.plex.art) || (a.vod && a.vod.backdrop));
-      post.style.backgroundImage = "url('" + img(d.poster || (a.plex && a.plex.thumb) || (a.vod && a.vod.icon)) + "')";
+      bgEl.style.backgroundImage = "url('" + img(d.backdrop || (show && show.backdrop) || (a.plex && a.plex.art) || (a.vod && a.vod.backdrop)) + "')";
+      if (d.cast && d.cast.length) castLine.innerHTML = '<span class="dim">Met </span>' + esc(d.cast.slice(0, 3).map(function (c) { return c.name; }).join(', '));
       var nSeasons = show ? show.seasons.length : (d.seasons || []).length;
       var imdb = d.ratings && d.ratings.imdb ? 'IMDb ' + String(d.ratings.imdb).replace('.', ',') : d.rating ? '★ ' + d.rating.toFixed(1).replace('.', ',') : '';
       var meta = [d.year || (a.vod && a.vod.year), nSeasons ? nSeasons + ' seizoen' + (nSeasons > 1 ? 'en' : '') : d.runtime ? d.runtime + ' min' : '',
@@ -783,11 +783,14 @@
       var svc = d.services || [], have = svc.filter(function (x) { return x.key && mine.indexOf(x.key) >= 0; }), other = svc.filter(function (x) { return have.indexOf(x) < 0; });
       var chip = function (x, dim) { return '<span class="where' + (dim ? ' dim' : '') + '">' + (x.logo ? '<i style="' + bg(x.logo) + '"></i>' : '') + esc(x.name) + '</span>'; };
       var where = have.map(function (x) { return chip(x); }).concat(a.plex ? [chip({ name: 'Plex' })] : [], a.vod ? [chip({ name: 'IPTV' })] : []);
-      txt.innerHTML = '<h1 style="font-size:64px;line-height:1">' + esc(d.title || a.title) + '</h1><div class="meta">' + meta.map(function (m) { return '<span>' + (m.indexOf('<span') === 0 ? m : esc(m)) + '</span>'; }).join('') + '</div>' +
-        '<p class="desc" style="-webkit-line-clamp:' + (series ? 3 : 5) + '">' + esc(d.overview || (show && show.plot) || (a.plex && a.plex.summary) || (a.vod && a.vod.plot) || '') + '</p>' +
+      txt.innerHTML = '<h1>' + esc(d.title || a.title) + '</h1><div class="meta">' + meta.map(function (m) { return '<span>' + (m.indexOf('<span') === 0 ? m : esc(m)) + '</span>'; }).join('') + '</div>' +
+        '<p class="desc">' + esc(d.overview || (show && show.plot) || (a.plex && a.plex.summary) || (a.vod && a.vod.plot) || '') + '</p>' +
         '<div class="wherebox">' + (where.length ? '<span class="dim">Te zien via</span>' + where.join('') : '<span class="dim">Nog niet te zien</span>') +
         (other.length ? '<span class="dim" style="margin-left:14px">Ook op</span>' + other.slice(0, 4).map(function (x) { return chip(x, true); }).join('') : '') + '</div>';
-      var bt = h('div', { style: 'display:flex;gap:16px;margin-top:6px' });
+      if (d.tmdb) (S.art[a.type + d.tmdb] ? Promise.resolve(S.art[a.type + d.tmdb]) : get('/api/art/' + a.type + '/' + d.tmdb).then(function (x) { S.art[a.type + d.tmdb] = x; return x; }, function () { return {}; })).then(function (x) {
+        if (!x.logo) return; var lg = new Image(); lg.className = 'ilogo'; lg.alt = d.title || ''; lg.onload = function () { var t = txt.querySelector('h1'); if (t) t.replaceWith(lg); }; lg.src = img(x.logo);
+      });
+      var bt = h('div', { class: 'ibtns' });
       var openSvc = have[0] && F(h('button', { class: 'btn' }, 'Openen in ' + esc(have[0].name)), function () { openApp(serviceMatch(have[0].key)); });
       if (series && show) {
         var nx = nextUp(show);
@@ -829,10 +832,12 @@
           [].forEach.call(pills.querySelectorAll('.pill'), function (p, i) { p.classList.toggle('on', i === st.season); });
           var s = show.seasons[st.season], keep = cur && row.contains(cur) ? [].indexOf.call(cur.parentNode.children, cur) : -1;
           row.innerHTML = '';
-          row.appendChild(rowSection(s.episodes.length + ' afleveringen', s.episodes.map(function (e) {
-            return wide({ title: e.num + '. ' + (e.title || 'Aflevering ' + e.num), sub: [e.dur ? Math.round(e.dur / 60) + ' min' : '', e.watched ? '✓ bekeken' : e.progress > 0.03 ? 'bezig' : ''].filter(Boolean).join(' · '),
-              img: e.img || show.backdrop, progress: e.watched ? 0 : e.progress, badge: e.watched ? '✓' : '', ok: function () { playEp(s, e); },
-              long: function () { epMenu(s, e); } });
+          row.appendChild(rowSection('', s.episodes.map(function (e) {
+            // Aflevering als kaart: beeld met de tekst erop, zoals in een goede videotheek.
+            var b = h('button', { class: 'row-item ep' }, '<div class="thumb" style="' + bg(e.img || show.backdrop) + '"><div class="cap"><span class="k">Aflevering ' + e.num + '</span><b>' + esc(e.title || 'Aflevering ' + e.num) + '</b>' +
+              (e.plot ? '<p>' + esc(e.plot) + '</p>' : '') + '<span class="f2">' + [e.dur ? Math.round(e.dur / 60) + ' min' : '', e.watched ? '✓ Bekeken' : ''].filter(Boolean).join(' · ') + '</span></div>' +
+              (!e.watched && e.progress > 0.03 ? '<div class="bar"><i style="width:' + Math.round(e.progress * 100) + '%"></i></div>' : '') + '</div>');
+            return F(b, function () { playEp(s, e); }, { long: function () { epMenu(s, e); } });
           })));
           if (keep >= 0) { var it = row.querySelectorAll('.row-item')[keep]; if (it) focus(it); }
         };
@@ -841,12 +846,6 @@
             [e.watched ? 'Markeer als niet bekeken' : 'Markeer als bekeken', function () { setWatched([epItem(s, e)], !e.watched).then(function () { e.watched = !e.watched; e.progress = 0; paint(); }); }]]);
         };
         paint();
-      } else if ((d.cast || []).length) {
-        lower.style.cssText += ';top:640px;padding-left:80px';
-        lower.appendChild(h('h2', { style: 'font-size:28px;font-weight:600;margin-bottom:16px' }, 'Acteurs'));
-        var cr = h('div', { style: 'display:flex;gap:26px' });
-        d.cast.slice(0, 10).forEach(function (c) { cr.appendChild(h('div', { class: 'cast' }, '<div class="ph" style="' + bg(c.photo) + '"></div><b>' + esc(c.name) + '</b><span class="dim">' + esc(c.role) + '</span>')); });
-        lower.appendChild(cr);
       }
       focus(bt.firstChild);
     });
