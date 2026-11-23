@@ -17,7 +17,7 @@ import * as youtube from './youtube.js';
 import * as searches from './searches.js';
 import * as photos from './photos.js';
 import { pipe, target } from './proxy.js';
-import { pool } from './http.js';
+import { pool, json } from './http.js';
 import { status } from './status.js';
 
 const PORT = +process.env.PORT || 8484;
@@ -166,6 +166,17 @@ on('GET', '/api/info-find', 'device', ({ q }) => {
   const type = q.get('type') === 'tv' ? 'tv' : 'movie', title = String(q.get('title') || '').slice(0, 120), year = String(q.get('year') || '').replace(/\D/g, '').slice(0, 4);
   if (!title) return { id: 0 };
   return cached(`tmdb:find:${type}:${title.toLowerCase()}:${year}`, 7 * 86400e3, async () => ({ id: await tmdb.findId(type, title, year).catch(() => 0) || (year ? await tmdb.findId(type, title, '').catch(() => 0) : 0) }));
+});
+// Rechtstreeks naar de titel in een app: het Netflix-nummer komt uit Wikidata (op IMDb-nummer). Een maand bewaard.
+on('GET', '/api/deeplink', 'device', ({ q }) => {
+  const imdb = String(q.get('imdb') || ''); if (!/^tt\d{5,10}$/.test(imdb)) return {};
+  return cached(`deeplink:${imdb}`, 30 * 86400e3, async () => {
+    const sparql = `SELECT ?nf WHERE { ?i wdt:P345 "${imdb}" . OPTIONAL { ?i wdt:P1874 ?nf } } LIMIT 1`;
+    const r = await json('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(sparql), { headers: { Accept: 'application/sparql-results+json', 'User-Agent': 'tv-serverr/1.0 (thuis)' }, what: 'Wikidata' }).catch(() => null);
+    if (!r) throw new Error('Wikidata niet bereikbaar');   // niet bewaren, volgende keer opnieuw proberen
+    const b = r.results?.bindings?.[0] || {};
+    return { netflix: /^\d+$/.test(b.nf?.value || '') ? b.nf.value : '' };
+  });
 });
 on('GET', '/api/person/:id', 'device', ({ p }) => tmdb.person(+p.id));
 on('GET', '/api/plex/extras/:key', 'device', ({ p }) => plex.extras(+p.key));

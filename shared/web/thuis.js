@@ -948,7 +948,7 @@
       var bt = h('div', { class: 'ibtns' });
       // Kijken: één knop per bron, met het logo. Eerst je eigen diensten (dan hoef je niet via IPTV), dan Plex, dan IPTV.
       var srcBtn = function (logoHtml, label, fn) { return F(h('button', { class: 'btn src' }, logoHtml + '<span>' + esc(label) + '</span>'), fn); };
-      have.forEach(function (x) { bt.appendChild(srcBtn(x.logo ? '<i class="ic" style="' + bg(x.logo) + '"></i>' : '', x.name.replace(/^Amazon /, ''), function () { openApp(serviceMatch(x.key)); })); });
+      have.forEach(function (x) { bt.appendChild(srcBtn(x.logo ? '<i class="ic" style="' + bg(x.logo) + '"></i>' : '', x.name.replace(/^Amazon /, ''), function () { openInApp(x.key, d); })); });
       if (series && show) {
         var nx = nextUp(show);
         if (nx) bt.appendChild(srcBtn('<i class="ic ' + (a.plex ? 'plex' : 'iptv') + '"></i>', (a.plex ? 'Plex' : 'IPTV') + ' · ' + nx.label + ' S' + nx.s.season + ' afl. ' + nx.e.num, function () { playEp(nx.s, nx.e); }));
@@ -1081,6 +1081,18 @@
   }
   function setWatched(items, on) {
     return api('POST', '/api/watched', { profile: S.profile, items: items, on: on }).then(function () { S.ov = {}; }, function (e) { toast(e.message); throw e; });
+  }
+  // Meteen naar de titel in de app van de dienst. Netflix: rechtstreeks via het Netflix-nummer. Andere diensten: zoeken op de titel in die app.
+  function openInApp(key, d) {
+    if (!N) return toast('Apps openen kan alleen op de tv');
+    var m = serviceMatch(key).toLowerCase();
+    loadApps().then(function (apps) {
+      var app = apps.filter(function (x) { return x.pkg.toLowerCase().indexOf(m) >= 0 || x.label.toLowerCase().indexOf(m) >= 0; })[0];
+      if (!app) return toast('Deze app staat niet op dit apparaat');
+      var title = d.title || '';
+      if (key === 'netflix' && d.imdb) get('/api/deeplink?imdb=' + d.imdb).then(function (r) { N.openTitle(app.pkg, r.netflix ? 'netflix://title/' + r.netflix : '', title); }, function () { N.openTitle(app.pkg, '', title); });
+      else N.openTitle(app.pkg, '', title);
+    });
   }
   function serviceMatch(k) { var s = S.svcList.filter(function (x) { return x.key === k; })[0]; return s ? s.match : k; }
   // Opnames uit de filmbibliotheek ("Rondo - S08E15") per seizoen.
