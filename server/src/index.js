@@ -17,6 +17,7 @@ import * as youtube from './youtube.js';
 import * as searches from './searches.js';
 import * as photos from './photos.js';
 import * as saver from './saver.js';
+import * as fanart from './fanart.js';
 import { pipe, target } from './proxy.js';
 import { status } from './status.js';
 
@@ -160,7 +161,9 @@ on('GET', '/api/info/:type/:id', 'device', async ({ p }) => {
   const type = p.type === 'tv' ? 'tv' : 'movie', kind = type === 'tv' ? 'series' : 'movie';
   const d = await tmdb.details(type, +p.id), c = await catalog.items(kind).catch(() => null);
   const related = (d.related || []).map(x => { const o = c && c.byTmdb.get(x.tmdb); return o ? { ...x, sources: o.sources, plex: o.plex || null, vod: o.vod ? withVod(kind, o.vod) : null } : x; });
-  return { ...d, related };
+  // Series: fanart per seizoen (fanart.tv), als die er is.
+  const seasonArt = type === 'tv' ? await fanart.seasons(d.tvdb).catch(() => ({})) : {};
+  return { ...d, related, seasonArt };
 });
 // Titel zonder TMDB-nummer (sommige Plex- en IPTV-titels): op naam en jaar opzoeken, een week bewaard.
 on('GET', '/api/info-find', 'device', ({ q }) => {
