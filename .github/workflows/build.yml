@@ -2,7 +2,9 @@ name: APK bouwen
 
 on:
   push:
-    branches: [main]
+    branches: [main, thuis-1]
+    # Alleen een nieuwe Thuis als de app zelf verandert, niet bij wijzigingen aan tv-serverr.
+    paths: ['app/**', 'brug/**', 'shared/**', 'tizen/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml']
   workflow_dispatch:
 
 permissions:
@@ -65,12 +67,30 @@ jobs:
           name: thuis-apk
           path: thuis-*.apk
 
+      - name: Versienummer bepalen
+        run: |
+          read MAJOR BASE < app/versie.txt
+          if [ "$GITHUB_REF_NAME" = "main" ]; then V=$(printf "%d.%02d" $MAJOR $(( GITHUB_RUN_NUMBER - BASE > 0 ? GITHUB_RUN_NUMBER - BASE : 0 )));
+          else V="$MAJOR.00-test.$GITHUB_RUN_NUMBER"; fi
+          echo "VERSIE=$V" >> "$GITHUB_ENV"
+
       - name: Release "laatste" bijwerken
+        if: github.ref_name == 'main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete laatste --yes --cleanup-tag || true
           gh release create laatste "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk thuis-brug.apk thuis-samsung-ongesigneerd.wgt \
-            --title "Thuis ${GITHUB_RUN_NUMBER}" \
+            --title "Thuis $VERSIE" \
             --notes "Automatisch gebouwd uit ${GITHUB_SHA::7}." \
             --latest
+
+      - name: Testversie (release "test") bijwerken
+        if: github.ref_name != 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete test --yes --cleanup-tag || true
+          gh release create test thuis.apk --target "$GITHUB_SHA" --prerelease \
+            --title "Thuis $VERSIE (test)" \
+            --notes "Testversie uit tak ${GITHUB_REF_NAME}, ${GITHUB_SHA::7}. Niet voor gewoon gebruik."

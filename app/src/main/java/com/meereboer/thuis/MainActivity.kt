@@ -52,6 +52,17 @@ class MainActivity : Activity() {
                         WebResourceResponse(type, null, 200, "OK", mapOf("Cache-Control" to "max-age=3600"), r.body!!.byteStream())
                     } catch (_: Exception) { null }
                 }
+                // Plaatjes van tv-serverr (avatars, foto's, Plex-plaatjes): /srv/... gaat naar de server, met de sleutel van dit apparaat.
+                if (u.host == "appassets.androidplatform.net" && (u.path ?: "").startsWith("/srv/") && request.method == "GET") {
+                    return try {
+                        val path = u.encodedPath!!.removePrefix("/srv") + (u.encodedQuery?.let { "?$it" } ?: "")
+                        val r = Server.http.newCall(okhttp3.Request.Builder().url(Server.url(this@MainActivity) + path)
+                            .header("X-Thuis-Key", Server.key(this@MainActivity)).build()).execute()
+                        if (!r.isSuccessful) { r.close(); return WebResourceResponse("text/plain", "utf-8", 404, "Not Found", null, null) }
+                        val type = r.header("Content-Type", "image/jpeg")!!.substringBefore(";")
+                        WebResourceResponse(type, null, 200, "OK", mapOf("Cache-Control" to "max-age=3600"), r.body!!.byteStream())
+                    } catch (_: Exception) { null }
+                }
                 return loader.shouldInterceptRequest(u)
             }
         }

@@ -63,6 +63,8 @@ class PlayerActivity : Activity() {
     private lateinit var listTitle: TextView
     private lateinit var center: TextView
     private lateinit var root: FrameLayout
+    /** Gekoppeld aan tv-serverr? Dan komt alles via de server, anders rechtstreeks van Dispatcharr (oude manier). */
+    private val srv by lazy { Server.paired(this) }
     private lateinit var guide: GuideView
     private val epgCache = HashMap<Int, Pair<Long, List<Programme>>>()
     private val epgPool = Executors.newFixedThreadPool(6)
@@ -227,7 +229,7 @@ class PlayerActivity : Activity() {
                 if (!retried) {
                     retried = true
                     showCenter("Opnieuw proberen…")
-                    ui.postDelayed({ if (index >= 0) { val r = replay; if (r != null) startUrl(Xtream.timeshiftUrl(prefs, channels[index], r)) else startStream(channels[index]) } }, 1500)
+                    ui.postDelayed({ if (index >= 0) { val r = replay; if (r != null) startReplay(channels[index], r) else startStream(channels[index]) } }, 1500)
                 } else {
                     showCenter(if (replay != null) "Terugkijken lukt niet voor dit programma" else "Deze zender speelt niet\n${error.errorCodeName}")
                 }
@@ -263,7 +265,7 @@ class PlayerActivity : Activity() {
     }
 
     private fun loadChannels() {
-        if (!prefs.configured) {
+        if (!srv && !prefs.configured) {
             showCenter("Live tv is nog niet ingesteld.\nGa naar Instellingen op het startscherm.")
             ui.postDelayed({ finish() }, 3500)
             return
@@ -272,11 +274,12 @@ class PlayerActivity : Activity() {
         bg.execute {
             try {
                 val cat = intent.getStringExtra("categoryId")
-                val all = Xtream.load(prefs)
-                // Gestart vanuit een categorie: dan zap je binnen die categorie.
-                val smart = if (!cat.isNullOrEmpty()) Categorizer.build(this, all).firstOrNull { it.id == cat } else null
-                val list = smart?.channels?.ifEmpty { all } ?: all
-                val title = smart?.name ?: "Alle zenders"
+                val (title, list) = if (srv) LiveSrv.load(this, cat) else {
+                    val all = Xtream.load(prefs)
+                    // Gestart vanuit een categorie: dan zap je binnen die categorie.
+                    val smart = if (!cat.isNullOrEmpty()) Categorizer.build(this, all).firstOrNull { it.id == cat } else null
+                    (smart?.name ?: "Alle zenders") to (smart?.channels?.ifEmpty { all } ?: all)
+                }
                 ui.post {
                     channels = list
                     if (list.isEmpty()) { showCenter("Geen zenders gevonden"); return@post }
@@ -306,7 +309,16 @@ class PlayerActivity : Activity() {
         loadEpg(ch)
     }
 
-    private fun startStream(ch: Channel) = startUrl(Xtream.streamUrl(prefs, ch))
+    private fun startStream(ch: Channel) = startUrl(if (srv) LiveSrv.streamUrl(this, ch) else Xtream.streamUrl(prefs, ch))
+
+    /** Terugkijken starten; via de server is dat een netwerkvraag, dus op de achtergrond. */
+    private fun startReplay(ch: Channel, prog: Programme) {
+        if (!srv) { startUrl(Xtream.timeshiftUrl(prefs, ch, prog)); return }
+        bg.execute {
+            val u = try { LiveSrv.catchupUrl(this, ch, prog) } catch (e: Exception) { ui.post { flash("Terugkijken lukt niet: ${e.message}") }; null }
+            if (u != null) ui.post { startUrl(u) }
+        }
+    }
 
     private var audioApplied = false
 
@@ -362,7 +374,7 @@ class PlayerActivity : Activity() {
         val missing = channels.filter { it.id !in guide.epg }
         if (missing.isEmpty()) return
         bg.execute {
-            val tasks = missing.map { c -> java.util.concurrent.Callable { c.id to (try { Xtream.fullEpg(prefs, c) } catch (_: Exception) { emptyList() }) } }
+            val tasks = missing.map { c -> java.util.concurrent.Callable { c.id to (try { if (srv) LiveSrv.fullEpg(this, c) else Xtream.fullEpg(prefs, c) } catch (_: Exception) { emptyList() }) } }
             val got = epgPool.invokeAll(tasks).map { it.get() }
             ui.post {
                 val t = System.currentTimeMillis()
@@ -423,7 +435,7 @@ class PlayerActivity : Activity() {
         retried = false
         replay = prog
         val ch = channels[i]
-        startUrl(Xtream.timeshiftUrl(prefs, ch, prog))
+        startReplay(ch, prog)
         tvNum.text = ch.num.toString()
         tvName.text = ch.name
         tvNow.text = "↺ " + prog.title
@@ -455,7 +467,7 @@ class PlayerActivity : Activity() {
         nowProg = null
         progress.visibility = View.INVISIBLE
         bg.execute {
-            val epg = try { Xtream.shortEpg(prefs, ch.id, 2) } catch (_: Exception) { emptyList() }
+            val epg = try { if (srv) LiveSrv.shortEpg(this, ch.id) else Xtream.shortEpg(prefs, ch.id, 2) } catch (_: Exception) { emptyList() }
             ui.post {
                 if (index < 0 || channels[index].id != ch.id) return@post
                 val now = epg.getOrNull(0)

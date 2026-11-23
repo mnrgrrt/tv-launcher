@@ -4,6 +4,14 @@ plugins {
 }
 
 val runNumber = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+// Zichtbaar versienummer: "1.00", "1.01", ... Het interne nummer (versionCode) loopt altijd door,
+// anders weigert Android de update. versie.txt: "<hoofdversie> <runnummer van x.00>".
+val versie = file("versie.txt").readText().trim().split(Regex("\\s+"))
+val major = versie[0].toInt()
+val base = versie.getOrElse(1) { "0" }.toInt()
+val branch = System.getenv("GITHUB_REF_NAME") ?: "lokaal"
+val shownVersion = if (branch == "main") "%d.%02d".format(major, maxOf(0, runNumber - base))
+    else "%d.00-test.%d".format(major, runNumber)
 
 android {
     namespace = "com.meereboer.thuis"
@@ -14,7 +22,7 @@ android {
         minSdk = 24
         targetSdk = 34
         versionCode = runNumber
-        versionName = "0.1.$runNumber"
+        versionName = shownVersion
     }
 
     signingConfigs {

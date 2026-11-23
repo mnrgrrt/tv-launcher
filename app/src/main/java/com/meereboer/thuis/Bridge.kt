@@ -36,6 +36,36 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
 
     @JavascriptInterface fun isApp(): Boolean = true
 
+    // ---------- tv-serverr ----------
+    @JavascriptInterface fun srvInfo(): String = Server.info(act).toString()
+    @JavascriptInterface fun srvPair(id: Int, url: String, code: String, name: String) = async(id) { Server.pair(act, url, code, name) }
+    @JavascriptInterface fun srvUnpair() = Server.unpair(act)
+    @JavascriptInterface fun srvSetProfile(p: Int) = Server.setProfile(act, p)
+    /** Elke API-aanroep van het startscherm loopt hierlangs; de sleutel van het apparaat blijft in Android. */
+    @JavascriptInterface fun srv(id: Int, method: String, path: String, body: String) =
+        async(id) { Server.call(act, method, path, body.ifEmpty { null }) }
+    @JavascriptInterface fun srvUrl(): String = Server.url(act)
+    @JavascriptInterface fun appVersion(): String = try { act.packageManager.getPackageInfo(act.packageName, 0).versionName ?: "" } catch (_: Exception) { "" }
+
+    /** Android-instellingen openen: "all", "wifi", "bluetooth", "sound", "display", "apps", "home" (oorspronkelijk startscherm). */
+    @JavascriptInterface fun openSystem(what: String) {
+        act.runOnUiThread {
+            val action = when (what) {
+                "wifi" -> android.provider.Settings.ACTION_WIFI_SETTINGS
+                "bluetooth" -> android.provider.Settings.ACTION_BLUETOOTH_SETTINGS
+                "sound" -> android.provider.Settings.ACTION_SOUND_SETTINGS
+                "display" -> android.provider.Settings.ACTION_DISPLAY_SETTINGS
+                "apps" -> android.provider.Settings.ACTION_APPLICATION_SETTINGS
+                "home" -> android.provider.Settings.ACTION_HOME_SETTINGS
+                else -> android.provider.Settings.ACTION_SETTINGS
+            }
+            try { act.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (_: Exception) {
+                try { act.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
+            }
+        }
+    }
+
     @JavascriptInterface fun getSettings(): String = prefs.toJson().toString()
 
     @JavascriptInterface fun saveSettings(json: String) {
