@@ -103,14 +103,49 @@ export async function continueWatching(profile) {
   }
   // Wat Plex zelf als "verder kijken" heeft (dat is van het Plex-account van de server, dus van één persoon):
   // alleen bij Samen en bij profielen waar dat op de beheerpagina aan staat. Anders zien alle profielen hetzelfde.
-  const usesPlex = +profile === 1 || db.prepare('SELECT plex_user FROM profiles WHERE id = ?').get(+profile)?.plex_user === '1';
-  if (usesPlex) try {
+  if (usesPlex(profile)) try {
     (await plex.deck()).slice(0, 8).forEach(p => {
       if (seen.has('plex:' + p.key) || (p.show && seen.has('plex:' + p.show))) return;
       out.push({ ...p, kind: p.type === 'movie' && !EPISODE.test(p.title) ? 'movie' : 'series', key: 'plex:' + p.key, when: p.added, resume: true });
     });
   } catch {}
   return out.sort((a, b) => (b.when || 0) - (a.when || 0)).slice(0, 20);
+}
+
+/** Hoort het Plex-account van de server bij dit profiel? (Samen, en profielen waar dat in beheer aan staat.) */
+export const usesPlex = profile => +profile === 1 || db.prepare('SELECT plex_user FROM profiles WHERE id = ?').get(+profile)?.plex_user === '1';
+
+/** Gezien of niet gezien zetten. items = [{ key, seriesKey, kind, meta }]. Bij Plex ook in Plex, als het Plex-account van dit profiel is. */
+export function setWatched(profile, items, yes) {
+  const put = db.prepare(`INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)
+    ON CONFLICT(profile, key) DO UPDATE SET pos = 0, watched = excluded.watched, updated = excluded.updated, hidden = 0,
+      series_key = CASE WHEN excluded.series_key = '' THEN progress.series_key ELSE excluded.series_key END,
+      meta = CASE WHEN excluded.meta = '{}' THEN progress.meta ELSE excluded.meta END`);
+  for (const it of (items || []).slice(0, 500)) {
+    const key = String(it.key || ''); if (!/^(plex|movie|series):\d+$/.test(key)) continue;
+    put.run(+profile, key, String(it.seriesKey || ''), String(it.kind || ''), yes ? 1 : 0, JSON.stringify(it.meta || {}).slice(0, 4000), Date.now());
+    if (key.startsWith('plex:') && usesPlex(profile)) plex.setWatched(key.slice(5), yes);
+  }
+}
+export const isWatched = (profile, key) => !!db.prepare('SELECT watched FROM progress WHERE profile = ? AND key = ?').get(+profile, key)?.watched;
+/** Wat dit profiel heeft gezien, nieuwste eerst. */
+export const watchedList = profile => db.prepare('SELECT key, kind, meta, updated FROM progress WHERE profile = ? AND watched = 1 ORDER BY updated DESC LIMIT 300')
+  .all(+profile).map(r => ({ ...JSON.parse(r.meta || '{}'), key: r.key, kind: r.kind, when: r.updated }));
+
+/** Seizoenen en afleveringen van een serie, met gezien en kijkstand van dit profiel. src = { plex } of { vod }. */
+export async function showState(profile, src) {
+  const mine = new Map(db.prepare("SELECT key, pos, dur, watched FROM progress WHERE profile = ? AND (key LIKE 'plex:%' OR key LIKE 'series:%')").all(+profile).map(r => [r.key, r]));
+  const own = usesPlex(profile);
+  const d = src.plex ? await plex.show(+src.plex) : await vod.info('series', +src.vod);
+  for (const s of d.seasons) for (const e of s.episodes) {
+    const key = src.plex ? 'plex:' + e.key : 'series:' + e.id, r = mine.get(key);
+    e.skey = key;
+    if (src.vod) e.url = sign(`/stream/series/${+e.id}.${/^[a-z0-9]{2,4}$/.test(e.ext) ? e.ext : 'mkv'}`);
+    const plexWatched = src.plex && own && e.watched, plexProg = src.plex && own ? e.progress : 0;
+    e.watched = !!(r ? r.watched : plexWatched);
+    e.progress = r ? (r.watched ? 0 : r.dur ? r.pos / r.dur : 0) : plexProg;
+  }
+  return d;
 }
 
 /** Uit Verder kijken halen (de hele serie). Bij Plex ook uit "Verder kijken" van Plex zelf. */
@@ -126,7 +161,9 @@ export async function nextEpisode(profile, seriesKey) {
   const id = seriesKey.slice('series:'.length);
   const info = await vod.info('series', id);
   const done = new Set(seriesState(profile, seriesKey).filter(r => r.watched).map(r => r.key));
-  for (const s of info.seasons) for (const e of s.episodes) {
+  // De eerste na de laatst geziene (zoals de infopagina); overgeslagen afleveringen tellen niet.
+  const all = info.seasons.flatMap(s => s.episodes.map(e => ({ s, e }))), last = all.findLastIndex(x => done.has('series:' + x.e.id));
+  for (const { s, e } of all.slice(last + 1)) {
     const key = 'series:' + e.id;
     if (!done.has(key)) return { key, kind: 'series', id: e.id, ext: e.ext, seriesId: id, season: +s.season, episode: e.num,
       sub: `Volgende: S${s.season} · afl. ${e.num}`, img: e.img || info.backdrop, progress: 0 };

@@ -121,7 +121,8 @@ export async function overview(kind, services, prefs) {
   tile('src:iptv', 'Nieuw bij IPTV', own.filter(o => o.sources.includes('iptv')));
   const perCat = {}; own.forEach(o => (o.cats || []).forEach(x => { (perCat[x] = perCat[x] || []).push(o); }));
   c.cats.filter(x => (perCat[x.id] || []).length >= 5).forEach(x => tile('cat:' + x.id, x.name, perCat[x.id]));
-  return { total: list.length, newest: own.filter(o => good(o, prefs.min)).slice(0, 30), genres, collections: coll };
+  // Opnames (afleveringen in de filmbibliotheek, zoals Rondo) in een eigen rij, niet tussen de nieuwe series.
+  return { total: list.length, newest: own.filter(o => !o.plexEps && good(o, prefs.min)).slice(0, 30), recordings: own.filter(o => o.plexEps), genres, collections: coll };
 }
 
 /** Bladeren. f = { genre, src ('plex', 'iptv' of een dienst), cat, sort ('beste', 'nieuw', 'az', 'jaar'), alles (1 = ook matige titels), offset }. */

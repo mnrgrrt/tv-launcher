@@ -250,12 +250,24 @@
       '<div class="t1">' + esc(title) + '</div><div class="t2">' + esc(sub) + '</div>';
     return F(el, ok);
   }
-  // Verder kijken: OK = verder, ingedrukt houden = menu (ook weghalen).
+  // Verder kijken: OK opent een keuzevenster (verder, vanaf begin, bekeken, naar de serie of film, weghalen).
   function contTile(c, after, focus) {
     return wide({ title: c.title, sub: c.next ? c.sub : [c.sub, c.left > 0 ? 'nog ' + c.left + ' min' : ''].filter(Boolean).join(' · '), img: c.img || c.art || c.thumb, progress: c.progress,
-      badge: c.next ? 'Volgende' : '', ok: function () { resume(c); }, focus: focus, long: function () {
-        menu(c.title, [['Verder kijken', function () { resume(c); }], ['Uit Verder kijken halen', function () { hideCont(c).then(after); }]]);
-      } });
+      badge: c.next ? 'Volgende' : '', ok: function () { contDialog(c, after); }, focus: focus });
+  }
+  function contDialog(c, after) {
+    var items = [[c.next ? '▶ ' + c.sub : '▶ Verder kijken' + (c.left > 0 ? ' (nog ' + c.left + ' min)' : ''), function () { resume(c); }]];
+    if (!c.next) items.push(['Vanaf het begin', function () { S.fromStart = true; resume(c); }]);
+    items.push(['Markeer als bekeken', function () {
+      setWatched([{ key: c.key, seriesKey: c.seriesId ? 'series:' + c.seriesId : '', kind: c.kind === 'movie' ? 'movie' : 'series', meta: { title: c.title, sub: c.sub, img: c.img || c.art || '', tmdb: c.tmdb } }], true)
+        .then(function () { toast('Op bekeken gezet'); after && after(); });
+    }]);
+    var isMovie = c.kind === 'movie', plexKey = String(c.key || '').indexOf('plex:') === 0 ? String(c.key).slice(5) : '';
+    var info = isMovie ? { type: 'movie', tmdb: c.tmdb || 0, title: c.title, plex: plexKey ? { key: plexKey } : null, vod: !plexKey && c.id ? { id: c.id } : null, vodKind: 'movie' }
+      : { type: 'tv', tmdb: 0, title: c.title, plex: c.show ? { key: c.show } : null, vod: c.seriesId ? { id: c.seriesId } : null, vodKind: 'series' };
+    if (info.tmdb || info.plex || info.vod) items.push([isMovie ? 'Naar de film' : 'Naar de serie', function () { go('info', info); }]);
+    items.push(['Uit Verder kijken halen', function () { hideCont(c).then(after); }]);
+    menu(c.title, items);
   }
   function hideCont(c) { return api('POST', '/api/continue/hide', { profile: S.profile, key: c.key }).then(function () { toast('Weggehaald uit Verder kijken'); }, function (e) { toast(e.message); }); }
   function menu(title, items) {
@@ -271,7 +283,7 @@
   function loading(text) { return h('div', { class: 'spinner' }, esc(text || 'Laden…')); }
 
   // ---------- afspelen ----------
-  function position(key) { return get('/api/position?profile=' + S.profile + '&key=' + encodeURIComponent(key)).then(function (r) { return r.pos || 0; }, function () { return 0; }); }
+  function position(key) { if (S.fromStart) { S.fromStart = false; return Promise.resolve(0); } return get('/api/position?profile=' + S.profile + '&key=' + encodeURIComponent(key)).then(function (r) { return r.pos || 0; }, function () { return 0; }); }
   function start(item) {
     item.server = true; item.profile = S.profile;
     if (N) N.playItem(JSON.stringify(item)); else toast('Afspelen kan alleen op de tv');
@@ -653,7 +665,7 @@
   function library(kind) {
     var el = h('div', { class: 'screen' }); el.appendChild(topbar(kind === 'movie' ? 'films' : 'series'));
     var sc = h('div', { class: 'scroll' }), inner = h('div', { class: 'scroll-inner' }); sc.appendChild(inner); el.appendChild(sc);
-    var slots = {}; ['cont', 'newest', 'genres', 'coll', 'svc'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
+    var slots = {}; ['cont', 'rec', 'newest', 'genres', 'coll', 'svc'].forEach(function (k) { slots[k] = h('div'); inner.appendChild(slots[k]); });
     slots.cont.className = 'first'; slots.newest.appendChild(loading());
     var again = function () { go(kind === 'movie' ? 'films' : 'series', {}, true); };
     get('/api/continue?profile=' + S.profile).then(function (list) {
@@ -666,6 +678,7 @@
         S.ov[kind] = o; slots.newest.innerHTML = '';
         if (!o.total) { slots.newest.innerHTML = '<div class="empty">Nog geen ' + (kind === 'movie' ? 'films' : 'series') + ' gevonden.</div>'; return; }
         slots.newest.appendChild(rowSection('Nieuw', o.newest.map(function (m) { return titleTile(m, kind); })));
+        if ((o.recordings || []).length) slots.rec.appendChild(rowSection('Opnames', o.recordings.map(function (m) { return titleTile(m, kind); })));
         slots.genres.appendChild(rowSection('Genres', o.genres.map(function (g) {
           return mosaicTile(g.name, g.count + ' titels', g.posters, function () { go('grid', { kind: kind, genre: g.name, title: g.name }); });
         })));
@@ -740,42 +753,96 @@
   }
 
   // ---------- infopagina ----------
+  // Boven: poster, gegevens, waar je het kunt zien en de knoppen. Bij een serie daaronder meteen de seizoenen en afleveringen.
   screens.info = function (a) {
     var el = h('div', { class: 'screen' });
     var bgEl = h('div', { class: 'info-bg' }); el.appendChild(bgEl);
-    var top = h('div', { style: 'position:absolute;left:80px;top:100px;display:flex;gap:48px' });
-    var post = h('div', { style: 'width:300px;height:450px;border-radius:16px;flex:none;background:#151922 center/cover' });
-    var txt = h('div', { style: 'width:1000px;display:flex;flex-direction:column;gap:18px' }, '<h1 style="font-size:68px;line-height:1">' + esc(a.title) + '</h1>');
+    var top = h('div', { style: 'position:absolute;left:80px;top:90px;display:flex;gap:48px' });
+    var post = h('div', { style: 'width:280px;height:420px;border-radius:16px;flex:none;background:#151922 center/cover' });
+    var txt = h('div', { style: 'width:1100px;display:flex;flex-direction:column;gap:16px' }, '<h1 style="font-size:64px;line-height:1">' + esc(a.title) + '</h1>');
     top.appendChild(post); top.appendChild(txt); el.appendChild(top);
-    var lower = h('div', { style: 'position:absolute;left:80px;right:80px;top:640px' }); el.appendChild(lower);
+    var lower = h('div', { style: 'position:absolute;left:0;right:0;top:560px' }); el.appendChild(lower);
+    var series = a.type === 'tv';
     var src = a.plex ? 'plex:' + a.plex.key : a.vod ? (a.vodKind === 'movie' ? 'movie:' : 'series:') + a.vod.id : '';
-    Promise.all([a.tmdb ? get('/api/info/' + a.type + '/' + a.tmdb).catch(function () { return null; }) : Promise.resolve(null),
-      get('/api/mylist?profile=' + S.profile).catch(function () { return []; })]).then(function (r) {
-      var d = r[0] || {}, inList = r[1].some(function (x) { return x.key === (src || 'tmdb:' + a.type + a.tmdb); });
-      bgEl.style.cssText = bg(d.backdrop || (a.plex && a.plex.art) || (a.vod && a.vod.backdrop));
+    var showQ = series && (a.plex || a.vod) ? get('/api/show?profile=' + S.profile + (a.plex ? '&plex=' + a.plex.key : '&vod=' + a.vod.id)).catch(function () { return null; }) : Promise.resolve(null);
+    showQ.then(function (show) {
+      var tmdbId = a.tmdb || (show && show.tmdb) || 0;
+      return Promise.all([tmdbId ? get('/api/info/' + a.type + '/' + tmdbId).catch(function () { return null; }) : null,
+        get('/api/mylist?profile=' + S.profile).catch(function () { return []; }), myServices(),
+        !series && src ? get('/api/watched?profile=' + S.profile + '&key=' + encodeURIComponent(src)).catch(function () { return {}; }) : {}, show]);
+    }).then(function (r) {
+      var d = r[0] || {}, mine = r[2], seen = !!r[3].on, show = r[4];
+      var inList = r[1].some(function (x) { return x.key === (src || 'tmdb:' + a.type + a.tmdb); });
+      bgEl.style.cssText = bg(d.backdrop || (show && show.backdrop) || (a.plex && a.plex.art) || (a.vod && a.vod.backdrop));
       post.style.backgroundImage = "url('" + img(d.poster || (a.plex && a.plex.thumb) || (a.vod && a.vod.icon)) + "')";
-      var meta = [d.year || (a.vod && a.vod.year), d.seasons && d.seasons.length ? d.seasons.length + ' seizoen' + (d.seasons.length > 1 ? 'en' : '') : d.runtime ? d.runtime + ' min' : '',
-        d.age ? '<span class="tag">' + esc(d.age) + '</span>' : '', d.rating ? '★ ' + d.rating.toFixed(1) : '', (d.genres || []).slice(0, 3).join(' · ')].filter(Boolean);
-      var where = [a.plex ? 'Plex' : '', a.vod ? 'IPTV' : ''].concat((d.services || []).map(serviceName)).filter(Boolean);
-      txt.innerHTML = '<h1 style="font-size:68px;line-height:1">' + esc(d.title || a.title) + '</h1><div class="meta">' + meta.map(function (m) { return '<span>' + (m.indexOf('<span') === 0 ? m : esc(m)) + '</span>'; }).join('') + '</div>' +
-        '<p class="desc" style="-webkit-line-clamp:5">' + esc(d.overview || (a.plex && a.plex.summary) || (a.vod && a.vod.plot) || '') + '</p>' +
-        '<div class="dim" style="font-size:20px">' + (d.director ? 'Makers: ' + esc(d.director) + ' · ' : '') + (where.length ? 'Te zien via: <span style="color:#fff">' + esc(where.join(', ')) + '</span>' : 'Nog niet te zien') + '</div>';
-      var bt = h('div', { style: 'display:flex;gap:16px;margin-top:10px' });
-      var series = a.type === 'tv';
-      if (a.plex && !series) bt.appendChild(F(h('button', { class: 'btn' }, '▶&nbsp; Afspelen'), function () { playPlex(a.plex.key, a.plex); }));
+      var nSeasons = show ? show.seasons.length : (d.seasons || []).length;
+      var imdb = d.ratings && d.ratings.imdb ? 'IMDb ' + String(d.ratings.imdb).replace('.', ',') : d.rating ? '★ ' + d.rating.toFixed(1).replace('.', ',') : '';
+      var meta = [d.year || (a.vod && a.vod.year), nSeasons ? nSeasons + ' seizoen' + (nSeasons > 1 ? 'en' : '') : d.runtime ? d.runtime + ' min' : '',
+        d.age ? '<span class="tag">' + esc(d.age) + '</span>' : '', imdb, (d.genres || []).slice(0, 3).join(' · ')].filter(Boolean);
+      // Waar te zien: eerst de diensten die je hebt, dan Plex en IPTV. Diensten die je niet hebt staan er grijs bij.
+      var svc = d.services || [], have = svc.filter(function (x) { return x.key && mine.indexOf(x.key) >= 0; }), other = svc.filter(function (x) { return have.indexOf(x) < 0; });
+      var chip = function (x, dim) { return '<span class="where' + (dim ? ' dim' : '') + '">' + (x.logo ? '<i style="' + bg(x.logo) + '"></i>' : '') + esc(x.name) + '</span>'; };
+      var where = have.map(function (x) { return chip(x); }).concat(a.plex ? [chip({ name: 'Plex' })] : [], a.vod ? [chip({ name: 'IPTV' })] : []);
+      txt.innerHTML = '<h1 style="font-size:64px;line-height:1">' + esc(d.title || a.title) + '</h1><div class="meta">' + meta.map(function (m) { return '<span>' + (m.indexOf('<span') === 0 ? m : esc(m)) + '</span>'; }).join('') + '</div>' +
+        '<p class="desc" style="-webkit-line-clamp:' + (series ? 3 : 5) + '">' + esc(d.overview || (show && show.plot) || (a.plex && a.plex.summary) || (a.vod && a.vod.plot) || '') + '</p>' +
+        '<div class="wherebox">' + (where.length ? '<span class="dim">Te zien via</span>' + where.join('') : '<span class="dim">Nog niet te zien</span>') +
+        (other.length ? '<span class="dim" style="margin-left:14px">Ook op</span>' + other.slice(0, 4).map(function (x) { return chip(x, true); }).join('') : '') + '</div>';
+      var bt = h('div', { style: 'display:flex;gap:16px;margin-top:6px' });
+      var openSvc = have[0] && F(h('button', { class: 'btn' }, 'Openen in ' + esc(have[0].name)), function () { openApp(serviceMatch(have[0].key)); });
+      if (series && show) {
+        var nx = nextUp(show);
+        if (nx) bt.appendChild(F(h('button', { class: 'btn' }, '▶&nbsp; ' + esc(nx.label + ': S' + nx.s.season + ' afl. ' + nx.e.num)), function () { playEp(nx.s, nx.e); }));
+      } else if (a.plex && !series) bt.appendChild(F(h('button', { class: 'btn' }, '▶&nbsp; Afspelen'), function () { playPlex(a.plex.key, a.plex); }));
       else if (a.vod && !series) bt.appendChild(F(h('button', { class: 'btn' }, '▶&nbsp; Afspelen'), function () { playMovie(a.vod); }));
-      if (series && (a.plex || a.vod)) bt.appendChild(F(h('button', { class: 'btn' }, '▶&nbsp; Afleveringen'), function () { go('episodes', { title: d.title || a.title, plex: a.plex, vod: a.vod, tmdb: a.tmdb }); }));
-      if (!a.plex && !a.vod && (d.services || []).length) {
-        var s = d.services[0];
-        bt.appendChild(F(h('button', { class: 'btn' }, 'Openen in ' + esc(serviceName(s))), function () { openApp(s); }));
-      }
+      // Staat het op een dienst die je hebt, dan die knop vooraan: dan hoef je niet via IPTV.
+      if (openSvc) bt.insertBefore(openSvc, bt.firstChild);
+      if (!series && src) bt.appendChild(F(h('button', { class: 'btn' }, seen ? '✓ Bekeken' : 'Markeer als bekeken'), function () {
+        var b = this; seen = !seen;
+        setWatched([{ key: src, kind: 'movie', meta: { title: d.title || a.title, img: d.backdrop || '', tmdb: a.tmdb, type: 'movie' } }], seen).then(function () { b.innerHTML = seen ? '✓ Bekeken' : 'Markeer als bekeken'; });
+      }));
       bt.appendChild(F(h('button', { class: 'btn' }, inList ? '✓ Mijn lijst' : '+ Mijn lijst'), function () {
-        var me2 = this; api('POST', '/api/mylist', { profile: S.profile, key: src || 'tmdb:' + a.type + a.tmdb, meta: { title: d.title || a.title, img: d.poster || '', type: a.type, tmdb: a.tmdb, plex: a.plex || null, vod: a.vod || null, vodKind: a.vodKind || '' } })
+        api('POST', '/api/mylist', { profile: S.profile, key: src || 'tmdb:' + a.type + a.tmdb, meta: { title: d.title || a.title, img: d.poster || '', type: a.type, tmdb: a.tmdb, plex: a.plex || null, vod: a.vod || null, vodKind: a.vodKind || '' } })
           .then(function (r2) { cur.innerHTML = r2.inList ? '✓ Mijn lijst' : '+ Mijn lijst'; toast(r2.inList ? 'Op je lijst gezet' : 'Van je lijst gehaald'); });
       }));
       if (d.trailer) bt.appendChild(F(h('button', { class: 'btn' }, 'Trailer'), function () { if (N) N.openUrl('https://www.youtube.com/watch?v=' + d.trailer); }));
       txt.appendChild(bt);
-      if ((d.cast || []).length) {
+
+      // Afspelen van een aflevering (Plex of IPTV).
+      function playEp(s, e) {
+        if (a.plex) playPlex(e.key, { title: d.title || a.title, sub: 'S' + s.season + ' · afl. ' + e.num, img: e.img });
+        else playEpisode({ id: a.vod.id, name: d.title || a.title, tmdb: a.tmdb, backdrop: show.backdrop, icon: a.vod.icon }, s.season, e);
+      }
+      function epItem(s, e) { return { key: e.skey, seriesKey: a.vod ? 'series:' + a.vod.id : '', kind: 'series', meta: { title: d.title || a.title, sub: 'S' + s.season + ' · afl. ' + e.num, img: e.img || '', tmdb: a.tmdb } }; }
+      if (series && show && show.seasons.length) {
+        var st = a.st || (a.st = { season: Math.max(0, show.seasons.indexOf((nextUp(show) || {}).s)) });
+        var pills = h('div', { class: 'seasons' }, '<span class="dim">Seizoen</span>'), row = h('div');
+        show.seasons.forEach(function (s, i) {
+          var allSeen = s.episodes.every(function (e) { return e.watched; });
+          pills.appendChild(F(h('button', { class: 'pill' + (i === st.season ? ' on' : '') }, esc(s.season) + (allSeen ? ' ✓' : '')), function () { st.season = i; paint(); }, { group: 'seasons' }));
+        });
+        pills.appendChild(F(h('button', { class: 'pill' }, 'Seizoen bekeken'), function () {
+          var s = show.seasons[st.season], on = !s.episodes.every(function (e) { return e.watched; });
+          setWatched(s.episodes.map(function (e) { return epItem(s, e); }), on).then(function () { s.episodes.forEach(function (e) { e.watched = on; e.progress = 0; }); paint(); toast(on ? 'Seizoen ' + s.season + ' op bekeken gezet' : 'Seizoen ' + s.season + ' weer op niet bekeken'); });
+        }, { group: 'seasons' }));
+        lower.appendChild(pills); lower.appendChild(row);
+        var paint = function () {
+          [].forEach.call(pills.querySelectorAll('.pill'), function (p, i) { p.classList.toggle('on', i === st.season); });
+          var s = show.seasons[st.season], keep = cur && row.contains(cur) ? [].indexOf.call(cur.parentNode.children, cur) : -1;
+          row.innerHTML = '';
+          row.appendChild(rowSection(s.episodes.length + ' afleveringen', s.episodes.map(function (e) {
+            return wide({ title: e.num + '. ' + (e.title || 'Aflevering ' + e.num), sub: [e.dur ? Math.round(e.dur / 60) + ' min' : '', e.watched ? '✓ bekeken' : e.progress > 0.03 ? 'bezig' : ''].filter(Boolean).join(' · '),
+              img: e.img || show.backdrop, progress: e.watched ? 0 : e.progress, badge: e.watched ? '✓' : '', ok: function () { playEp(s, e); },
+              long: function () { epMenu(s, e); } });
+          })));
+          if (keep >= 0) { var it = row.querySelectorAll('.row-item')[keep]; if (it) focus(it); }
+        };
+        var epMenu = function (s, e) {
+          menu('S' + s.season + ' afl. ' + e.num, [['Afspelen', function () { playEp(s, e); }], ['Vanaf het begin', function () { S.fromStart = true; playEp(s, e); }],
+            [e.watched ? 'Markeer als niet bekeken' : 'Markeer als bekeken', function () { setWatched([epItem(s, e)], !e.watched).then(function () { e.watched = !e.watched; e.progress = 0; paint(); }); }]]);
+        };
+        paint();
+      } else if ((d.cast || []).length) {
+        lower.style.cssText += ';top:640px;padding-left:80px';
         lower.appendChild(h('h2', { style: 'font-size:28px;font-weight:600;margin-bottom:16px' }, 'Acteurs'));
         var cr = h('div', { style: 'display:flex;gap:26px' });
         d.cast.slice(0, 10).forEach(function (c) { cr.appendChild(h('div', { class: 'cast' }, '<div class="ph" style="' + bg(c.photo) + '"></div><b>' + esc(c.name) + '</b><span class="dim">' + esc(c.role) + '</span>')); });
@@ -785,33 +852,43 @@
     });
     return el;
   };
+  // Wat er nu aan de beurt is: een aflevering die half gekeken is, anders de eerste na de laatst geziene.
+  function nextUp(show) {
+    var all = []; show.seasons.forEach(function (s) { s.episodes.forEach(function (e) { all.push({ s: s, e: e }); }); });
+    if (!all.length) return null;
+    var busy = all.filter(function (x) { return !x.e.watched && x.e.progress > 0.03; })[0];
+    if (busy) return { s: busy.s, e: busy.e, label: 'Verder' };
+    var last = -1; all.forEach(function (x, i) { if (x.e.watched) last = i; });
+    if (last < 0) return { s: all[0].s, e: all[0].e, label: 'Begin' };
+    if (last + 1 < all.length) return { s: all[last + 1].s, e: all[last + 1].e, label: 'Volgende' };
+    return { s: all[0].s, e: all[0].e, label: 'Opnieuw' };
+  }
+  function setWatched(items, on) {
+    return api('POST', '/api/watched', { profile: S.profile, items: items, on: on }).then(function () { S.ov = {}; }, function (e) { toast(e.message); throw e; });
+  }
+  function serviceMatch(k) { var s = S.svcList.filter(function (x) { return x.key === k; })[0]; return s ? s.match : k; }
   // Opnames uit de filmbibliotheek ("Rondo - S08E15") per seizoen.
   function groupEps(eps) {
     var by = {}; eps.forEach(function (e) { (by[e.season] = by[e.season] || []).push({ key: e.key, num: e.num, title: 'Aflevering ' + e.num, img: e.img, progress: e.progress }); });
     return Object.keys(by).sort(function (x, y) { return x - y; }).map(function (k) { return { season: k, episodes: by[k] }; });
   }
-  screens.episodes = function (a) {
+  screens.episodes = function (a) {   // alleen nog voor opnames; echte series staan op de infopagina
     var el = h('div', { class: 'screen' });
     el.appendChild(h('div', { style: 'position:absolute;left:80px;top:50px' }, '<h1 style="font-size:44px">' + esc(a.title) + '</h1>'));
     var seasonsBox = h('div', { style: 'position:absolute;left:80px;right:80px;top:130px;display:flex;gap:10px' });
     var list = h('div', { class: 'main', style: 'left:80px;top:220px' });
     el.appendChild(seasonsBox); el.appendChild(list);
-    var load = a.plexEps ? Promise.resolve({ seasons: groupEps(a.plexEps) }) : a.plex ? get('/api/plex/show/' + a.plex.key) : get('/api/vod/series/info/' + a.vod.id);
-    load.then(function (d) {
-      var st = a.st || (a.st = { season: 0 });
-      var seasons = d.seasons || [];
-      seasons.forEach(function (s, i) { seasonsBox.appendChild(F(h('button', { class: 'pill' + (i === st.season ? ' on' : '') }, 'Seizoen ' + esc(s.season)), function () { st.season = i; go('episodes', a, true); }, { group: 'seasons' })); });
-      var s = seasons[st.season]; if (!s) { list.innerHTML = '<div class="empty" style="padding:0">Geen afleveringen gevonden</div>'; return; }
-      var inner = h('div', { class: 'scroll-inner', style: 'display:flex;flex-direction:column;gap:10px' }); list.appendChild(inner);
-      s.episodes.forEach(function (ep) {
-        var done = ep.watched ? ' · gezien' : ep.progress > 0.05 ? ' · bezig' : '';
-        inner.appendChild(F(h('button', { class: 'listrow' }, '<span><b>' + ep.num + '.</b> ' + esc(ep.title || 'Aflevering ' + ep.num) + '</span><span class="dim">' + (ep.dur ? Math.round(ep.dur / 60) + ' min' : '') + done + '</span>'), function () {
-          if (a.plex || a.plexEps) playPlex(ep.key, { title: a.title, sub: 'S' + s.season + ' · afl. ' + ep.num, img: ep.img });
-          else playEpisode({ id: a.vod.id, name: a.title, tmdb: a.tmdb, backdrop: d.backdrop, icon: a.vod.icon }, s.season, ep);
-        }));
-      });
-      focus(inner.firstChild);
-    }).catch(function (e) { list.innerHTML = '<div class="empty" style="padding:0">' + esc(e.message) + '</div>'; });
+    var st = a.st || (a.st = { season: 0 }), seasons = groupEps(a.plexEps || []);
+    seasons.forEach(function (s, i) { seasonsBox.appendChild(F(h('button', { class: 'pill' + (i === st.season ? ' on' : '') }, 'Seizoen ' + esc(s.season)), function () { st.season = i; go('episodes', a, true); }, { group: 'seasons' })); });
+    var s = seasons[st.season]; if (!s) { list.innerHTML = '<div class="empty" style="padding:0">Geen afleveringen gevonden</div>'; return el; }
+    var inner = h('div', { class: 'scroll-inner', style: 'display:flex;flex-direction:column;gap:10px' }); list.appendChild(inner);
+    s.episodes.forEach(function (ep) {
+      inner.appendChild(F(h('button', { class: 'listrow' }, '<span><b>' + ep.num + '.</b> ' + esc(ep.title) + '</span><span class="dim">' + (ep.progress > 0.05 ? 'bezig' : '') + '</span>'), function () {
+        playPlex(ep.key, { title: a.title, sub: 'S' + s.season + ' · afl. ' + ep.num, img: ep.img });
+      }, { long: function () { menu('S' + s.season + ' afl. ' + ep.num, [['Vanaf het begin', function () { S.fromStart = true; playPlex(ep.key, { title: a.title, sub: 'S' + s.season + ' · afl. ' + ep.num, img: ep.img }); }],
+        ['Markeer als bekeken', function () { setWatched([{ key: 'plex:' + ep.key, kind: 'movie', meta: { title: a.title, sub: 'S' + s.season + ' · afl. ' + ep.num, img: ep.img } }], true).then(function () { toast('Op bekeken gezet'); }); }]]); } }));
+    });
+    setTimeout(function () { focus(inner.firstChild); }, 0);
     return el;
   };
 
@@ -946,7 +1023,7 @@
     var el = h('div', { class: 'screen' }), p = me(), tab = a.tab || 'list';
     var side = h('div', { class: 'side' });
     side.appendChild(h('div', { style: 'display:flex;flex-direction:column;align-items:center;gap:14px;padding:10px 0 26px' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '" style="width:170px;height:170px;border-radius:50%;object-fit:cover"><h1 style="font-size:42px">' + esc(p.name) + '</h1>'));
-    [['list', 'Mijn lijst'], ['cont', 'Verder kijken'], ['svc', 'Mijn diensten'], ['skip', 'Genres overslaan'], ['avatar', 'Avatar kiezen'], ['prefs', 'Voorkeuren'], ['switch', 'Wissel van profiel']].forEach(function (t) {
+    [['list', 'Mijn lijst'], ['cont', 'Verder kijken'], ['seen', 'Bekeken'], ['svc', 'Mijn diensten'], ['skip', 'Genres overslaan'], ['avatar', 'Avatar kiezen'], ['prefs', 'Voorkeuren'], ['switch', 'Wissel van profiel']].forEach(function (t) {
       side.appendChild(F(h('button', { class: 'listrow' + (t[0] === tab ? ' on' : '') }, esc(t[1])), function () {
         if (t[0] === 'switch') return whoDialog();
         a.tab = t[0]; go('profile', a, true);
@@ -971,6 +1048,19 @@
         l.forEach(function (c) {
           box.appendChild(F(h('button', { class: 'listrow' }, '<span><b>' + esc(c.title) + '</b> <span class="dim">' + esc(c.sub || '') + '</span></span><span class="dim">Weghalen</span>'), function () {
             hideCont(c).then(function () { a._focus = null; go('profile', a, true); });
+          }));
+        });
+        focus(box.firstChild);
+      });
+    } else if (tab === 'seen') {
+      main.appendChild(h('h2', { style: 'font-size:36px' }, 'Bekeken'));
+      main.appendChild(h('div', { class: 'dim', style: 'font-size:20px;margin-bottom:10px' }, 'Wat jij hebt gezien, nieuwste bovenaan. OK zet iets terug op niet bekeken.'));
+      get('/api/watched?profile=' + S.profile).then(function (l) {
+        if (!l.length) { main.appendChild(h('div', { class: 'dim', style: 'font-size:22px' }, 'Nog niets. Kijk je iets uit, of markeer je het als bekeken, dan komt het hier.')); return; }
+        var box = h('div', { class: 'scroll-inner', style: 'display:flex;flex-direction:column;gap:10px' }); main.appendChild(box);
+        l.forEach(function (c) {
+          box.appendChild(F(h('button', { class: 'listrow' }, '<span><b>' + esc(c.title || '') + '</b> <span class="dim">' + esc(c.sub || '') + '</span></span><span class="dim">' + esc(dayName(c.when)) + '</span>'), function () {
+            menu(c.title || '', [['Markeer als niet bekeken', function () { setWatched([{ key: c.key }], false).then(function () { a._focus = null; go('profile', a, true); }); }]]);
           }));
         });
         focus(box.firstChild);

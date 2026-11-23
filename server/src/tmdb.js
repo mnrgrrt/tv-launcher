@@ -135,8 +135,8 @@ export async function search(q) {
 /** Alles voor de informatiepagina: details, acteurs, trailer, vergelijkbaar, diensten. */
 export function details(type, id) {
   return cached(`tmdb:d:${type}:${id}`, 24 * 3600e3, async () => {
-    const d = await tmdb(`/${type}/${id}?language=nl-NL&append_to_response=credits,videos,similar,release_dates,content_ratings,external_ids&include_video_language=nl,en`);
-    const tv = type === 'tv';
+    const d = await tmdb(`/${type}/${id}?language=nl-NL&append_to_response=credits,videos,similar,release_dates,content_ratings,external_ids,watch/providers&include_video_language=nl,en`);
+    const tv = type === 'tv', mine = new Map(streamingServices().map(s => [s.provider, s.key]));
     const trailer = (d.videos?.results || []).find(v => v.site === 'YouTube' && v.type === 'Trailer');
     let age = '';
     if (tv) age = (d.content_ratings?.results || []).find(r => r.iso_3166_1 === 'NL')?.rating || '';
@@ -153,7 +153,8 @@ export function details(type, id) {
       seasons: tv ? (d.seasons || []).filter(s => s.season_number > 0).map(s => ({ n: s.season_number, episodes: s.episode_count, year: (s.air_date || '').slice(0, 4) })) : [],
       tvdb: d.external_ids?.tvdb_id || 0, imdb: d.external_ids?.imdb_id || '',
       similar: (d.similar?.results || []).slice(0, 12).map(x => item({ ...x, _type: type }, '')),
-      services: await providers(type, id),
+      // Alle diensten met een abonnement in Nederland; key is gezet als Thuis de dienst kent.
+      services: (d['watch/providers']?.results?.NL?.flatrate || []).map(p => ({ key: mine.get(p.provider_id) || '', name: p.provider_name, logo: p.logo_path ? TIMG + 'w92' + p.logo_path : '' })),
       ratings: await ratings(d.external_ids?.imdb_id || '').catch(() => null)
     };
   });
