@@ -109,12 +109,6 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 @keyframes bob { 50% { transform: translateY(6px); opacity: .7; } }
 .hero .txt { position: absolute; left: 80px; bottom: 260px; width: 760px; display: flex; flex-direction: column; gap: 14px; z-index: 2; transition: opacity .6s; }
 .hero .txt.uit { opacity: 0; }
-/* Bolletjes van de carrousel: welke dia je ziet. Focus: links/rechts bladeren, OK opent de titel. */
-.hero .dots { position: absolute; left: 50%; bottom: 300px; z-index: 3; display: flex; align-items: center; gap: 9px; padding: 9px 14px; border-radius: 999px; background: rgba(20,20,24,.5); transform: translateX(-50%); }
-.hero .dots.none { display: none; }
-.hero .dots i { width: 8px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.4); transition: width .3s var(--ease), background .3s; }
-.hero .dots i.on { width: 26px; background: #fff; }
-.hero .dots.focus { background: rgba(255,255,255,.22); transform: translateX(-50%) scale(1.12); }
 .hero .logo { max-width: 520px; max-height: 170px; object-fit: contain; object-position: left bottom; display: none; filter: drop-shadow(0 4px 18px rgba(0,0,0,.6)); }
 .hero .logo.on { display: block; }
 .hero ~ div { position: relative; z-index: 2; }
@@ -186,8 +180,8 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .g-info .desc { font-size: 19px; -webkit-line-clamp: 2; max-width: 820px; color: var(--ink-2); }
 .g-info .kicker { font-size: 15px; }
 /* Programmabeeld rechtsboven: vervaagt naar links en naar onder, de bovenste zenders lopen er half overheen */
-.g-art { position: absolute; right: 0; top: 0; width: 1040px; height: 585px; pointer-events: none; }  /* precies 16:9: niets bijgesneden */
-.g-art > div { position: absolute; inset: 0; background: center/cover no-repeat; opacity: 0; transition: opacity .7s var(--ease);
+.g-art { position: absolute; right: 0; top: 40px; width: 1040px; height: 585px; pointer-events: none; }  /* 16:9; hogere beelden tonen de bovenkant */
+.g-art > div { position: absolute; inset: 0; background: center top/cover no-repeat; opacity: 0; transition: opacity .7s var(--ease);
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.55) 28%, #000 60%), linear-gradient(180deg, #000 45%, transparent 100%);
   -webkit-mask-composite: source-in; mask-composite: intersect; }
 .g-art > div.on { opacity: .9; }

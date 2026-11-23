@@ -184,7 +184,7 @@
   // Eerste knop in de inhoud: bij voorkeur in het bovenste blok (.first), anders de eerste buiten de bovenbalk.
   // Rijen komen los van elkaar binnen; zolang je nog niets hebt ingedrukt, schuift de focus mee naar de bovenste.
   var touched = false;
-  function firstContent() { var all = focusables().filter(function (e) { return !e.classList.contains('dots'); }); return all.filter(function (e) { return e.closest('.first'); })[0] || all.filter(function (e) { return !e.closest('.top'); })[0] || all[0]; }
+  function firstContent() { var all = focusables(); return all.filter(function (e) { return e.closest('.first'); })[0] || all.filter(function (e) { return !e.closest('.top'); })[0] || all[0]; }
   function contentReady() { if (overlay || touched) return; var f = firstContent(); if (f && f !== cur && !f.closest('.top')) focus(f); }
   function back() {
     if (overlay) { if (overlay._sticky) return; var o = overlay; closeOverlay(); if (o._onclose) o._onclose(); return; }
@@ -275,9 +275,9 @@
       var r = pick.getBoundingClientRect(), top = (r.top - inner.getBoundingClientRect().top) / SCALE, start = inner.parentNode.getBoundingClientRect().top / SCALE;
       var add = Math.max(0, H - start - top - r.height / SCALE);
       pick.style.marginTop = add + 'px';
-      // Bolletjes net boven de rij, de titeltekst daar weer boven.
+      // De titeltekst van de achtergrond net boven de rij.
       var txt = inner.querySelector('.hero .txt'), hero = txt && txt.parentNode;
-      if (hero) { var base = hero.offsetHeight - (top + add); hero.querySelector('.dots').style.bottom = (base + 16) + 'px'; txt.style.bottom = Math.max(40, base + 74) + 'px'; }
+      if (hero) txt.style.bottom = Math.max(40, hero.offsetHeight - (top + add) + 34) + 'px';
       if (!pick.querySelector(':scope > .more')) pick.appendChild(h('div', { class: 'more' }, '<svg viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l9 8 9-8"/></svg>'));
     }, 0);
   }
@@ -604,9 +604,8 @@
   }
 
   // ---------- thuis ----------
-  // Grote achtergrond bovenaan (Thuis, Films, Series) als carrousel met bolletjes.
-  // In rust wisselen de dia's vanzelf: een eigen foto ({ photo }) en/of uitgelichte titels ({ item, ok }).
-  // Met focus op een tegel: het beeld van die tegel. Omhoog naar de bolletjes: links/rechts bladeren, OK opent de titel.
+  // Grote achtergrond bovenaan (Thuis, Films, Series) die vanzelf wisselt.
+  // In rust: een eigen foto ({ photo }) en/of uitgelichte titels ({ item }). Met focus op een tegel: het beeld van die tegel.
   function heroBlock(inner) {
     // Het beeld staat vast achter de pagina; de rijen schuiven eroverheen. De tekst schuift wel mee.
     var hero = h('div', { class: 'hero first' }, '<div class="txt uit"><img class="logo" alt=""><h1></h1><div class="meta"></div></div>');
@@ -614,10 +613,6 @@
     var bgl = backdrop(inner.parentNode.parentNode, inner.parentNode), setBg = bgl.set;
     var txt = hero.querySelector('.txt'), heroT = 0, resting = true;
     var slides = [], idx = 0, slideT = 0;
-    var dots = F(h('button', { class: 'dots' }), function () { var sl = slides[idx]; if (sl && sl.ok) sl.ok(); },
-      { move: function (dir) { if (dir === 'left' || dir === 'right') { show(idx + (dir === 'left' ? -1 : 1)); return true; } },
-        focus: function () { if (!resting) { resting = true; show(idx); } } });
-    hero.appendChild(dots);
     // Beeld, logo (of titel) en een regel info van een titel.
     function paint(it, mine) {
       var art = it.tmdb ? artFor(it.type, it.tmdb) : Promise.resolve({ backdrop: it.img || '' });
@@ -635,19 +630,15 @@
       clearTimeout(slideT); if (!slides.length) return;
       idx = (i + slides.length) % slides.length;
       var sl = slides[idx], want = idx;
-      [].forEach.call(dots.children, function (d, k) { d.classList.toggle('on', k === idx); });
       if (sl.photo) { sl.photo().then(function (u) { if (resting && idx === want) { setBg(u); txt.classList.add('uit'); } }); }
       else paint(sl.item, function () { return resting && idx === want; });
-      // Vanzelf verder, alleen als je bovenin staat (op de eerste rij of op de bolletjes). Een foto blijft langer staan.
+      // Vanzelf verder, alleen als je bovenin staat (op de eerste rij). Een foto blijft langer staan.
       slideT = setTimeout(function () {
         if (!document.body.contains(hero)) return;
-        if (resting && cur && (cur === dots || cur.closest('.first'))) show(idx + 1); else show(idx);
+        if (resting && cur && cur.closest('.first')) show(idx + 1); else show(idx);
       }, sl.photo ? 20000 : 8000);
     }
-    function setSlides(l) {
-      slides = l; dots.innerHTML = slides.length > 1 ? slides.map(function () { return '<i></i>'; }).join('') : '';
-      dots.classList.toggle('none', slides.length < 2); if (resting) show(0);
-    }
+    function setSlides(l) { slides = l; if (resting) show(0); }
     function rest() { clearTimeout(heroT); if (resting) return; resting = true; show(idx); }
     function showArt(it) {
       clearTimeout(heroT); clearTimeout(slideT);
@@ -671,8 +662,8 @@
   function artFor(type, tmdb) {
     return S.art[type + tmdb] ? Promise.resolve(S.art[type + tmdb]) : get('/api/art/' + type + '/' + tmdb).then(function (a) { S.art[type + tmdb] = a; return a; }, function () { return {}; });
   }
-  // Een titel als dia: beeld en logo, OK opent de titel.
-  function slideOf(o, kind) { return { item: artOf(o, kind), ok: function () { openTitle(o, kind); } }; }
+  // Een titel als dia: beeld en logo.
+  function slideOf(o, kind) { return { item: artOf(o, kind) }; }
   function artOf(o, kind) { return { tmdb: o.tmdb, type: kind === 'series' ? 'tv' : 'movie', title: o.title, meta: [o.year, rating(o), whereFrom(o) || 'Niet bij jou'].filter(Boolean).join(' · ') }; }
   screens.home = function () {
     var el = h('div', { class: 'screen' }); el.appendChild(topbar('home'));
@@ -1066,8 +1057,8 @@
         };
         paint();
       }
-      // Onder het beeld: cast, extra's en trailers, meer zoals dit en alles over de titel. Scrollen mag.
-      var slot = {}; ['cast', 'extras', 'vid', 'rel', 'over'].forEach(function (k) { slot[k] = h('div'); lower.appendChild(slot[k]); });
+      // Onder het beeld (en bij series onder de seizoenen): extra's en trailers, cast, alles over de titel, en als laatste meer zoals dit.
+      var slot = {}; ['extras', 'vid', 'cast', 'over', 'rel'].forEach(function (k) { slot[k] = h('div'); lower.appendChild(slot[k]); });
       if ((d.related || []).length) slot.rel.appendChild(rowSection('Meer zoals dit', d.related.map(function (x) {
         var type = x.id.indexOf('tv') === 0 ? 'tv' : 'movie';
         return poster({ title: x.title, sub: x.year, img: x.poster, badges: x.sources ? srcBadges(x) : '', ok: function () { go('info', { type: type, tmdb: x.tmdb, title: x.title, plex: x.plex || null, vod: x.vod || null, vodKind: type === 'tv' ? 'series' : 'movie' }); } });
