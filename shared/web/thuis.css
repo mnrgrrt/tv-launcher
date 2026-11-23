@@ -82,7 +82,8 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .snav .hd { font-size: 17px; font-weight: 600; color: var(--ink-3); padding: 18px 18px 6px; }
 .snav .sv { width: 28px; height: 28px; border-radius: 8px; flex: none; background: var(--card) center/cover no-repeat; }
 .snav .sv.hdmi { background: #2b2e36 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.6' stroke-linejoin='round'%3E%3Cpath d='M3 8h18v5l-3 3H6l-3-3z'/%3E%3Cpath d='M7 11h10' stroke-linecap='round'/%3E%3C/svg%3E") center/70% no-repeat; }
-.snav .svcs { display: flex; flex-direction: column; gap: 2px; }
+.snav .svcs { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-height: 0; overflow: hidden; margin: 0 -10px; padding: 0 10px; }
+.vscroll { scroll-behavior: smooth; }
 .snav .it.bottom { margin-top: auto; }
 
 /* Scherm met rijen */
@@ -92,17 +93,19 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 /* Grote afbeelding op Thuis: eerst een rustige foto, bij een tegel met een mooie achtergrond faden we over. */
 /* De foto heeft 16:9, dus over het hele scherm (1080 hoog) staat hij er in zijn geheel; onderaan loopt hij weg naar de achtergrond. */
 .hero { position: relative; height: 780px; margin-bottom: -200px; padding: 0 80px; }
-.hero .bg { position: absolute; left: 0; right: 0; top: 0; height: 1080px; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.2s var(--ease); animation: drift 40s ease-in-out infinite alternate; }
-.hero .bg.on { opacity: 1; }
+.hero-bg { position: absolute; inset: 0; transition: opacity .6s var(--ease); }
+.screen.down .hero-bg { opacity: .32; }
+.hero-bg .bg { position: absolute; left: 0; right: 0; top: 0; height: 1080px; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.2s var(--ease); animation: drift 40s ease-in-out infinite alternate; }
+.hero-bg .bg.on { opacity: 1; }
 /* Onderkant van de foto zelf laten wegvloeien: ook bij inzoomen en scrollen geen harde rand */
-.hero .bg { -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 98%); mask-image: linear-gradient(180deg, #000 55%, transparent 98%); }
-.hero::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1080px; pointer-events: none; z-index: 1; background: linear-gradient(0deg, var(--bg) 0%, rgba(14,14,16,.6) 22%, rgba(14,14,16,0) 50%), linear-gradient(90deg, rgba(14,14,16,.55) 0%, rgba(14,14,16,0) 45%), linear-gradient(180deg, rgba(14,14,16,.45) 0%, rgba(14,14,16,0) 18%); }
+.hero-bg .bg { -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 98%); mask-image: linear-gradient(180deg, #000 55%, transparent 98%); }
+.hero-bg::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1080px; pointer-events: none; background: linear-gradient(0deg, var(--bg) 0%, rgba(14,14,16,.6) 22%, rgba(14,14,16,0) 50%), linear-gradient(90deg, rgba(14,14,16,.55) 0%, rgba(14,14,16,0) 45%), linear-gradient(180deg, rgba(14,14,16,.45) 0%, rgba(14,14,16,0) 18%); }
 /* Eerste blok vult het scherm; een zacht pijltje onderin wijst naar wat eronder staat */
 .fold { position: relative; }
 .lsearch { position: absolute; right: 80px; top: 40px; z-index: 5; display: flex; align-items: center; gap: 10px; font-size: 20px; background: rgba(20,20,24,.45); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
 .lsearch svg { width: 22px; height: 22px; }
 .lsearch.focus { background: var(--ink); color: #111; }
-.fold > .more { position: absolute; left: 50%; bottom: 22px; width: 40px; margin-left: -20px; color: rgba(255,255,255,.38); transition: opacity .3s; pointer-events: none; }
+.fold > .more { position: absolute; left: 50%; bottom: 18px; width: 40px; margin-left: -20px; color: rgba(255,255,255,.38); transition: opacity .3s; pointer-events: none; }
 .fold > .more svg { display: block; width: 40px; height: 20px; animation: bob 2.8s ease-in-out infinite; }
 .scroll-inner.down .fold > .more { opacity: 0; }
 @keyframes bob { 50% { transform: translateY(6px); opacity: .7; } }
@@ -180,7 +183,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .g-info .desc { font-size: 19px; -webkit-line-clamp: 2; max-width: 820px; color: var(--ink-2); }
 .g-info .kicker { font-size: 15px; }
 /* Programmabeeld rechtsboven: vervaagt naar links en naar onder, de bovenste zenders lopen er half overheen */
-.g-art { position: absolute; right: 0; top: 0; width: 1180px; height: 700px; pointer-events: none; }
+.g-art { position: absolute; right: 0; top: 0; width: 1040px; height: 585px; pointer-events: none; }  /* precies 16:9: niets bijgesneden */
 .g-art > div { position: absolute; inset: 0; background: center/cover no-repeat; opacity: 0; transition: opacity .7s var(--ease);
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.55) 28%, #000 60%), linear-gradient(180deg, #000 45%, transparent 100%);
   -webkit-mask-composite: source-in; mask-composite: intersect; }
@@ -197,7 +200,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .itxt { position: absolute; left: 80px; bottom: 60px; width: 900px; display: flex; flex-direction: column; gap: 16px; z-index: 2; }
 .itxt h1 { font-size: 76px; line-height: 1; letter-spacing: -.03em; text-shadow: 0 2px 24px rgba(0,0,0,.4); }
 .ilogo { max-width: 440px; max-height: 130px; object-fit: contain; object-position: left bottom; filter: drop-shadow(0 4px 20px rgba(0,0,0,.5)); }
-.itxt .desc { -webkit-line-clamp: 3; }
+.itxt .desc { -webkit-line-clamp: 2; }   /* bovenin kort; het hele verhaal staat onderaan bij Over */
 .ibtns { display: flex; gap: 16px; margin-top: 8px; }
 .icast { position: absolute; right: 80px; bottom: 70px; width: 420px; z-index: 2; font-size: 19px; color: var(--ink-2); text-align: right; }
 .tag { border: 1px solid rgba(255,255,255,.5); padding: 0 8px; border-radius: 4px; }
@@ -251,7 +254,8 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .side .listrow { background: transparent; color: var(--ink-2); font-weight: 600; }
 .side .listrow.on { background: rgba(255,255,255,.12); color: var(--ink); }
 .side .listrow.focus { background: var(--ink); color: var(--bg); }
-.main { position: absolute; left: 620px; right: 80px; top: 100px; bottom: 60px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.main { position: absolute; left: 620px; right: 80px; top: 100px; bottom: 0; padding: 0 12px 60px; margin: 0 -12px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.main > * { flex: none; }
 .hint { position: absolute; left: 80px; right: 80px; bottom: 20px; font-size: 16px; color: var(--ink-3); display: flex; gap: 30px; }
 .kbd { display: inline-block; padding: 1px 10px; border: 1px solid rgba(255,255,255,.4); border-radius: 6px; color: var(--ink); margin-right: 6px; font-size: 18px; }
 .empty { padding: 0 80px; font-size: 22px; color: var(--ink-3); }
@@ -278,6 +282,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .about .l { flex: 1.3; display: flex; flex-direction: column; gap: 12px; }
 .about .l i { font-size: 24px; color: var(--ink); font-style: normal; font-weight: 600; }
 .about .l p { margin: 0; font-size: 21px; line-height: 1.6; color: var(--ink-2); }
+.about .l .src { font-size: 15px; color: var(--ink-3); }
 .about dl { flex: 1; display: grid; grid-template-columns: 170px 1fr; gap: 10px 20px; margin: 0; font-size: 17px; align-content: start; }
 .about dt { color: var(--ink-3); } .about dd { margin: 0; color: var(--ink-2); }
 /* Eigen logo's voor Plex en IPTV (zelfde vorm als de dienstlogo's) */

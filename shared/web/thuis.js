@@ -85,6 +85,13 @@
       if (R > W - 80) shift -= R - (W - 80); else if (L < 80) shift += 80 - L;
       shift = Math.min(0, shift); row.dataset.x = shift; row.style.transform = 'translateX(' + shift + 'px)';
     }
+    // Lijsten die langer zijn dan het scherm (instellingen, diensten in de zijbalk): meeschuiven met de focus.
+    var vs = el.closest('.vscroll');
+    if (vs && !(el.closest('.scroll-inner') && vs.contains(el.closest('.scroll-inner')))) {
+      var vr = vs.getBoundingClientRect(), er = el.getBoundingClientRect(), pad = 24 * SCALE;
+      if (er.bottom > vr.bottom - pad) vs.scrollTop += (er.bottom - vr.bottom + pad) / SCALE;
+      else if (er.top < vr.top + pad) vs.scrollTop -= (vr.top + pad - er.top) / SCALE;
+    }
     var inner = el.closest('.scroll-inner');
     if (inner) {
       var box = (el.closest('.section') || el).getBoundingClientRect(), y = parseFloat(inner.dataset.y || 0), T = box.top / SCALE, B = box.bottom / SCALE;
@@ -95,6 +102,7 @@
       if (el.closest('.first')) y = 0;
       y = Math.min(0, y); inner.dataset.y = y; inner.style.transform = 'translateY(' + y + 'px)';
       inner.classList.toggle('down', y < 0);
+      var scr = inner.closest('.screen'); if (scr) scr.classList.toggle('down', y < 0);   // achtergrond blijft staan en wordt donkerder
     }
   }
   function move(dir) {
@@ -115,7 +123,7 @@
       if (score < bestScore) { bestScore = score; best = el; }
     });
     if (best) focus(best);
-    else if (dir === 'left' && !overlay && isMain()) openSidebar();
+    else if (dir === 'left' && !overlay && S.profile && current && ['pair', 'who'].indexOf(current.name) < 0) openSidebar();   // links tegen de rand: zijbalk
   }
   var okDown = 0, longFired = false;
   // Sommige tv's geven geen e.key mee maar alleen een code (23 = OK op Android).
@@ -211,8 +219,6 @@
     apps: SVG('<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>'),
     settings: SVG('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>')
   };
-  var MAIN = ['home', 'live', 'films', 'series', 'search'];
-  function isMain() { return current && MAIN.indexOf(current.name) >= 0; }
   function openSidebar() {
     if (overlay) return;
     var nav = h('div', { class: 'snav' }), here = current.name;
@@ -232,7 +238,7 @@
     item('lib', 'Bibliotheek', NAVICON.lib, function () { go('grid', { lib: true, kind: 'movie', title: 'Bibliotheek', alles: '1', sort: 'nieuw' }); });
     item('list', 'Mijn lijst', NAVICON.list, function () { go('profile', { tab: 'list' }); });
     // Diensten die op dit apparaat staan, met hun logo. OK opent de app.
-    var svcBox = h('div', { class: 'svcs' }); nav.appendChild(svcBox);
+    var svcBox = h('div', { class: 'svcs vscroll' }); nav.appendChild(svcBox);
     installedServices().then(function (l) {
       l = sortServices(l.filter(function (x) { return x.svc.key !== 'plex'; }));
       if (!l.length) return;
@@ -252,16 +258,20 @@
   setInterval(function () { var t = document.querySelector('.snav .clock'); if (t) t.textContent = clock(Date.now()); checkReminders(); }, 20000);
 
   // ---------- tegels ----------
-  // Rust bij openen: alleen het eerste blok met inhoud staat in beeld, de rest begint onder de rand.
-  // Een zacht pijltje onderin laat zien dat er meer is; het verdwijnt zodra je naar beneden gaat.
+  // Rust bij openen: alleen het eerste blok met inhoud staat in beeld, onderin, net boven een zacht pijltje.
+  // De rest begint onder de rand; de titeltekst van de grote achtergrond staat er netjes boven.
   function fold(slots) {
     setTimeout(function () {
       var pick = slots.filter(function (el) { return el.children.length && !el.querySelector('.spinner'); })[0];
-      slots.forEach(function (el) { if (el !== pick) { el.classList.remove('fold'); el.style.minHeight = ''; var m = el.querySelector(':scope > .more'); if (m) m.remove(); } });
+      slots.forEach(function (el) { if (el !== pick) { el.classList.remove('fold'); el.style.marginTop = el.style.paddingBottom = ''; var m = el.querySelector(':scope > .more'); if (m) m.remove(); } });
       var inner = pick && pick.closest('.scroll-inner'); if (!inner) return;
-      pick.classList.add('fold'); pick.style.minHeight = '';
-      var top = (pick.getBoundingClientRect().top - inner.getBoundingClientRect().top) / SCALE, start = inner.parentNode.getBoundingClientRect().top / SCALE;
-      pick.style.minHeight = Math.max(0, H - start - top) + 'px';
+      var BOTTOM = 76;
+      pick.classList.add('fold'); pick.style.marginTop = ''; pick.style.paddingBottom = BOTTOM + 'px';
+      var r = pick.getBoundingClientRect(), top = (r.top - inner.getBoundingClientRect().top) / SCALE, start = inner.parentNode.getBoundingClientRect().top / SCALE;
+      var add = Math.max(0, H - start - top - r.height / SCALE);
+      pick.style.marginTop = add + 'px';
+      var txt = inner.querySelector('.hero .txt'), hero = txt && txt.parentNode;
+      if (hero) txt.style.bottom = Math.max(40, hero.offsetHeight - (top + add - 24)) + 'px';
       if (!pick.querySelector(':scope > .more')) pick.appendChild(h('div', { class: 'more' }, '<svg viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l9 8 9-8"/></svg>'));
     }, 0);
   }
@@ -454,9 +464,26 @@
     });
   }
   // HDMI: sleutel per poort (blijft gelijk, ook als het apparaat een andere naam doorgeeft).
+  // Een eigen naam (bijv. "Formuler") hoort bij dit apparaat en staat daarom op het apparaat zelf.
+  function hdmiNames() { try { return JSON.parse(localStorage.getItem('thuis-hdmi-namen') || '{}'); } catch (e) { return {}; } }
   function hdmiInputs() {
-    var l = []; try { l = N && N.getInputs ? JSON.parse(N.getInputs()) : []; } catch (e) {}
-    return l.map(function (i) { return { svc: { key: 'hdmi:' + i.port, name: i.label }, app: { input: i.id } }; });
+    var l = [], names = hdmiNames(); try { l = N && N.getInputs ? JSON.parse(N.getInputs()) : []; } catch (e) {}
+    return l.map(function (i) { return { svc: { key: 'hdmi:' + i.port, name: names[i.port] || i.label, hdmi: i.label }, app: { input: i.id } }; });
+  }
+  function renameHdmi(x, done) {
+    var port = x.svc.key.slice(5), names = hdmiNames(), name = names[port] || '';
+    var d = h('div', { class: 'dialog' }, '<h2>Naam voor ' + esc(x.svc.hdmi) + '</h2>'), field = h('div', { class: 'field', style: 'width:560px;height:64px;font-size:28px' });
+    var paint = function () { field.textContent = name || ' '; };
+    var save = function (v) { if (v) names[port] = v; else delete names[port]; try { localStorage.setItem('thuis-hdmi-namen', JSON.stringify(names)); } catch (e) {} closeOverlay(); done(); };
+    d.appendChild(field);
+    d.appendChild(keyboard('abcdefghijklmnopqrstuvwxyz1234567890', function (c) {
+      if (c === '⌫') name = name.slice(0, -1); else if (name.length < 24) name += c === '␣' ? ' ' : (!name || name.slice(-1) === ' ' ? c.toUpperCase() : c);
+      paint();
+    }));
+    var bt = h('div', { style: 'display:flex;gap:16px' });
+    bt.appendChild(F(h('button', { class: 'btn' }, 'Opslaan'), function () { save(name.trim()); }));
+    bt.appendChild(F(h('button', { class: 'btn' }, 'Standaardnaam'), function () { save(''); }));
+    d.appendChild(bt); paint(); openOverlay(d);
   }
   function openService(x) { if (!N) return; if (x.app.input) N.openInput(x.app.input); else N.launch(x.app.pkg); }
   // In- of uitgeplugd: het beginscherm opnieuw opbouwen (alleen als je daar bent en niets open hebt).
@@ -574,9 +601,11 @@
   // Grote achtergrond bovenaan (Thuis, Films, Series). In rust een beeld uit nextRest(), elke minuut een ander zolang je bovenin staat.
   // Met focus op een titel: zacht overfaden naar het beeld van die titel, met logo (of titel) en een regel info.
   function heroBlock(inner, nextRest) {
-    var hero = h('div', { class: 'hero first' }, '<div class="bg on"></div><div class="bg"></div><div class="txt uit"><img class="logo" alt=""><h1></h1><div class="meta"></div></div>');
-    inner.appendChild(hero);
-    var layers = hero.querySelectorAll('.bg'), txt = hero.querySelector('.txt'), shown = '', heroT = 0, resting = true, restUrl = '';
+    // Het beeld staat vast achter de pagina; de rijen schuiven eroverheen. De tekst schuift wel mee.
+    var hero = h('div', { class: 'hero first' }, '<div class="txt uit"><img class="logo" alt=""><h1></h1><div class="meta"></div></div>');
+    var back = h('div', { class: 'hero-bg' }, '<div class="bg on"></div><div class="bg"></div>');
+    inner.appendChild(hero); inner.parentNode.parentNode.insertBefore(back, inner.parentNode);
+    var layers = back.querySelectorAll('.bg'), txt = hero.querySelector('.txt'), shown = '', heroT = 0, resting = true, restUrl = '';
     function setBg(u) {
       if (!u || u === shown) return; shown = u;
       var nxt = layers[0].classList.contains('on') ? layers[1] : layers[0], old = nxt === layers[0] ? layers[1] : layers[0];
@@ -991,8 +1020,8 @@
         };
         paint();
       }
-      // Onder het beeld: cast, extra's en trailers, meer zoals dit, beelden en alles over de titel. Scrollen mag.
-      var slot = {}; ['cast', 'extras', 'vid', 'rel', 'img', 'over'].forEach(function (k) { slot[k] = h('div'); lower.appendChild(slot[k]); });
+      // Onder het beeld: cast, extra's en trailers, meer zoals dit en alles over de titel. Scrollen mag.
+      var slot = {}; ['cast', 'extras', 'vid', 'rel', 'over'].forEach(function (k) { slot[k] = h('div'); lower.appendChild(slot[k]); });
       if ((d.related || []).length) slot.rel.appendChild(rowSection('Meer zoals dit', d.related.map(function (x) {
         var type = x.id.indexOf('tv') === 0 ? 'tv' : 'movie';
         return poster({ title: x.title, sub: x.year, img: x.poster, badges: x.sources ? srcBadges(x) : '', ok: function () { go('info', { type: type, tmdb: x.tmdb, title: x.title, plex: x.plex || null, vod: x.vod || null, vodKind: type === 'tv' ? 'series' : 'movie' }); } });
@@ -1009,16 +1038,16 @@
       if ((d.videos || []).length) slot.vid.appendChild(rowSection('Trailers en meer', d.videos.map(function (v) {
         return wide({ title: v.name, sub: EXTRA[v.type] || v.type, img: v.img, ok: function () { if (N) N.openUrl('https://www.youtube.com/watch?v=' + v.key); } });
       })));
-      // Beelden: OK zet het beeld groot bovenaan.
-      if ((d.images || []).length) slot.img.appendChild(rowSection('Beelden', d.images.map(function (u) {
-        return wide({ title: '', img: u, ok: function () { bgEl.style.backgroundImage = "url('" + img(u.replace('/w780/', '/original/')) + "')"; reveal(bt.firstChild); focus(bt.firstChild); } });
-      })));
       // Over: het hele verhaal en de gegevens op een rij.
       var facts = [['Regie', d.director], ['Schrijvers', d.writers], ['Verschenen', d.date ? new Date(d.date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''],
         ['Duur', d.runtime ? Math.floor(d.runtime / 60) + ' u ' + (d.runtime % 60) + ' min' : ''], ['Taal', d.language ? langName(d.language) : ''], ['Land', (d.countries || []).join(', ')],
         ['Gemaakt door', d.companies], ['Originele titel', d.original && d.original !== d.title ? d.original : ''], ['Leeftijd', d.age]].filter(function (f) { return f[1]; });
-      if (d.overview || facts.length) {
-        var card = F(h('button', { class: 'about' }, '<div class="l">' + (d.tagline ? '<i>' + esc(d.tagline) + '</i>' : '') + '<p>' + esc(d.overview || '') + '</p></div>' +
+      // Het hele verhaal: van Wikipedia als dat er is, anders de langste tekst die we hebben. Bovenin blijft het kort.
+      var story = d.story && d.story.text, plain = [d.overview, show && show.plot, a.plex && a.plex.summary, a.vod && a.vod.plot].filter(Boolean).sort(function (x, y) { return y.length - x.length; })[0] || '';
+      var long = story || plain;
+      if (long || facts.length) {
+        var card = F(h('button', { class: 'about' }, '<div class="l">' + (d.tagline ? '<i>' + esc(d.tagline) + '</i>' : '') +
+          long.split(/\n\n+/).map(function (t) { return '<p>' + esc(t) + '</p>'; }).join('') + (story ? '<small class="src">Bron: Wikipedia</small>' : '') + '</div>' +
           '<dl>' + facts.map(function (f) { return '<dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd>'; }).join('') + '</dl>'), function () {});
         var sec = h('div', { class: 'section' }, '<h2>Over ' + esc(d.title || a.title) + '</h2>'); sec.appendChild(card); slot.over.appendChild(sec);
       }
@@ -1233,7 +1262,7 @@
       }, { group: 'side' }));
     });
     el.appendChild(side);
-    var main = h('div', { class: 'main' }); el.appendChild(main);
+    var main = h('div', { class: 'main vscroll' }); el.appendChild(main);
     if (tab === 'list') {
       main.appendChild(h('h2', { style: 'font-size:36px' }, 'Mijn lijst'));
       get('/api/mylist?profile=' + S.profile).then(function (l) {
@@ -1278,12 +1307,15 @@
         var pr = p.prefs || {}, hide = (pr.appHide || []).slice(), order = l.map(function (x) { return x.svc.key; });
         var save = function (focusId) { api('POST', '/api/profiles/' + p.id + '/prefs', { appOrder: order, appHide: hide }).then(function () { p.prefs = Object.assign(pr, { appOrder: order, appHide: hide }); a._focus = focusId; go('profile', a, true); }); };
         l.forEach(function (x, i) {
-          var k = x.svc.key, off = hide.indexOf(k) >= 0, row = h('div', { style: 'display:flex;gap:10px' });
-          row.appendChild(F(h('button', { class: 'listrow', id: 'app-' + k, style: 'flex:1' }, '<b>' + esc(x.svc.name) + '</b><span class="dim">' + (off ? 'Verborgen' : 'Op Thuis') + '</span>'), function () {
-            if (off) hide.splice(hide.indexOf(k), 1); else hide.push(k); save('#app-' + k);
+          var k = x.svc.key, sid = k.replace(/[^\w-]/g, '_'), off = hide.indexOf(k) >= 0, row = h('div', { style: 'display:flex;gap:10px' });
+          row.appendChild(F(h('button', { class: 'listrow', id: 'app-' + sid, style: 'flex:1' }, '<b>' + esc(x.svc.name) + '</b><span class="dim">' + (off ? 'Verborgen' : 'Op Thuis') + '</span>'), function () {
+            if (off) hide.splice(hide.indexOf(k), 1); else hide.push(k); save('#app-' + sid);
           }));
-          if (i > 0) row.appendChild(F(h('button', { class: 'listrow', id: 'up-' + k, style: 'width:150px;justify-content:center' }, 'Hoger'), function () {
-            order.splice(i, 1); order.splice(i - 1, 0, k); save('#up-' + k);
+          if (x.app.input) row.appendChild(F(h('button', { class: 'listrow', id: 'nm-' + sid, style: 'width:150px;justify-content:center' }, 'Naam'), function () {
+            renameHdmi(x, function () { a._focus = '#nm-' + sid; go('profile', a, true); });
+          }));
+          if (i > 0) row.appendChild(F(h('button', { class: 'listrow', id: 'up-' + sid, style: 'width:150px;justify-content:center' }, 'Hoger'), function () {
+            order.splice(i, 1); order.splice(i - 1, 0, k); save('#up-' + sid);
           }));
           box2.appendChild(row);
         });
@@ -1401,7 +1433,7 @@
       side.appendChild(F(h('button', { class: 'listrow' + (t[0] === tab ? ' on' : '') }, esc(t[1])), function () { a.tab = t[0]; go('settings', a, true); }, { group: 'side' }));
     });
     el.appendChild(side);
-    var main = h('div', { class: 'main' }); el.appendChild(main);
+    var main = h('div', { class: 'main vscroll' }); el.appendChild(main);
     function row(title, sub, ok) { main.appendChild(F(h('button', { class: 'listrow' }, '<span style="display:flex;flex-direction:column;gap:4px;text-align:left"><b>' + esc(title) + '</b>' + (sub ? '<span class="dim" style="font-size:18px">' + esc(sub) + '</span>' : '') + '</span><span>›</span>'), ok)); }
     if (tab === 'device') {
       main.appendChild(h('h2', { style: 'font-size:36px;margin-bottom:10px' }, 'Dit apparaat'));

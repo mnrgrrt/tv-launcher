@@ -9,7 +9,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * HDMI-ingangen van dit apparaat. Alleen ingangen waar iets op zit; heeft het apparaat via HDMI-CEC een naam
+ * HDMI-ingangen van dit apparaat. Alleen ingangen waar iets op zit dat aan staat; heeft het apparaat via HDMI-CEC een naam
  * doorgegeven (bijv. "PlayStation 5"), dan die naam. Thuis krijgt bericht als er iets in- of uitgeplugd wordt.
  */
 object Inputs {
@@ -22,13 +22,13 @@ object Inputs {
         val ports = all.filter { it.type == TvInputInfo.TYPE_HDMI && it.parentId == null }
         ports.sortedBy { it.loadLabel(c).toString() }.forEachIndexed { i, port ->
             // Een CEC-apparaat verschijnt als "kind" van de poort; dat heeft de mooiste naam.
-            val child = all.firstOrNull { it.parentId == port.id && m.getInputState(it.id) != TvInputManager.INPUT_STATE_DISCONNECTED }
+            val child = all.firstOrNull { it.parentId == port.id && m.getInputState(it.id) == TvInputManager.INPUT_STATE_CONNECTED }
             val use = child ?: port
-            if (m.getInputState(use.id) == TvInputManager.INPUT_STATE_DISCONNECTED) return@forEachIndexed
+            // Alleen wat echt aan staat. Sommige apparaten (zoals de JBL) melden een lege ingang als "stand-by".
+            if (m.getInputState(use.id) != TvInputManager.INPUT_STATE_CONNECTED) return@forEachIndexed
             if (use.isHidden(c)) return@forEachIndexed
             val label = (use.loadCustomLabel(c) ?: use.loadLabel(c))?.toString()?.trim().orEmpty().ifEmpty { "HDMI ${i + 1}" }
-            out.put(JSONObject().put("id", use.id).put("port", port.id).put("label", label)
-                .put("standby", m.getInputState(use.id) == TvInputManager.INPUT_STATE_CONNECTED_STANDBY))
+            out.put(JSONObject().put("id", use.id).put("port", port.id).put("label", label))
         }
         return out
     }

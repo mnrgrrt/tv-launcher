@@ -4,6 +4,7 @@ import { S, cached } from './db.js';
 import { json, enc } from './http.js';
 import { genreName } from './plex.js';
 import { ratings } from './omdb.js';
+import { story } from './wiki.js';
 
 const API = 'https://api.themoviedb.org/3';
 export const TIMG = 'https://image.tmdb.org/t/p/';
@@ -101,8 +102,8 @@ const streamingServices = () => services().filter(s => s.provider > 0 && s.key !
 
 /** Alles voor de informatiepagina: details, acteurs, trailer, vergelijkbaar, diensten. */
 export function details(type, id) {
-  return cached(`tmdb:d2:${type}:${id}`, 24 * 3600e3, async () => {
-    const d = await tmdb(`/${type}/${id}?language=nl-NL&append_to_response=credits,videos,similar,recommendations,release_dates,content_ratings,external_ids,watch/providers,images&include_image_language=nl,en,null&include_video_language=nl,en`);
+  return cached(`tmdb:d3:${type}:${id}`, 24 * 3600e3, async () => {
+    const d = await tmdb(`/${type}/${id}?language=nl-NL&append_to_response=credits,videos,similar,recommendations,release_dates,content_ratings,external_ids,watch/providers&include_video_language=nl,en`);
     const tv = type === 'tv', mine = new Map(streamingServices().map(s => [s.provider, s.key]));
     const yt = (d.videos?.results || []).filter(v => v.site === 'YouTube');
     const trailer = yt.find(v => v.type === 'Trailer');
@@ -130,11 +131,12 @@ export function details(type, id) {
       language: d.original_language || '', countries: (d.production_countries || d.origin_country || []).map(c => c.iso_3166_1 || c).slice(0, 3),
       writers: [...new Set((d.credits?.crew || []).filter(c => ['Screenplay', 'Writer', 'Novel', 'Story'].includes(c.job)).map(c => c.name))].slice(0, 3).join(', '),
       companies: (d.production_companies || d.networks || []).slice(0, 3).map(c => c.name).join(', '),
-      images: (d.images?.backdrops || []).filter(b => !b.iso_639_1).slice(0, 12).map(b => TIMG + 'w780' + b.file_path),
       videos, related: related.filter(x => x.poster_path).slice(0, 16).map(x => item({ ...x, _type: type }, '')),
       // Alle diensten met een abonnement in Nederland; key is gezet als Thuis de dienst kent.
       services: (d['watch/providers']?.results?.NL?.flatrate || []).map(p => ({ key: mine.get(p.provider_id) || '', name: p.provider_name, logo: p.logo_path ? TIMG + 'w92' + p.logo_path : '' })),
-      ratings: await ratings(d.external_ids?.imdb_id || '').catch(() => null)
+      ratings: await ratings(d.external_ids?.imdb_id || '').catch(() => null),
+      // Het hele verhaal voor onderaan de infopagina (Nederlandse Wikipedia), als dat er is.
+      story: await story(d.external_ids?.wikidata_id).catch(() => null)
     };
   });
 }
