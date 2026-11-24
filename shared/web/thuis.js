@@ -380,9 +380,11 @@
   // HDMI: sleutel per poort (blijft gelijk, ook als het apparaat een andere naam doorgeeft).
   // Een eigen naam (bijv. "Formuler") hoort bij dit apparaat en staat daarom op het apparaat zelf.
   function hdmiNames() { try { return JSON.parse(localStorage.getItem('thuis-hdmi-namen') || '{}'); } catch (e) { return {}; } }
+  // Verborgen ingangen (bijvoorbeeld een soundbar): ook per apparaat.
+  function hdmiHidden() { try { return JSON.parse(localStorage.getItem('thuis-hdmi-verborgen') || '[]'); } catch (e) { return []; } }
   function hdmiInputs() {
-    var l = [], names = hdmiNames(); try { l = K.can.inputs ? JSON.parse(N.getInputs()) : []; } catch (e) {}
-    return l.map(function (i) { return { svc: { key: 'hdmi:' + i.port, name: names[i.port] || i.label, hdmi: i.label }, app: { input: i.id } }; });
+    var l = [], names = hdmiNames(), hidden = hdmiHidden(); try { l = K.can.inputs ? JSON.parse(N.getInputs()) : []; } catch (e) {}
+    return l.filter(function (i) { return hidden.indexOf(String(i.port)) < 0; }).map(function (i) { return { svc: { key: 'hdmi:' + i.port, name: names[i.port] || i.label, hdmi: i.label }, app: { input: i.id } }; });
   }
   function renameHdmi(x, done) {
     var port = x.svc.key.slice(5), names = hdmiNames(), name = names[port] || '';
@@ -397,6 +399,9 @@
     var bt = h('div', { style: 'display:flex;gap:16px' });
     bt.appendChild(F(h('button', { class: 'btn' }, 'Opslaan'), function () { save(name.trim()); }));
     bt.appendChild(F(h('button', { class: 'btn' }, 'Standaardnaam'), function () { save(''); }));
+    bt.appendChild(F(h('button', { class: 'btn' }, 'Verbergen'), function () {
+      var hid = hdmiHidden(); hid.push(port); try { localStorage.setItem('thuis-hdmi-verborgen', JSON.stringify(hid)); } catch (e) {} closeOverlay(); done();
+    }));
     d.appendChild(bt); paint(); openOverlay(d);
   }
   function openService(x) { if (!N) return; if (x.app.input) N.openInput(x.app.input); else N.launch(x.app.pkg); }
@@ -1383,6 +1388,7 @@
         row('Apps', 'Bijwerken, opslag, gegevens wissen', function () { N.openSystem('apps'); });
       }
       if (K.can.apps) row('Alle apps', 'Ook apps zonder tegel op het startscherm', function () { go('apps'); });
+      if (hdmiHidden().length) row('Verborgen HDMI-ingangen weer tonen', 'HDMI ' + hdmiHidden().join(', '), function () { try { localStorage.removeItem('thuis-hdmi-verborgen'); } catch (e) {} a._focus = null; go('settings', a, true); });
       if (K.can.system) row('Geavanceerd: ander startscherm kiezen', 'Alleen voor noodgevallen', function () { N.openSystem('home'); });
     } else if (tab === 'profile') {
       main.appendChild(h('h2', { style: 'font-size:36px;margin-bottom:10px' }, 'Profiel op dit apparaat'));

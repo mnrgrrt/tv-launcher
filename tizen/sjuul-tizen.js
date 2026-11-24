@@ -18,7 +18,16 @@
     base: function () { return url(); },
     httpProxy: function () { return ''; },
     // Geen HDMI-tegels, schermbeveiliging, systeeminstellingen, inspreken of zelf bijwerken: dat regelt de Samsung zelf.
-    features: function () { return JSON.stringify({ apps: true, inputs: false, saver: false, system: false, voice: false, update: false }); },
+    features: function () { return JSON.stringify({ apps: true, inputs: true, saver: false, system: false, voice: false, update: false }); },
+    // HDMI-ingangen met iets erop (bij het opstarten opgehaald, zie hieronder).
+    getInputs: function () { return JSON.stringify(inputs.map(function (s) { return { id: 'HDMI' + s.number, port: s.number, label: 'HDMI ' + s.number, standby: false }; })); },
+    // Naar een ingang: de bron van de tv omzetten en dan het gewone tv-beeld openen. De afstandsbediening werkt dan
+    // weer op dat apparaat (Anynet+). Terug in Sjuul TV via Home en dan Sjuul TV.
+    openInput: function (id) {
+      var s = inputs.filter(function (x) { return 'HDMI' + x.number === id; })[0];
+      var view = function () { try { tizen.application.launch('org.tizen.tv-viewer'); } catch (e) {} };
+      try { if (s) tizen.tvwindow.setSource(s, view, view); else view(); } catch (e) { view(); }
+    },
     metered: function () { return false; },
     appVersion: function () { try { return tizen.application.getAppInfo().version; } catch (e) { return ''; } },
     srvInfo: function () { return JSON.stringify({ paired: !!key(), profile: +LS.getItem('sjuul.profiel') || 0, url: url(), device: 'Samsung' }); },
@@ -60,6 +69,14 @@
       } catch (e) {}
     }
   };
+
+  var inputs = [];
+  function loadInputs() {
+    return new Promise(function (done) {
+      try { tizen.systeminfo.getPropertyValue('VIDEOSOURCE', function (v) { inputs = (v.connected || []).filter(function (s) { return s.type === 'HDMI'; }); done(); }, function () { done(); }); }
+      catch (e) { done(); }
+    });
+  }
 
   // ---------- Samsung-speler (AVPlay) onder de knoppen ----------
   window.SpelerMotor = function (root, ev) {
@@ -148,7 +165,7 @@
   function start() {
     var base = url();
     if (!base) return opzet();
-    fetch(base + '/api/health').then(function (r) { if (!r.ok) throw new Error(r.status); return fetch('app/index.html'); }).then(function (r) { return r.text(); }).then(function (html) {
+    fetch(base + '/api/health').then(function (r) { if (!r.ok) throw new Error(r.status); return loadInputs(); }).then(function () { return fetch('app/index.html'); }).then(function (r) { return r.text(); }).then(function (html) {
       var doc = new DOMParser().parseFromString(html, 'text/html'), app = '';
       // Alles in de schermen (scripts, stijlen, services.json) is relatief aan app/, net als op de andere apparaten.
       var bs = document.createElement('base'); bs.href = 'app/'; document.head.insertBefore(bs, document.head.firstChild);
