@@ -157,13 +157,21 @@ on('GET', '/api/live/catchup/:id', 'device', ({ p, q }) => {
 });
 on('GET', '/api/live/url/:id', 'device', ({ p }) => ({ url: auth.sign(`/stream/live/${+p.id}`) }));
 // HLS voor spelers die de bron niet zelf aankunnen. src is een ondertekende /stream/-link die het apparaat al kreeg.
-on('POST', '/api/hls/start', 'device', async ({ b, dev }) => {
-  const src = String(b.src || '');
+// Alleen een ondertekende /stream/-link die het apparaat al kreeg; geeft de echte bron terug.
+function srcOf(src) {
+  src = String(src || '');
   if (!src.startsWith('/stream/') || !auth.verify(src)) throw Object.assign(new Error('Link ongeldig of verlopen'), { status: 403 });
   const u = new URL(src, 'http://x'), t = target(u.pathname, u.searchParams); if (!t) throw Object.assign(new Error('Onbekend'), { status: 404 });
-  const s = await hls.start({ url: t.url, headers: t.headers, live: u.pathname.startsWith('/stream/live/'), from: +b.from || 0, dev: dev.id, low: !!b.low });
-  return { url: `/hls/${s.id}/index.m3u8`, id: s.id, dur: s.dur };
+  return { ...t, live: u.pathname.startsWith('/stream/live/') };
+}
+on('POST', '/api/hls/start', 'device', async ({ b, dev }) => {
+  const t = srcOf(b.src);
+  const s = await hls.start({ url: t.url, headers: t.headers, live: t.live, from: +b.from || 0, dev: dev.id, low: !!b.low, audio: +b.audio || 0 });
+  return { url: `/hls/${s.id}/index.m3u8`, id: s.id, dur: s.dur, audio: s.audio, audioIndex: s.audioIndex };
 });
+// Sporen van een film of aflevering, en een tekstondertitel uit het bestand zelf.
+on('POST', '/api/media/tracks', 'device', async ({ b }) => { const t = srcOf(b.src); if (t.live) return { audio: [], subs: [] }; return hls.tracks(t.url, t.headers); });
+on('POST', '/api/media/sub', 'device', async ({ res, b }) => { const t = srcOf(b.src); send(res, 200, await hls.subText(t.url, t.headers, +b.i || 0), 'application/x-subrip; charset=utf-8'); });
 on('POST', '/api/hls/stop', 'device', ({ b, dev }) => { hls.stop(String(b.id || ''), dev.id); return { ok: true }; });
 
 // services = de diensten van dit profiel (de tv weet welke er op het apparaat staan); leeg = alle diensten.

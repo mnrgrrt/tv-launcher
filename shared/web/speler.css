@@ -34,10 +34,52 @@
 .sp.busy.osd .sp-spin { opacity: 0; }
 @keyframes sp-rond { to { transform: rotate(360deg); } }
 html.sp-open, html.sp-open body { overflow: hidden; }
-/* Ondertitels: de speler tekent ze zelf (werkt met elke motor). */
-.sp-sub { position: absolute; left: 6%; right: 6%; bottom: 8%; text-align: center; font-size: clamp(18px, 3.6vh, 44px); font-weight: 600; line-height: 1.35; pointer-events: none; transition: bottom .25s; }
-.sp-sub span { background: rgba(0,0,0,.6); padding: 2px 10px; border-radius: 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-.sp.osd .sp-sub { bottom: 26%; }
+/* Ondertitels: de speler tekent ze zelf (werkt met elke motor). Grootte, dikte, achtergrond en hoogte zijn in te stellen. */
+.sp-sub { position: absolute; left: 6%; right: 6%; bottom: var(--sub-place, 8%); text-align: center; font-size: max(16px, var(--sub-size, 4.7vh)); font-weight: var(--sub-weight, 500); line-height: 1.3; pointer-events: none; transition: bottom .25s; color: #fff; }
+.sp-sub span { padding: 0 .25em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.sp-sub.bg0 span { text-shadow: 0 0 .12em #000, 0 .06em .18em #000, 0 0 .3em rgba(0,0,0,.8); }
+.sp-sub.bg1 span { text-shadow: -.05em -.05em 0 #000, .05em -.05em 0 #000, -.05em .05em 0 #000, .05em .05em 0 #000, 0 0 .2em #000; }
+.sp-sub.bg2 span { background: rgba(0,0,0,.75); border-radius: .15em; }
+.sp-sub.bg3 span { color: #ffe14d; text-shadow: 0 0 .12em #000, 0 .06em .18em #000; }
+.sp.osd .sp-sub { bottom: max(var(--sub-place, 8%), 26%); }
+/* Meldingen midden in beeld (gelijkzetten) en ingetoetst zendernummer. */
+.sp-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 70%; padding: 24px 32px; border-radius: 16px; background: rgba(0,0,0,.78); font-size: 20px; line-height: 1.45; text-align: center; }
+.sp-msg[hidden], .sp-num[hidden] { display: none; }
+.sp-num { position: absolute; right: 4%; top: 6%; padding: 8px 20px; border-radius: 12px; background: rgba(0,0,0,.7); font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Zenders en gids in beeld: links de zenders, rechts de programma's van de gekozen zender. */
+.sp-gd { position: absolute; left: 0; top: 0; bottom: 0; width: min(900px, 92%); display: flex; background: linear-gradient(90deg, rgba(8,8,10,.96) 0%, rgba(8,8,10,.92) 80%, rgba(8,8,10,0) 100%); padding: calc(14px + env(safe-area-inset-top)) 0 calc(14px + env(safe-area-inset-bottom)) env(safe-area-inset-left); }
+.sp-gd .gl { width: 40%; overflow-y: auto; padding: 0 8px; scrollbar-width: none; }
+.sp-gd .gp { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 0 16px; }
+.sp-gd .gh { font-size: 18px; font-weight: 700; padding: 8px 4px 10px; }
+.sp-gd .gpl { flex: 1; overflow-y: auto; scrollbar-width: none; }
+.sp-gd .gl::-webkit-scrollbar, .sp-gd .gpl::-webkit-scrollbar { display: none; }
+.sp-gd .gc, .sp-gd .gq { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; border: 0; background: none; color: #fff; padding: 9px 10px; border-radius: 10px; font: 500 15px Inter, system-ui, sans-serif; }
+.sp-gd .gc b { width: 34px; flex: none; color: rgba(255,255,255,.55); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sp-gd .gc span, .sp-gd .gq b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-gd .gc.on { background: rgba(255,255,255,.1); }
+.sp-gd .gq .t { flex: none; color: rgba(255,255,255,.6); font-variant-numeric: tabular-nums; }
+.sp-gd .gq b { font-weight: 600; }
+.sp-gd .gq .m { flex: none; font-size: 13px; color: rgba(255,255,255,.7); }
+.sp-gd .gq.live .t, .sp-gd .gq.live .m { color: #ff5a4f; }
+.sp-gd .gq.past b { color: rgba(255,255,255,.7); }
+.sp-gd .gx { color: rgba(255,255,255,.6); padding: 10px; }
+.sp-gd .kf { outline: 3px solid #fff; outline-offset: -3px; background: rgba(255,255,255,.18); }
+.sp.gids .sp-sub { visibility: hidden; }
+/* Tv-scherm (1920 breed en meer): alles groter, leesbaar vanaf de bank. */
+@media (min-width: 1500px) {
+  .sp-tt b { font-size: 34px; } .sp-tt span { font-size: 24px; }
+  .sp-top { padding: 40px 60px 80px; } .sp-bot { padding: 80px 60px 44px; }
+  .sp .sb { width: 72px; height: 72px; } .sp .sb svg { width: 36px; height: 36px; }
+  .sp .sb.big { width: 104px; height: 104px; } .sp .sb.big svg { width: 50px; height: 50px; }
+  .sp-mid { gap: 70px; }
+  .sp-bar { height: 34px; } .sp-bar::before, .sp-bar i { top: 14px; height: 6px; } .sp-bar s { top: 7px; width: 20px; height: 20px; margin-left: -10px; }
+  .sp-time { font-size: 22px; }
+  .sp .st { height: 56px; padding: 0 26px; border-radius: 28px; font-size: 22px; }
+  .sp-row { gap: 14px; margin-top: 18px; } .sp-row .sb { width: 56px; height: 56px; }
+  .sp-msg { font-size: 32px; padding: 40px 56px; } .sp-num { font-size: 64px; }
+  .sp-gd { width: 1200px; padding: 50px 0; } .sp-gd .gh { font-size: 30px; }
+  .sp-gd .gc, .sp-gd .gq { font-size: 24px; padding: 14px 16px; gap: 18px; } .sp-gd .gc b { width: 56px; } .sp-gd .gq .m { font-size: 20px; }
+}
 /* Afstandsbediening: gekozen knop. */
 .sp .kf { outline: 3px solid #fff; outline-offset: 3px; background: rgba(255,255,255,.3); }
 /* Beeld onder de pagina (ExoPlayer op Android): alles doorzichtig behalve de knoppen. */
