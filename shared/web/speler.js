@@ -36,14 +36,42 @@
     // Lukt starten toch niet, dan zeggen dat je zelf op afspelen moet tikken (in plaats van stil beeld).
     function start() { var p = v.play(); if (p) p.catch(function (e) { if (e && e.name === 'NotAllowedError' && ev.blocked) ev.blocked(); }); }
     function end() { try { return v.seekable.length ? v.seekable.end(v.seekable.length - 1) : 0; } catch (e) { return 0; } }
+    // Chrome, Edge en Firefox: afspelen via hls.js (lib/, Apache-2.0). De eigen HLS-speler van Chrome ziet de lijst die nog groeit
+    // als live tv en springt dan minuten vooruit. hls.js begint vooraan en blijft daar. iPad, iPhone en Safari spelen het zelf goed af.
+    var ua = navigator.userAgent;
+    var apple = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || (/Safari/.test(ua) && !/Chrome|Chromium|Edg|Firefox|Android/.test(ua));
+    var useHls = !apple && !!(window.MediaSource || window.ManagedMediaSource), hls = null, laden = null;
+    function need() {
+      if (!useHls || window.Hls) return Promise.resolve();
+      return laden || (laden = new Promise(function (res) {
+        var t = document.createElement('script'); t.src = 'lib/hls.light.min.js';
+        t.onload = function () { if (!window.Hls || !Hls.isSupported()) useHls = false; res(); };
+        t.onerror = function () { useHls = false; res(); };
+        document.head.appendChild(t);
+      }));
+    }
+    function attach(url) {
+      if (hls) { hls.destroy(); hls = null; }
+      if (!useHls) { v.src = url; return; }
+      // Film: vooraan beginnen en nooit vooruit springen. Live: gewoon bij het nieuwste stuk.
+      hls = new Hls({ startPosition: live ? -1 : 0, liveMaxLatencyDurationCount: Infinity, maxBufferLength: 60, backBufferLength: 90 });
+      hls.on(Hls.Events.ERROR, function (e, d) {
+        if (!d.fatal) return;
+        if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+        else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+        else if (ev.error) ev.error();
+      });
+      hls.loadSource(url); hls.attachMedia(v);
+    }
     var m = {
       load: function (s, from, isLive, audio) {
         if (s !== src) ai = audio || 0;
         vrijgeven();   // nog binnen de tik die de speler opende
         src = s; live = !!isLive; base = live ? 0 : Math.floor(from || 0);
-        return api('POST', '/api/hls/start', { src: s, from: base, low: !!S.low, audio: ai, hevc: hevc }).then(function (r) {
+        return Promise.all([api('POST', '/api/hls/start', { src: s, from: base, low: !!S.low, audio: ai, hevc: hevc }), need()]).then(function (x) {
+          var r = x[0];
           id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; if (!live && r.start != null) base = +r.start;   // de server begint bij het sleutelbeeld
-          v.src = r.url; start(); return r.dur;
+          attach(r.url); start(); return r.dur;
         });
       },
       time: function () { return base + (v.currentTime || 0); },
@@ -51,7 +79,7 @@
       // Binnen wat al omgezet is: meteen. Verder weg, of terug voor het beginpunt: de server begint opnieuw vanaf daar.
       seek: function (sec) { var rel = sec - base; if (rel >= 0 && rel <= end() - 2) { v.currentTime = rel; return Promise.resolve(); } return m.load(src, sec, false); },
       paused: function () { return v.paused; }, play: function () { v.play().catch(function () {}); }, pause: function () { v.pause(); },
-      stop: function () { if (id) { api('POST', '/api/hls/stop', { id: id }).catch(function () {}); id = ''; } src = ''; v.pause(); v.removeAttribute('src'); v.load(); },
+      stop: function () { if (id) { api('POST', '/api/hls/stop', { id: id }).catch(function () {}); id = ''; } src = ''; if (hls) { hls.destroy(); hls = null; } v.pause(); v.removeAttribute('src'); v.load(); },
       audio: function () { return aud.map(function (t, i) { return { label: trackLabel(t, i), lang: t.lang, codec: t.codec, on: i === ai }; }); },
       setAudio: function (i) { ai = i; return m.load(src, live ? 0 : m.time(), live); },
       rect: function (r) { v.style.cssText = r ? 'left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px' : ''; }
