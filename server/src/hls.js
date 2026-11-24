@@ -88,16 +88,20 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   const copyV = !low && v && (v.codec_name === 'h264' || (v.codec_name === 'hevc' && hevc));
   // Film of aflevering halverwege: het gekopieerde beeld kan alleen bij een sleutelbeeld beginnen. Daar beginnen we dan ook,
   // zodat de tijd in de speler (en de ondertitels) klopt. Lukt het opzoeken niet, dan klopt alleen de tijd een paar seconden niet.
+  // Lukt het opzoeken niet (bij IPTV soms), dan ook het geluid bij het sleutelbeeld laten beginnen: anders zit er een gat
+  // aan het begin en slaat de browser het eerste stukje over. De tijd in de speler wijkt dan een paar seconden af.
+  let loose = false;
   if (!live && from > 0 && copyV) {
     const k = await keyframeBefore(url, headers, from);
-    if (k != null && k >= 0 && k <= from && from - k < 30) from = Math.round(k * 1000) / 1000;
+    if (k != null && k >= 0 && k <= from && from - k < 30) from = Math.round(k * 1000) / 1000; else loose = true;
   }
   const id = crypto.randomBytes(16).toString('hex'), dir = path.join(ROOT, id);
   fs.mkdirSync(dir);
-  const args = ['-hide_banner', '-loglevel', 'error', ...(live || !from ? [] : ['-ss', String(Math.max(0, +from))]), ...hdrArgs(headers), '-i', url,
+  const args = ['-hide_banner', '-loglevel', 'error', ...(live || !from ? [] : ['-ss', String(Math.max(0, +from)), ...(loose ? ['-noaccurate_seek'] : [])]), ...hdrArgs(headers), '-i', url,
     '-map', '0:v:0?', '-map', '0:a:' + ai + '?',
     ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
-      : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', ...(low ? ['-vf', 'scale=-2:min(720\\,ih)', '-b:v', '1800k', '-maxrate', '2000k', '-bufsize', '4000k'] : ['-vf', 'scale=-2:min(1080\\,ih)', '-crf', '21'])]),
+      : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', '-pix_fmt', 'yuv420p',   // 8-bit: 10-bit H.264 speelt in geen enkele browser
+         ...(low ? ['-vf', 'scale=-2:min(720\\,ih)', '-b:v', '1800k', '-maxrate', '2000k', '-bufsize', '4000k'] : ['-vf', 'scale=-2:min(1080\\,ih)', '-crf', '21'])]),
     ...(a && a.codec_name === 'aac' && !low ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2']),
     '-f', 'hls', '-hls_time', live ? '4' : '6', '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4',
     // Geen edit list: browsers negeren die, en dan loopt het geluid voor op het beeld. Zo staat de echte begintijd in de stukjes.
