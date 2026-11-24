@@ -1,89 +1,126 @@
-/* Sjuul TV: de gedeelde speler (zie speler.js). Licht voor zwakke tv's: geen blur, geen maskers. */
-.sp { position: fixed; inset: 0; z-index: 28; background: #000; color: #fff; font-family: Inter, system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
-.sp[hidden] { display: none; }
-.sp video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
-.sp-top, .sp-mid, .sp-bot { position: absolute; left: 0; right: 0; opacity: 0; pointer-events: none; transition: opacity .25s; }
-.sp.osd .sp-top, .sp.osd .sp-mid, .sp.osd .sp-bot { opacity: 1; pointer-events: auto; }
-.sp-top { top: 0; display: flex; align-items: flex-start; gap: 12px; padding: calc(14px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 40px calc(18px + env(safe-area-inset-left));
-  background: linear-gradient(180deg, rgba(0,0,0,.75), rgba(0,0,0,0)); }
-.sp-tt { flex: 1; min-width: 0; }
-.sp-tt b { display: block; font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sp-tt span { display: block; font-size: 13px; color: rgba(255,255,255,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-.sp-mid { top: 50%; transform: translateY(-50%); display: flex; justify-content: center; align-items: center; gap: 44px; }
-.sp-bot { bottom: 0; padding: 40px calc(18px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left));
-  background: linear-gradient(0deg, rgba(0,0,0,.8), rgba(0,0,0,0)); }
-.sp .sb { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.12); color: #fff; border: 0; padding: 0; }
-.sp .sb svg { width: 24px; height: 24px; }
-.sp .sb.big { width: 68px; height: 68px; background: rgba(255,255,255,.18); }
-.sp .sb.big svg { width: 34px; height: 34px; }
-.sp .sb.x { background: rgba(0,0,0,.35); flex: none; }
-.sp .sb:focus-visible, .sp .st:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
-.sp-bar { position: relative; height: 22px; cursor: pointer; touch-action: none; }
-.sp-bar::before, .sp-bar i { content: ""; position: absolute; left: 0; top: 9px; height: 4px; border-radius: 2px; }
-.sp-bar::before { right: 0; background: rgba(255,255,255,.25); }
-.sp-bar i.b { background: rgba(255,255,255,.4); width: 0; }
-.sp-bar i.p { background: #fff; width: 0; }
-.sp-bar s { position: absolute; top: 4px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #fff; left: 0; }
-.sp-time { display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,.8); font-variant-numeric: tabular-nums; margin-top: 2px; }
-.sp-row { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
-.sp .st { height: 36px; padding: 0 14px; border-radius: 18px; border: 0; background: rgba(255,255,255,.14); color: #fff; font: 600 14px Inter, system-ui, sans-serif; }
-.sp-row .sb { width: 36px; height: 36px; }
-.sp-row .sb svg { width: 20px; height: 20px; }
-.sp-spin { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid rgba(255,255,255,.2); border-top-color: #fff; opacity: 0; animation: sp-rond 1s linear infinite; pointer-events: none; }
-.sp.busy .sp-spin { opacity: 1; }
-.sp.busy.osd .sp-spin { opacity: 0; }
-@keyframes sp-rond { to { transform: rotate(360deg); } }
+/* Sjuul TV: de gedeelde speler (zie speler.js). Maten en kleuren gelijk aan de JBL-spelers.
+   --dp is één dp van Android: op een tv-scherm (1920 breed = 960 dp) schaalt hij mee, op telefoon en iPad is het 1px.
+   Licht voor zwakke tv's: geen blur, geen maskers. */
+.sp { --dp: 1px; position: fixed; inset: 0; z-index: 28; background: #000; color: #fff; font-family: Inter, system-ui, sans-serif; -webkit-user-select: none; user-select: none; overflow: hidden; }
+@media (min-width: 1500px) { .sp { --dp: calc(100vw / 960); } }
+.sp[hidden], .sp [hidden] { display: none !important; }
+.sp button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+.sp video { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
 html.sp-open, html.sp-open body { overflow: hidden; }
-/* Ondertitels: de speler tekent ze zelf (werkt met elke motor). Grootte, dikte, achtergrond en hoogte zijn in te stellen. */
-.sp-sub { position: absolute; left: 6%; right: 6%; bottom: var(--sub-place, 8%); text-align: center; font-size: max(16px, var(--sub-size, 4.7vh)); font-weight: var(--sub-weight, 500); line-height: 1.3; pointer-events: none; transition: bottom .25s; color: #fff; }
+/* Beeld onder de pagina (AVPlay op Samsung, ExoPlayer op Android): alles doorzichtig behalve de knoppen. */
+.sp.native, html.sp-native, html.sp-native body { background: transparent !important; }
+html.sp-native #app > :not(.overlay) { visibility: hidden; }
+/* Keuzevensters van de tv boven de speler. */
+html.sp-open .overlay { position: fixed; z-index: 40; }
+
+/* ---------- melding in het midden (laden, fouten, zendernummer, gelijkzetten) ---------- */
+.sp-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 70%; white-space: pre-line; text-align: center;
+  padding: calc(14 * var(--dp)) calc(22 * var(--dp)); border-radius: calc(16 * var(--dp)); background: rgba(28,28,31,.85); font-size: calc(15 * var(--dp)); font-weight: 500; line-height: 1.4; }
+.sp.is-live .sp-msg { font-size: calc(28 * var(--dp)); font-weight: 700; padding: calc(16 * var(--dp)) calc(28 * var(--dp)); border-radius: calc(14 * var(--dp)); background: rgba(0,0,0,.7); }
+
+/* ---------- ondertitels: zelf getekend; grootte, dikte, achtergrond en hoogte zoals SubStyle ---------- */
+.sp-sub { position: absolute; left: 6%; right: 6%; bottom: var(--sub-place, 8%); text-align: center; font-size: max(16px, var(--sub-size, 4.7vh)); font-weight: var(--sub-weight, 500); line-height: 1.3; pointer-events: none; color: #fff; }
 .sp-sub span { padding: 0 .25em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .sp-sub.bg0 span { text-shadow: 0 0 .12em #000, 0 .06em .18em #000, 0 0 .3em rgba(0,0,0,.8); }
 .sp-sub.bg1 span { text-shadow: -.05em -.05em 0 #000, .05em -.05em 0 #000, -.05em .05em 0 #000, .05em .05em 0 #000, 0 0 .2em #000; }
 .sp-sub.bg2 span { background: rgba(0,0,0,.75); border-radius: .15em; }
 .sp-sub.bg3 span { color: #ffe14d; text-shadow: 0 0 .12em #000, 0 .06em .18em #000; }
-.sp.osd .sp-sub { bottom: max(var(--sub-place, 8%), 26%); }
-/* Meldingen midden in beeld (gelijkzetten) en ingetoetst zendernummer. */
-.sp-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 70%; padding: 24px 32px; border-radius: 16px; background: rgba(0,0,0,.78); font-size: 20px; line-height: 1.45; text-align: center; }
-.sp-msg[hidden], .sp-num[hidden] { display: none; }
-.sp-num { position: absolute; right: 4%; top: 6%; padding: 8px 20px; border-radius: 12px; background: rgba(0,0,0,.7); font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; }
-/* Zenders en gids in beeld: links de zenders, rechts de programma's van de gekozen zender. */
-.sp-gd { position: absolute; left: 0; top: 0; bottom: 0; width: min(900px, 92%); display: flex; background: linear-gradient(90deg, rgba(8,8,10,.96) 0%, rgba(8,8,10,.92) 80%, rgba(8,8,10,0) 100%); padding: calc(14px + env(safe-area-inset-top)) 0 calc(14px + env(safe-area-inset-bottom)) env(safe-area-inset-left); }
-.sp-gd .gl { width: 40%; overflow-y: auto; padding: 0 8px; scrollbar-width: none; }
-.sp-gd .gp { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 0 16px; }
-.sp-gd .gh { font-size: 18px; font-weight: 700; padding: 8px 4px 10px; }
-.sp-gd .gpl { flex: 1; overflow-y: auto; scrollbar-width: none; }
-.sp-gd .gl::-webkit-scrollbar, .sp-gd .gpl::-webkit-scrollbar { display: none; }
-.sp-gd .gc, .sp-gd .gq { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; border: 0; background: none; color: #fff; padding: 9px 10px; border-radius: 10px; font: 500 15px Inter, system-ui, sans-serif; }
-.sp-gd .gc b { width: 34px; flex: none; color: rgba(255,255,255,.55); font-weight: 600; font-variant-numeric: tabular-nums; }
-.sp-gd .gc span, .sp-gd .gq b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sp-gd .gc.on { background: rgba(255,255,255,.1); }
-.sp-gd .gq .t { flex: none; color: rgba(255,255,255,.6); font-variant-numeric: tabular-nums; }
-.sp-gd .gq b { font-weight: 600; }
-.sp-gd .gq .m { flex: none; font-size: 13px; color: rgba(255,255,255,.7); }
-.sp-gd .gq.live .t, .sp-gd .gq.live .m { color: #ff5a4f; }
-.sp-gd .gq.past b { color: rgba(255,255,255,.7); }
-.sp-gd .gx { color: rgba(255,255,255,.6); padding: 10px; }
-.sp-gd .kf { outline: 3px solid #fff; outline-offset: -3px; background: rgba(255,255,255,.18); }
-.sp.gids .sp-sub { visibility: hidden; }
-/* Tv-scherm (1920 breed en meer): alles groter, leesbaar vanaf de bank. */
-@media (min-width: 1500px) {
-  .sp-tt b { font-size: 34px; } .sp-tt span { font-size: 24px; }
-  .sp-top { padding: 40px 60px 80px; } .sp-bot { padding: 80px 60px 44px; }
-  .sp .sb { width: 72px; height: 72px; } .sp .sb svg { width: 36px; height: 36px; }
-  .sp .sb.big { width: 104px; height: 104px; } .sp .sb.big svg { width: 50px; height: 50px; }
-  .sp-mid { gap: 70px; }
-  .sp-bar { height: 34px; } .sp-bar::before, .sp-bar i { top: 14px; height: 6px; } .sp-bar s { top: 7px; width: 20px; height: 20px; margin-left: -10px; }
-  .sp-time { font-size: 22px; }
-  .sp .st { height: 56px; padding: 0 26px; border-radius: 28px; font-size: 22px; }
-  .sp-row { gap: 14px; margin-top: 18px; } .sp-row .sb { width: 56px; height: 56px; }
-  .sp-msg { font-size: 32px; padding: 40px 56px; } .sp-num { font-size: 64px; }
-  .sp-gd { width: 1200px; padding: 50px 0; } .sp-gd .gh { font-size: 30px; }
-  .sp-gd .gc, .sp-gd .gq { font-size: 24px; padding: 14px 16px; gap: 18px; } .sp-gd .gc b { width: 56px; } .sp-gd .gq .m { font-size: 20px; }
+.sp.is-vod.osd-on .sp-sub { bottom: max(var(--sub-place, 8%), calc(150 * var(--dp))); }
+.sp.guide-on .sp-sub { visibility: hidden; }
+
+/* ---------- film: onderbalk (VodActivity) ---------- */
+.sv-osd, .sv-menu { display: none; }
+.sp.is-vod .sv-osd { display: block; position: absolute; left: 0; right: 0; bottom: 0; padding: calc(140 * var(--dp)) calc(56 * var(--dp)) calc(26 * var(--dp));
+  background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.45) 33%, rgba(0,0,0,.8) 66%, rgba(0,0,0,.9) 100%); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.sp.is-vod.osd-on .sv-osd { opacity: 1; pointer-events: auto; }
+.sv-tt { font-size: calc(20 * var(--dp)); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-st { font-size: calc(13 * var(--dp)); color: rgba(255,255,255,.7); margin-top: calc(3 * var(--dp)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-bar { position: relative; height: calc(16 * var(--dp)); margin-top: calc(12 * var(--dp)); touch-action: none; }
+.sv-bar::before, .sv-bar i { content: ""; position: absolute; left: 0; top: 50%; height: calc(4 * var(--dp)); margin-top: calc(-2 * var(--dp)); border-radius: calc(2 * var(--dp)); }
+.sv-bar::before { right: 0; background: rgba(255,255,255,.2); }
+.sv-bar i.sp-bf { background: rgba(255,255,255,.3); width: 0; }
+.sv-bar i.sp-pf { background: #fff; width: 0; }
+.sv-bar s { position: absolute; top: 50%; width: calc(16 * var(--dp)); height: calc(16 * var(--dp)); margin: calc(-8 * var(--dp)) 0 0 calc(-8 * var(--dp)); border-radius: 50%; background: #fff; display: none; }
+.sv-bar.lit::before, .sv-bar.lit i { height: calc(6 * var(--dp)); margin-top: calc(-3 * var(--dp)); border-radius: calc(3 * var(--dp)); }
+.sv-bar.lit s { display: block; }
+.sv-times { display: flex; justify-content: space-between; margin-top: calc(4 * var(--dp)); font-size: calc(12 * var(--dp)); font-weight: 500; color: rgba(255,255,255,.7); font-variant-numeric: tabular-nums; }
+.sv-row { position: relative; height: calc(56 * var(--dp)); margin-top: calc(8 * var(--dp)); }
+.sv-row .sv-mid { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: calc(28 * var(--dp)); }
+.sv-row .sv-end { position: absolute; right: 0; top: 50%; transform: translateY(-50%); display: flex; gap: calc(12 * var(--dp)); }
+/* Ronde knop: zonder focus alleen het pictogram; met focus een witte cirkel met donker pictogram, iets groter. */
+.sp .sp-rb { width: calc(44 * var(--dp)); height: calc(44 * var(--dp)); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; transition: transform .16s, background-color .16s; }
+.sp .sp-rb svg { width: 48%; height: 48%; }
+.sp .sp-rb.lit { background: #fff; color: #111113; transform: scale(1.08); }
+/* Keuzekaart rechts boven de knoppen. */
+.sp.is-vod .sv-menu:not([hidden]) { display: block; position: absolute; right: calc(56 * var(--dp)); bottom: calc(112 * var(--dp)); width: calc(400 * var(--dp)); max-height: calc(100% - 160 * var(--dp)); overflow-y: auto;
+  background: rgba(28,28,31,.95); border-radius: calc(20 * var(--dp)); padding: calc(16 * var(--dp)) calc(8 * var(--dp)) calc(8 * var(--dp)); box-shadow: 0 calc(12 * var(--dp)) calc(40 * var(--dp)) rgba(0,0,0,.5); scrollbar-width: none; }
+.sv-menu::-webkit-scrollbar { display: none; }
+.sv-menu .sv-mt { font-size: calc(12 * var(--dp)); font-weight: 600; color: rgba(255,255,255,.6); text-transform: uppercase; letter-spacing: .06em; padding: 0 0 calc(8 * var(--dp)) calc(16 * var(--dp)); }
+.sv-menu .sp-mi { display: flex; align-items: center; width: 100%; text-align: left; padding: calc(10 * var(--dp)) calc(16 * var(--dp)) calc(10 * var(--dp)) calc(14 * var(--dp)); border-radius: calc(12 * var(--dp)); }
+.sv-menu .sp-mi .sp-ck { width: calc(24 * var(--dp)); flex: none; font-size: calc(14 * var(--dp)); font-weight: 600; }
+.sv-menu .sp-mi .sp-lb { flex: 1; min-width: 0; font-size: calc(15 * var(--dp)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-menu .sp-mi.kf { background: rgba(255,255,255,.16); }
+
+/* ---------- live: balk onderin (PlayerActivity) ---------- */
+.sl-bar, .sl-list, .sl-choice { display: none; }
+.sp.is-live .sl-bar { display: block; position: absolute; left: 0; right: 0; bottom: 0; padding: calc(100 * var(--dp)) calc(48 * var(--dp)) calc(24 * var(--dp));
+  background: linear-gradient(180deg, rgba(5,7,10,0) 0%, rgba(5,7,10,.75) 50%, rgba(5,7,10,.96) 100%); opacity: 0; transition: opacity .18s; pointer-events: none; }
+.sp.is-live.bar-on .sl-bar { opacity: 1; pointer-events: auto; }
+.sl-bar .sl-chan { font-size: calc(17 * var(--dp)); color: rgba(255,255,255,.7); }
+.sl-bar .sl-now { font-size: calc(30 * var(--dp)); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sl-bar .sl-next { font-size: calc(16 * var(--dp)); color: rgba(255,255,255,.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.2em; }
+.sl-bar .sl-time { display: flex; align-items: center; gap: calc(14 * var(--dp)); margin-top: calc(10 * var(--dp)); font-size: calc(16 * var(--dp)); font-variant-numeric: tabular-nums; }
+.sl-bar .sl-pg { flex: 1; height: calc(4 * var(--dp)); background: rgba(255,255,255,.25); }
+.sl-bar .sl-pg i { display: block; height: 100%; width: 0; background: #fff; }
+.sl-bar .sl-btns { display: none; overflow-x: auto; scrollbar-width: none; align-items: center; gap: calc(8 * var(--dp)); margin-top: calc(12 * var(--dp)); }
+.sp.menu-on .sl-bar .sl-btns { display: flex; }
+.sl-bar .sl-btns::-webkit-scrollbar { display: none; }
+.sl-bar .sl-pill { flex: none;  font-size: calc(19 * var(--dp)); font-weight: 700; padding: calc(7 * var(--dp)) calc(16 * var(--dp)); border-radius: 999px; background: rgba(255,255,255,.15); color: #fff; white-space: nowrap; }
+.sl-bar .sl-pill.on { background: #fff; color: #05070a; }
+.sl-bar .sl-hint { flex: 1; text-align: right; font-size: calc(16 * var(--dp)); color: rgba(255,255,255,.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Zenderlijst links. */
+.sp.is-live .sl-list:not([hidden]) { display: flex; flex-direction: column; position: absolute; left: 0; top: 0; bottom: 0; width: calc(320 * var(--dp)); background: rgba(10,13,18,.9);
+  padding: calc(32 * var(--dp)) calc(12 * var(--dp)) calc(24 * var(--dp)) calc(24 * var(--dp)); }
+.sl-list .sl-lt { font-size: calc(22 * var(--dp)); font-weight: 700; padding-bottom: calc(12 * var(--dp)); }
+.sl-list .sl-ll { flex: 1; overflow-y: auto; scrollbar-width: none; }
+.sl-list .sl-ll::-webkit-scrollbar { display: none; }
+.sl-list .sl-li { display: block; width: 100%; text-align: left; font-size: calc(20 * var(--dp)); padding: calc(10 * var(--dp)) calc(14 * var(--dp)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sl-list .sl-li.sl-cur { color: #7fe3c4; }
+.sl-list .sl-li.kf { background: rgba(255,255,255,.25); }
+/* Keuze bij een lopend programma: live of vanaf begin. */
+.sp.is-live .sl-choice:not([hidden]) { display: flex; gap: calc(16 * var(--dp)); position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  padding: calc(20 * var(--dp)) calc(24 * var(--dp)); border-radius: calc(18 * var(--dp)); background: rgba(10,13,18,.95); }
+.sl-choice span { font-size: calc(22 * var(--dp)); font-weight: 700; padding: calc(9 * var(--dp)) calc(18 * var(--dp)); border-radius: 999px; background: rgba(255,255,255,.2); cursor: pointer; }
+.sl-choice span.on { background: #fff; color: #05070a; }
+
+/* ---------- gids als raster (GuideView): kop met details, tijdlijn, rijen; beeld rechtsboven ---------- */
+.sl-guide { --name: 18%; --row: 7.8vh; position: absolute; inset: 0; background: rgba(10,13,18,.95); padding: 0 5%; }
+.sp.guide-on video { z-index: 1; }
+.sl-guide .gd-hd { position: absolute; left: 5%; top: 4.5vh; width: 57%; }
+.sl-guide .gd-k { font-size: 2.6vh; font-weight: 600; color: rgba(255,255,255,.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sl-guide .gd-t { font-size: 5.8vh; font-weight: 600; margin-top: 1.2vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sl-guide .gd-w { font-size: 2.8vh; color: rgba(255,255,255,.7); margin-top: 1vh; }
+.sl-guide .gd-d { font-size: 2.8vh; color: rgba(255,255,255,.7); margin-top: 1.2vh; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sl-guide .gd-times { position: absolute; left: calc(5% + 90% * .18); right: 5%; top: 35.5vh; height: 3vh; }
+.sl-guide .gd-times span { position: absolute; font-size: 2.4vh; color: rgba(255,255,255,.7); padding-left: 6px; }
+.sl-guide .gd-rows { position: absolute; left: 5%; right: 5%; top: 40vh; bottom: 5vh; overflow: hidden; }
+.sl-guide .gd-gr { position: relative; display: flex; height: var(--row); align-items: stretch; }
+.sl-guide .gd-gr.on { background: rgba(255,255,255,.12); margin: 0 -10px; padding: 0 10px; }
+.sl-guide .gd-gr .gd-nm { width: var(--name); flex: none; display: flex; align-items: center; font-size: 2.7vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 20px; cursor: pointer; }
+.sl-guide .gd-gr.on .gd-nm { font-weight: 600; }
+.sl-guide .gd-gr .gd-bl { position: relative; flex: 1; }
+.sl-guide .gd-pb { position: absolute; top: 5px; bottom: 5px; margin-left: 3px; border-radius: 10px; background: #1b212b; font-size: 2.5vh; text-align: left; overflow: hidden; }
+.sl-guide .gd-pb span { display: block; padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: calc(var(--row) - 10px); }
+.sl-guide .gd-pb.now { background: #232c3a; }
+.sl-guide .gd-pb.kf { background: #fff; color: #05070a; }
+.sl-guide .gd-none { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 2.4vh; color: rgba(255,255,255,.7); }
+.sl-guide .gd-now { position: absolute; top: -1vh; bottom: 0; width: 4px; margin-left: -2px; background: #ff4b4b; pointer-events: none; }
+.sl-guide .gd-hint { position: absolute; left: 5%; bottom: 1.6vh; font-size: 2.2vh; color: rgba(255,255,255,.7); }
+.sl-guide .gd-tbtn { display: none; }
+/* Aanraken (telefoon, iPad): knoppen om door de tijd te gaan en te sluiten, in plaats van de hint. */
+@media (hover: none) and (pointer: coarse) {
+  .sl-guide .gd-hint, .sl-bar .sl-hint { display: none; }
+  .sl-guide .gd-tbtn { display: flex; gap: 10px; position: absolute; right: 5%; bottom: 1.2vh; }
+  .sl-guide .gd-tbtn button { padding: 8px 16px; border-radius: 999px; background: rgba(255,255,255,.16); font-size: 15px; font-weight: 600; }
+  .sp .sp-rb { width: max(44px, calc(44 * var(--dp))); height: max(44px, calc(44 * var(--dp))); }
 }
-/* Afstandsbediening: gekozen knop. */
-.sp .kf { outline: 3px solid #fff; outline-offset: 3px; background: rgba(255,255,255,.3); }
-/* Beeld onder de pagina (ExoPlayer op Android): alles doorzichtig behalve de knoppen. */
-.sp.native, html.sp-native, html.sp-native body { background: transparent !important; }
-html.sp-native #app > :not(.overlay) { visibility: hidden; }
-/* Keuzevensters van de tv boven de speler. */
-html.sp-open .overlay { position: fixed; z-index: 40; }
