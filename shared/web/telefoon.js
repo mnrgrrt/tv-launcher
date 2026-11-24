@@ -44,6 +44,12 @@
   function drawTabs() {
     $tabs.innerHTML = ''; $tabs.hidden = !S.profile;
     var root = (stack[0] || current || {}).name;
+    // Webversie: iPhone en iPad hebben geen terugknop, dus een eigen knop vooraan in de balk.
+    if (!N) {
+      var kan = stack.length || (current && current.name !== 'home');
+      var t = h('button', { class: 'terug' + (kan ? '' : ' uit'), 'aria-label': 'Terug' }, SVG('<path d="M15 5l-7 7 7 7"/>') + '<span>Terug</span>');
+      t.onclick = back; $tabs.appendChild(t);
+    }
     TABS.forEach(function (t) {
       var b = h('button', { class: t[0] === root ? 'on' : '' }, SVG(t[2]) + '<span>' + t[1] + '</span>');
       b.onclick = function () { if (t[0] === root && !stack.length) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; } go(t[0], {}, true); };
