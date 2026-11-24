@@ -52,6 +52,14 @@ const on = (method, pattern, level, fn) => routes.push({ method, re: new RegExp(
 // Open: alleen wat nodig is om te koppelen.
 on('GET', '/api/health', 'open', () => ({ ok: true, name: 'tv-serverr', version: VERSION }));
 on('POST', '/api/pair', 'open', async ({ req, b }) => ({ key: auth.pair(b.code, b.name, ipOf(req)) }));
+// Webversie (iPad, iPhone, browser): de sleutel gaat in een cookie die de pagina zelf niet kan lezen.
+// Secure alleen achter https (Nginx Proxy Manager); thuis via http werkt het dan ook.
+const DEVCOOKIE = (req, v, age) => `sjuul=${v}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}` + (req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '');
+on('POST', '/api/web/pair', 'open', ({ req, res, b }) => {
+  const key = auth.pair(b.code, String(b.name || 'Browser').slice(0, 40), ipOf(req));
+  res.setHeader('Set-Cookie', DEVCOOKIE(req, key, 400 * 86400)); return { ok: true };
+});
+on('POST', '/api/web/unpair', 'device', ({ req, res, dev }) => { auth.unpair(dev.id); res.setHeader('Set-Cookie', DEVCOOKIE(req, '', 0)); return { ok: true }; });
 
 // Inloggen beheer
 const COOKIE = (v, age) => `tvs=${v}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}`;
@@ -245,7 +253,12 @@ const server = http.createServer(async (req, res) => {
       const r = routes.find(r => r.method === req.method && r.re.test(u.pathname));
       if (!r) return send(res, 404, { error: 'Onbekend' });
       let dev = null;
-      if (r.level === 'device') { dev = auth.deviceFor(req.headers['x-thuis-key'], ip); if (!dev) return send(res, 401, { error: 'Deze tv is niet gekoppeld' }); }
+      if (r.level === 'device') {
+        // App: sleutel in een header. Webversie: sleutel in de cookie, plus een eigen header die een andere website niet kan meesturen.
+        const viaCookie = !req.headers['x-thuis-key'], key = viaCookie ? auth.cookie(req, 'sjuul') : req.headers['x-thuis-key'];
+        if (viaCookie && key && req.headers['x-thuis'] !== '1') return send(res, 403, { error: 'Geweigerd' });
+        dev = auth.deviceFor(key, ip); if (!dev) return send(res, 401, { error: 'Dit apparaat is niet gekoppeld' });
+      }
       let me = null;
       if (r.level === 'admin') {
         me = auth.userFor(req); if (!me) return send(res, 401, { error: 'Niet ingelogd' });

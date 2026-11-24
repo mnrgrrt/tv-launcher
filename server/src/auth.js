@@ -103,7 +103,7 @@ export function login(name, pw, ip) {
   db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(Date.now(), u.id);
   return { token, name: u.name, maxAge: SESSION_DAYS * 86400 };
 }
-const cookie = (req, n) => { const m = new RegExp('(?:^|;\\s*)' + n + '=([a-f0-9]{64})').exec(req.headers.cookie || ''); return m ? m[1] : ''; };
+export const cookie = (req, n) => { const m = new RegExp('(?:^|;\\s*)' + n + '=([a-f0-9]{64})').exec(req.headers.cookie || ''); return m ? m[1] : ''; };
 export function userFor(req) {
   const t = cookie(req, 'tvs'); if (!t) return null;
   return db.prepare('SELECT u.id, u.name FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ? AND s.expires > ?').get(sha(t), Date.now()) || null;
