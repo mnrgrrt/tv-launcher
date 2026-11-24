@@ -77,7 +77,10 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0 
     '-map', '0:v:0?', '-map', '0:a:' + ai + '?',
     ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', ...(low ? ['-vf', 'scale=-2:min(720\\,ih)', '-b:v', '1800k', '-maxrate', '2000k', '-bufsize', '4000k'] : ['-crf', '21'])]),
-    ...(a && a.codec_name === 'aac' && !low ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2']),
+    // Film of aflevering: het beeld (gekopieerd) begint bij het vorige sleutelbeeld, het geluid precies op het gekozen punt.
+    // Browsers laten het geluid dan te vroeg starten. Daarom het geluid vooraan aanvullen met stilte, zodat beide op 0 beginnen.
+    ...(a && a.codec_name === 'aac' && !low && live ? ['-c:a', 'copy']
+      : ['-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2', ...(live ? [] : ['-af', 'aresample=async=1:first_pts=0'])]),
     '-f', 'hls', '-hls_time', live ? '4' : '6', '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4',
     ...(live ? ['-hls_list_size', '15', '-hls_flags', 'delete_segments+independent_segments'] : ['-hls_playlist_type', 'event', '-hls_flags', 'independent_segments']),
     '-hls_segment_filename', path.join(dir, 's%05d.m4s'), path.join(dir, 'index.m3u8')];
