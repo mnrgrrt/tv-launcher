@@ -54,7 +54,8 @@
       if (hls) { hls.destroy(); hls = null; }
       if (!useHls) { v.src = url; return; }
       // Film: vooraan beginnen en nooit vooruit springen. Live: gewoon bij het nieuwste stuk.
-      hls = new Hls({ startPosition: live ? -1 : 0, liveMaxLatencyDurationCount: Infinity, maxBufferLength: 60, backBufferLength: 90 });
+      // liveMaxLatencyDurationCount staat standaard op oneindig: hls.js springt dan nooit zelf vooruit.
+      hls = new Hls({ startPosition: live ? -1 : 0, maxBufferLength: 60, backBufferLength: 90 });
       hls.on(Hls.Events.ERROR, function (e, d) {
         if (!d.fatal) return;
         if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
