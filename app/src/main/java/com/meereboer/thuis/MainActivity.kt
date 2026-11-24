@@ -20,9 +20,19 @@ import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import org.json.JSONObject
 
-/** Het startscherm: een volledig scherm WebView met de HTML uit assets/web. */
+/** Afstandsbediening tijdens het kijken: Android-knop naar de knopcode van speler.js (dezelfde als op de Samsung). */
+private val PLAYER_KEYS = mapOf(
+    KeyEvent.KEYCODE_CHANNEL_UP to 427, KeyEvent.KEYCODE_CHANNEL_DOWN to 428,
+    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE to 10252, KeyEvent.KEYCODE_MEDIA_PLAY to 415, KeyEvent.KEYCODE_MEDIA_PAUSE to 19,
+    KeyEvent.KEYCODE_MEDIA_FAST_FORWARD to 417, KeyEvent.KEYCODE_MEDIA_REWIND to 412,
+    KeyEvent.KEYCODE_PROG_GREEN to 404, KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK to 404, KeyEvent.KEYCODE_PROG_YELLOW to 405,
+    KeyEvent.KEYCODE_CAPTIONS to 405, KeyEvent.KEYCODE_LAST_CHANNEL to 10190, KeyEvent.KEYCODE_INFO to 457,
+    KeyEvent.KEYCODE_GUIDE to 458, KeyEvent.KEYCODE_MENU to 458)
+
+/** Het startscherm: een volledig scherm WebView met de HTML uit assets/web. Het beeld van de speler ligt eronder (Motor). */
 class MainActivity : Activity() {
     private lateinit var web: WebView
+    private lateinit var motor: Motor
     private var inputWatch: android.media.tv.TvInputManager.TvInputCallback? = null
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -53,6 +63,10 @@ class MainActivity : Activity() {
             loadWithOverviewMode = true
         }
         web.webViewClient = object : WebViewClient() {
+            // De motor onder de gedeelde speler (ExoPlayer) aanmelden bij de pagina.
+            override fun onPageFinished(view: WebView, url: String) {
+                view.evaluateJavascript(assets.open("android/motor.js").bufferedReader().use { it.readText() }, null)
+            }
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val u = request.url
                 // Plaatjes van http-adressen in het thuisnetwerk (zenderlogo's) haalt de app zelf op,
@@ -89,7 +103,12 @@ class MainActivity : Activity() {
             }
         }
         web.addJavascriptInterface(Bridge(this, web), "Native")
-        setContentView(web)
+        // Het beeld van de speler ligt onder de pagina; de pagina tekent de knoppen erop.
+        val root = android.widget.FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        root.addView(web, android.widget.FrameLayout.LayoutParams(-1, -1))
+        motor = Motor(this, web, root)
+        web.addJavascriptInterface(motor, "Motor")
+        setContentView(root)
         Prefs(this).wipeOldSecrets()
         // Tv en telefoon delen de kern (kern.js), maar hebben elk een eigen scherm.
         web.loadUrl("https://appassets.androidplatform.net/assets/web/" + if (BuildConfig.TELEFOON) "telefoon.html" else "index.html")
@@ -98,10 +117,25 @@ class MainActivity : Activity() {
         web.requestFocus()
     }
 
+    /** De speler gaat open of dicht. Telefoon: tijdens het kijken liggend en schermvullend, daarna weer zoals het was. */
+    fun playing(on: Boolean) {
+        if (!BuildConfig.TELEFOON) return
+        val small = resources.configuration.smallestScreenWidthDp < 600
+        requestedOrientation = when {
+            on -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            small -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        hideSystemUi()
+    }
+
     @Suppress("DEPRECATION")
     private fun hideSystemUi() {
-        // Op de telefoon blijven de klok en de knoppen van Android gewoon zichtbaar.
-        if (BuildConfig.TELEFOON) { window.statusBarColor = Color.BLACK; window.navigationBarColor = Color.BLACK; return }
+        // Op de telefoon blijven de klok en de knoppen van Android gewoon zichtbaar, behalve tijdens het kijken.
+        if (BuildConfig.TELEFOON && !(::motor.isInitialized && motor.active)) {
+            window.decorView.systemUiVisibility = 0
+            window.statusBarColor = Color.BLACK; window.navigationBarColor = Color.BLACK; return
+        }
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN
             or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
             or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
@@ -136,7 +170,17 @@ class MainActivity : Activity() {
         if (intent.hasCategory(Intent.CATEGORY_HOME) && ::web.isInitialized) web.evaluateJavascript("window.__home && window.__home()", null)
     }
 
+    // Naar een andere app of scherm uit: wat speelt stopt (zoals de oude spelers deden).
+    override fun onStop() {
+        if (::motor.isInitialized && motor.active) {
+            motor.release()
+            web.evaluateJavascript("window.Speler && window.Speler.isOpen() && window.Speler.close()", null)
+        }
+        super.onStop()
+    }
+
     override fun onDestroy() {
+        if (::motor.isInitialized) motor.release()
         try { unregisterReceiver(screen) } catch (_: Exception) {}
         Inputs.unwatch(this, inputWatch)
         super.onDestroy()
@@ -149,6 +193,15 @@ class MainActivity : Activity() {
                 web.evaluateJavascript("window.__back && window.__back()", null)
             }
             return true
+        }
+        // Tijdens het kijken: knoppen die de pagina niet zelf kent (zenders, kleuren, gids, info) doorgeven aan de speler.
+        if (::motor.isInitialized && motor.active) {
+            val code = PLAYER_KEYS[event.keyCode]
+            if (code != null) {
+                if (event.action == KeyEvent.ACTION_DOWN)
+                    web.evaluateJavascript("window.Speler && window.Speler.key($code, ${event.repeatCount > 0})", null)
+                return true
+            }
         }
         return super.dispatchKeyEvent(event)
     }

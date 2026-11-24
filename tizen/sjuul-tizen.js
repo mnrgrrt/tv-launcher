@@ -48,8 +48,6 @@
         }); }).catch(function (e) { cb(id, false, e.message || 'Geen verbinding met tv-serverr'); });
     },
     // Afspelen: de gedeelde speler, met AVPlay eronder.
-    playItem: function (json) { window.Speler.vod(JSON.parse(json)); },
-    playLive: function (catId, id, start, end, title) { window.Speler.live(catId, id, start, end, title); },
     // Apps van de Samsung zelf (Netflix, YouTube, ...).
     getApps: function (id) {
       try {

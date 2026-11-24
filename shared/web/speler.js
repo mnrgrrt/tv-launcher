@@ -442,7 +442,10 @@
   // Het lopende beeld rechtsboven, net als op de JBL.
   function previewRect() {
     var w = el.clientWidth, hh = el.clientHeight, pw = w * 0.30;
-    if (E.rect) E.rect({ x: Math.round(w - pw - w * 0.04), y: Math.round(hh * 0.05), w: Math.round(pw), h: Math.round(pw * 9 / 16) });
+    var r = { x: Math.round(w - pw - w * 0.04), y: Math.round(hh * 0.05), w: Math.round(pw), h: Math.round(pw * 9 / 16) };
+    if (E.rect) E.rect(r);
+    // Beeld onder de pagina (Android, Samsung): een gat in de gids op dezelfde plek.
+    if (E.transparent && gd) { var g = h('div', { class: 'gd-hole' }); g.style.cssText = 'left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px'; gd.box.insertBefore(g, gd.box.firstChild); }
   }
   function guideClose() { if (!gd) return; gd.box.remove(); gd = null; el.classList.remove('guide-on'); if (E.rect) E.rect(null); }
   function progs(r) { var c = cur.list[r]; return c && epgCache[c.id] ? epgCache[c.id].l : []; }
@@ -680,5 +683,7 @@
     }).catch(function (e) { msg('Live tv lukt nu niet: ' + e.message, 0); });
   }
 
-  window.Speler = { vod: vod, live: live, isOpen: function () { return !!cur; }, back: back, close: close };
+  // key: een knop die het apparaat zelf doorgeeft (Android: zenders, kleuren, gids), met dezelfde codes als hierboven.
+  window.Speler = { vod: vod, live: live, isOpen: function () { return !!cur; }, back: back, close: close,
+    key: function (c, rep) { if (cur && !el.hidden && !document.querySelector('.sheet, .overlay')) handle(c, rep); } };
 })();

@@ -114,7 +114,7 @@
   // Terug in Thuis. Na aan/uit eerst kiezen wie er kijkt (behalve op een vastgezet apparaat).
   window.__resume = function (woke) { if (woke && S.profiles) { go('home', {}, 'root'); wakeWho(); } };
   // Home-knop op de afstandsbediening: altijd naar het beginscherm.
-  window.__home = function () { if (!S.profile) return; go('home', {}, 'root'); };
+  window.__home = function () { if (window.Speler && Speler.isOpen()) Speler.close(); if (!S.profile) return; go('home', {}, 'root'); };
   function manyProfiles() { return S.profiles && S.profiles.length > 1 && !(S.device && S.device.locked); }
   function wakeWho() { if (manyProfiles()) whoDialog(true); }
 
