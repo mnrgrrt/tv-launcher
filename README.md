@@ -1,13 +1,14 @@
-# Thuis: eigen tv-startscherm
+# Sjuul TV: eigen tv-startscherm
 
 Eén gedeeld startscherm (HTML in `shared/web`) met per apparaat een eigen laag. Alle gegevens komen van **tv-serverr** (`server/`); de tv kent geen wachtwoorden of sleutels.
 
 | Platform | Map | Status |
 |---|---|---|
-| Android TV (JBL, Google TV) | `app/` | in gebruik, testkanaal |
-| Samsung The Frame (Tizen) | `tizen/` | voorbereid |
+| Android TV (JBL, Formuler, ander Android-kastje) | `app/`, smaak `tv` | in gebruik, testkanaal |
+| Android-telefoon en -tablet | `app/`, smaak `telefoon` | testkanaal |
+| iPad, iPhone, browser | `shared/web/telefoon.html` via tv-serverr (`/app/telefoon.html`) | testkanaal |
 
-## Wat Thuis doet
+## Wat Sjuul TV doet
 - Zijbalk als menu (Terug of links tegen de rand): profiel, Zoeken, Thuis, Live tv, Films, Series, Bibliotheek, Mijn lijst, de apps en Instellingen.
 - Startscherm: de apps (per profiel te ordenen), Nieuw voor jou, een rij met je favoriete genre en wat populair is maar je niet hebt.
 - Live tv met gids (een week terug en vooruit), terugkijken, pauzeren en spoelen.

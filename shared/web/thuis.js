@@ -118,7 +118,7 @@
   function manyProfiles() { return S.profiles && S.profiles.length > 1 && !(S.device && S.device.locked); }
   function wakeWho() { if (manyProfiles()) whoDialog(true); }
 
-  K.ui.toast = toast; K.ui.askWho = askWho; K.ui.unpaired = function () { go('pair', {}, 'root'); };
+  K.ui.toast = toast; K.ui.sheet = function (t, items) { menu(t, items); }; K.ui.askWho = askWho; K.ui.unpaired = function () { go('pair', {}, 'root'); };
 
   function F(el, ok, opts) { el.classList.add('f'); el._ok = ok; if (opts) { el._long = opts.long; el._onfocus = opts.focus; el._move = opts.move; if (opts.group) el.dataset.group = opts.group; } return el; }
 
@@ -148,6 +148,7 @@
   function contentReady() { if (overlay || touched) return; var f = firstContent(); if (f && f !== cur && !f.closest('.top')) focus(f); }
   function back() {
     if (overlay) { if (overlay._sticky) return; var o = overlay; closeOverlay(); if (o._onclose) o._onclose(); return; }
+    if (window.Speler && Speler.isOpen()) return Speler.back();
     if (current && current.args && current.args._onback && current.args._onback() === true) return;
     if (stack.length) { current = stack.pop(); render(); return; }
     if (current && current.name !== 'home' && S.profile) go('home', {}, 'root');
@@ -305,7 +306,8 @@
     menu(c.title, items);
   }
   function menu(title, items) {
-    var d = h('div', { class: 'dialog' }, '<h2>' + esc(title) + '</h2>'), bt = h('div', { style: 'display:flex;gap:16px;flex-wrap:wrap;justify-content:center' });
+    // Lange lijsten (zenders in de speler) onder elkaar en scrollend; korte keuzes naast elkaar.
+    var d = h('div', { class: 'dialog' }, '<h2>' + esc(title) + '</h2>'), bt = h('div', items.length > 8 ? { class: 'vscroll', style: 'display:flex;flex-direction:column;gap:10px;max-height:620px;width:640px' } : { style: 'display:flex;gap:16px;flex-wrap:wrap;justify-content:center' });
     items.forEach(function (it) { bt.appendChild(F(h('button', { class: 'btn' }, esc(it[0])), function () { closeOverlay(); it[1](); })); });
     d.appendChild(bt); openOverlay(d);
   }
@@ -364,7 +366,7 @@
       });
     }, function () {});
   }
-  function loadApps() { if (S.apps) return Promise.resolve(S.apps); if (!N) return Promise.resolve([]); return native('getApps').then(function (t) { S.apps = JSON.parse(t); return S.apps; }); }
+  function loadApps() { if (S.apps) return Promise.resolve(S.apps); if (!K.can.apps) return Promise.resolve([]); return native('getApps').then(function (t) { S.apps = JSON.parse(t); return S.apps; }); }
   // Diensten waarvan de app op dit apparaat staat, plus HDMI-ingangen waar iets op zit: [{svc, app}]
   function installedServices() {
     return loadApps().then(function (apps) {
@@ -379,7 +381,7 @@
   // Een eigen naam (bijv. "Formuler") hoort bij dit apparaat en staat daarom op het apparaat zelf.
   function hdmiNames() { try { return JSON.parse(localStorage.getItem('thuis-hdmi-namen') || '{}'); } catch (e) { return {}; } }
   function hdmiInputs() {
-    var l = [], names = hdmiNames(); try { l = N && N.getInputs ? JSON.parse(N.getInputs()) : []; } catch (e) {}
+    var l = [], names = hdmiNames(); try { l = K.can.inputs ? JSON.parse(N.getInputs()) : []; } catch (e) {}
     return l.map(function (i) { return { svc: { key: 'hdmi:' + i.port, name: names[i.port] || i.label, hdmi: i.label }, app: { input: i.id } }; });
   }
   function renameHdmi(x, done) {
@@ -1055,7 +1057,7 @@
     var st = a.st || (a.st = { q: a.q || '', filter: 'alles', r: null });
     var left = h('div', { style: 'position:absolute;left:80px;top:140px;width:400px;display:flex;flex-direction:column;gap:16px' });
     var field = h('div', { class: 'field', style: 'height:64px;font-size:28px' }); left.appendChild(field);
-    left.appendChild(F(h('button', { class: 'btn', style: 'justify-content:center;padding:12px 24px;font-size:21px' }, '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>Inspreken'), function () {
+    if (K.can.voice) left.appendChild(F(h('button', { class: 'btn', style: 'justify-content:center;padding:12px 24px;font-size:21px' }, '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>Inspreken'), function () {
       listen(function (t) { st.q = t; paint(); run(); });
     }, { group: 'kbtop' }));
     left.appendChild(keyboard('abcdefghijklmnopqrstuvwxyz1234567890', function (c) { if (c === '⌫') st.q = st.q.slice(0, -1); else st.q += c === '␣' ? ' ' : c; paint(); clearTimeout(st.t); st.t = setTimeout(run, 700); }));
@@ -1161,7 +1163,7 @@
   };
   // Inspreken: Android luistert zelf en stopt als je klaar bent; wat je zegt verschijnt meteen. Terug = stoppen.
   function listen(done) {
-    if (!N || !N.voiceStop) return toast('Inspreken kan alleen op de tv');
+    if (!K.can.voice) return toast('Inspreken kan niet op dit apparaat');
     var box = h('div', { class: 'listen' }, '<div class="dot"></div><div class="dim" style="font-size:22px">Luisteren…</div><div class="said"></div>');
     var said = box.querySelector('.said');
     window.__voicePartial = function (t) { said.textContent = t; };
@@ -1307,7 +1309,7 @@
     ['album3', "Eigen foto's 3", ''], ['kunst', 'Kunst', 'Schilderijen uit het Art Institute of Chicago'], ['klok', 'Alleen klok en weer', 'Rustig scherm zonder foto\'s']];
   function saverPrefs() { try { return JSON.parse(N.saverGet()); } catch (e) { return null; } }
   function saverRows(row, redo) {
-    var sp = N && saverPrefs(); if (!sp) return;
+    var sp = K.can.saver && saverPrefs(); if (!sp) return;
     var src = sp.src.split(','), names = SAVERSRC.filter(function (x) { return src.indexOf(x[0]) >= 0; }).map(function (x) { return x[1]; });
     if (!sp.active) row('Schermbeveiliging is nog niet aangezet', 'Eenmalig via de computer in te stellen. Tot dan toont Android zijn eigen schermbeveiliging.', function () { N.openSystem('saver'); });
     row('Schermbeveiliging: beelden', names.join(', '), function () { pickSaverSources(sp, redo); });
@@ -1372,14 +1374,16 @@
         api('POST', '/api/device', { view: next }).then(function () { S.view = next; fit(); a._focus = null; go('settings', a, true); }, function (e) { toast(e.message); });
       });
       saverRows(row, function () { a._focus = null; go('settings', a, true); });
-      row('Alle Android-instellingen', 'De instellingen van dit apparaat zelf', function () { N && N.openSystem('all'); });
-      row('Wifi en netwerk', '', function () { N && N.openSystem('wifi'); });
-      row('Bluetooth', 'Afstandsbedieningen en koptelefoons', function () { N && N.openSystem('bluetooth'); });
-      row('Geluid', '', function () { N && N.openSystem('sound'); });
-      row('Beeld', '', function () { N && N.openSystem('display'); });
-      row('Apps', 'Bijwerken, opslag, gegevens wissen', function () { N && N.openSystem('apps'); });
-      row('Alle apps', 'Ook apps zonder tegel op het startscherm', function () { go('apps'); });
-      row('Geavanceerd: ander startscherm kiezen', 'Alleen voor noodgevallen', function () { N && N.openSystem('home'); });
+      if (K.can.system) {
+        row('Alle Android-instellingen', 'De instellingen van dit apparaat zelf', function () { N.openSystem('all'); });
+        row('Wifi en netwerk', '', function () { N.openSystem('wifi'); });
+        row('Bluetooth', 'Afstandsbedieningen en koptelefoons', function () { N.openSystem('bluetooth'); });
+        row('Geluid', '', function () { N.openSystem('sound'); });
+        row('Beeld', '', function () { N.openSystem('display'); });
+        row('Apps', 'Bijwerken, opslag, gegevens wissen', function () { N.openSystem('apps'); });
+      }
+      if (K.can.apps) row('Alle apps', 'Ook apps zonder tegel op het startscherm', function () { go('apps'); });
+      if (K.can.system) row('Geavanceerd: ander startscherm kiezen', 'Alleen voor noodgevallen', function () { N.openSystem('home'); });
     } else if (tab === 'profile') {
       main.appendChild(h('h2', { style: 'font-size:36px;margin-bottom:10px' }, 'Profiel op dit apparaat'));
       var d = S.device || {};
@@ -1405,8 +1409,7 @@
     } else {
       main.appendChild(h('h2', { style: 'font-size:36px;margin-bottom:10px' }, 'Over Sjuul TV'));
       main.appendChild(h('div', { class: 'listrow' }, '<b>Versie</b><span class="dim">Sjuul TV ' + esc(N ? N.appVersion() : 'browser') + '</span>'));
-      row('Zoeken naar een nieuwe versie', '', function () {
-        if (!N) return;
+      if (K.can.update) row('Zoeken naar een nieuwe versie', '', function () {
         toast('Even kijken…');
         native('checkUpdate').then(function (t) {
           var u = JSON.parse(t);

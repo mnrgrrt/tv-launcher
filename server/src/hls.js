@@ -9,7 +9,7 @@ import path from 'node:path';
 const ROOT = path.join(os.tmpdir(), 'sjuul-hls');
 fs.rmSync(ROOT, { recursive: true, force: true });
 fs.mkdirSync(ROOT, { recursive: true });
-const sessions = new Map();   // id -> { proc, dir, dev, seen }
+const sessions = new Map();   // id -> { proc, dir, dev, seen, live }
 const MAX = 4;                // meer tegelijk trekt de server niet netjes
 const IDLE = 60e3;            // een minuut niets opgevraagd: kijker is weg, ffmpeg stopt
 
@@ -53,7 +53,7 @@ export async function start({ url, headers, live, from = 0, dev, low }) {
   let err = '', done = false;
   proc.stderr.on('data', d => { err = (err + d).slice(-400); });
   proc.on('exit', () => { done = true; });
-  sessions.set(id, { proc, dir, dev, seen: Date.now() });
+  sessions.set(id, { proc, dir, dev, seen: Date.now(), live: !!live });
   // Wachten tot de eerste stukjes klaar staan, anders geeft de speler meteen op.
   const list = path.join(dir, 'index.m3u8');
   for (let i = 0; i < 100; i++) {
@@ -73,7 +73,7 @@ export function file(id, name) {
   if (!s || !/^(index\.m3u8|init\.mp4|s\d{5}\.m4s)$/.test(name)) return null;
   s.seen = Date.now();
   const f = path.join(s.dir, name);
-  return fs.existsSync(f) ? f : null;
+  return fs.existsSync(f) ? { f, live: s.live } : null;
 }
 
 setInterval(() => { for (const [id, s] of sessions) if (Date.now() - s.seen > IDLE) kill(id); }, 15e3).unref();

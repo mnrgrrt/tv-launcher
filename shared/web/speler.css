@@ -2,7 +2,6 @@
 .sp { position: fixed; inset: 0; z-index: 28; background: #000; color: #fff; font-family: Inter, system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
 .sp[hidden] { display: none; }
 .sp video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
-.sp video::cue { background: rgba(0,0,0,.55); color: #fff; font-family: Inter, system-ui, sans-serif; font-size: 1em; line-height: 1.3; }
 .sp-top, .sp-mid, .sp-bot { position: absolute; left: 0; right: 0; opacity: 0; pointer-events: none; transition: opacity .25s; }
 .sp.osd .sp-top, .sp.osd .sp-mid, .sp.osd .sp-bot { opacity: 1; pointer-events: auto; }
 .sp-top { top: 0; display: flex; align-items: flex-start; gap: 12px; padding: calc(14px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 40px calc(18px + env(safe-area-inset-left));
@@ -35,3 +34,14 @@
 .sp.busy.osd .sp-spin { opacity: 0; }
 @keyframes sp-rond { to { transform: rotate(360deg); } }
 html.sp-open, html.sp-open body { overflow: hidden; }
+/* Ondertitels: de speler tekent ze zelf (werkt met elke motor). */
+.sp-sub { position: absolute; left: 6%; right: 6%; bottom: 8%; text-align: center; font-size: clamp(18px, 3.6vh, 44px); font-weight: 600; line-height: 1.35; pointer-events: none; transition: bottom .25s; }
+.sp-sub span { background: rgba(0,0,0,.6); padding: 2px 10px; border-radius: 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.sp.osd .sp-sub { bottom: 26%; }
+/* Afstandsbediening: gekozen knop. */
+.sp .kf { outline: 3px solid #fff; outline-offset: 3px; background: rgba(255,255,255,.3); }
+/* Beeld onder de pagina (ExoPlayer op Android): alles doorzichtig behalve de knoppen. */
+.sp.native, html.sp-native, html.sp-native body { background: transparent !important; }
+html.sp-native #app > :not(.overlay) { visibility: hidden; }
+/* Keuzevensters van de tv boven de speler. */
+html.sp-open .overlay { position: fixed; z-index: 40; }

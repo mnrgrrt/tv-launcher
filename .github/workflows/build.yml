@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, thuis-1]
     # Alleen een nieuwe Thuis als de app zelf verandert, niet bij wijzigingen aan tv-serverr.
-    paths: ['app/**', 'shared/**', 'tizen/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml']
+    paths: ['app/**', 'shared/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml']
   workflow_dispatch:
 
 permissions:
@@ -51,19 +51,6 @@ jobs:
           cp app/build/outputs/apk/telefoon/release/app-telefoon-release.apk "sjuul-telefoon-${GITHUB_RUN_NUMBER}.apk"
           cp app/build/outputs/apk/telefoon/release/app-telefoon-release.apk sjuul-telefoon.apk
 
-      - name: Samsung-pakket (Tizen) maken
-        run: |
-          set -e
-          mkdir -p build-tizen
-          cp -r shared/web/. build-tizen/
-          cp shared/categories.json build-tizen/
-          cp tizen/config.xml tizen/icon.png tizen/thuis-tizen.js build-tizen/
-          # Platformlaag laden vóór het script van het startscherm
-          sed -i 's#<head>#<head>\n<script src="thuis-tizen.js"></script>#' build-tizen/index.html
-          grep -q 'thuis-tizen.js' build-tizen/index.html
-          sed -i "s#version=\"1.0.0\"#version=\"1.0.${GITHUB_RUN_NUMBER}\"#" build-tizen/config.xml
-          (cd build-tizen && zip -qr ../thuis-samsung-ongesigneerd.wgt .)
-
       - uses: actions/upload-artifact@v4
         with:
           name: thuis-apk
@@ -84,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete laatste --yes --cleanup-tag || true
-          gh release create laatste "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk thuis-samsung-ongesigneerd.wgt \
+          gh release create laatste "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk \
             --title "Sjuul TV $VERSIE" \
             --notes "Automatisch gebouwd uit ${GITHUB_SHA::7}." \
             --latest

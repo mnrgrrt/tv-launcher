@@ -46,13 +46,16 @@
   function pair(url, code, name) { return N ? native('srvPair', url, code, name) : web('POST', '/api/web/pair', { code: code, name: name }); }
   function unpair() { if (N) { N.srvUnpair(); return Promise.resolve(); } return web('POST', '/api/web/unpair').catch(function () {}); }
   var get = function (p) { return api('GET', p); };
-  // Plaatjes: van de server (pad met /) via de app, https rechtstreeks, http via de app (anders blokkeert de pagina ze).
+  // Plaatjes en streams: serverpaden (met /) via de basis die de app opgeeft; http zo nodig via de app (Android blokkeert het anders).
+  var BASE = N ? N.base() : '', HTTPPROXY = N && N.httpProxy ? N.httpProxy() : '';
   function img(u) {
     if (!u) return '';
-    if (u.charAt(0) === '/') return N ? 'https://appassets.androidplatform.net/srv' + u : u;
-    if (u.indexOf('http://') === 0) return N ? 'https://appassets.androidplatform.net/proxy?u=' + encodeURIComponent(u) : u;
+    if (u.charAt(0) === '/') return BASE + u;
+    if (u.indexOf('http://') === 0 && HTTPPROXY) return HTTPPROXY + encodeURIComponent(u);
     return u;
   }
+  // Wat dit apparaat kan (apps, HDMI-ingangen, schermbeveiliging, systeeminstellingen, inspreken, zelf bijwerken).
+  var can = N && N.features ? JSON.parse(N.features()) : {};
   function bg(u) { return u ? "background-image:url('" + img(u).replace(/'/g, '%27') + "')" : ''; }
 
   // ---------- toestand ----------
@@ -61,6 +64,7 @@
   try { S.reminders = JSON.parse(localStorage.getItem('thuis-herinneringen') || '{}'); } catch (e) {}
   // Lagere kwaliteit (720p) om data te sparen; de speler vraagt het de server bij het omzetten.
   try { S.low = localStorage.getItem('sjuul-laag') === '1'; } catch (e) {}
+  if (N && N.metered && N.metered()) S.low = true;   // Android weet zelf of je op mobiel internet zit
   function me() { for (var i = 0; i < S.profiles.length; i++) if (S.profiles[i].id === S.profile) return S.profiles[i]; return S.profiles[0] || { id: 1, name: 'Samen', avatarUrl: '' }; }
   function setProfile(id) { S.profile = id; if (N) N.srvSetProfile(id); else try { localStorage.setItem(WEBPROF, String(id)); } catch (e) {} }
 
@@ -137,7 +141,7 @@
   // Uit Verder kijken halen (zonder op bekeken te zetten).
   function hideCont(c) { return api('POST', '/api/continue/hide', { profile: S.profile, key: c.key }).then(function () { ui.toast('Weggehaald uit Verder kijken'); }, function (e) { ui.toast(e.message); }); }
 
-  window.Kern = { N: N, ui: ui, info: info, pair: pair, unpair: unpair, S: S, esc: esc, h: h, pad: pad, clock: clock, dayName: dayName, native: native, api: api, get: get, img: img, bg: bg,
+  window.Kern = { N: N, can: can, ui: ui, info: info, pair: pair, unpair: unpair, S: S, esc: esc, h: h, pad: pad, clock: clock, dayName: dayName, native: native, api: api, get: get, img: img, bg: bg,
     me: me, setProfile: setProfile, position: position, start: start, playPlex: playPlex, playMovie: playMovie, playEpisode: playEpisode, resume: resume,
     playLive: playLive, playCatchup: playCatchup, setWatched: setWatched, rating: rating, whereFrom: whereFrom, nextUp: nextUp, hideCont: hideCont };
 })();

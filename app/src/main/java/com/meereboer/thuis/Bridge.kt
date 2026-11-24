@@ -23,8 +23,13 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
         }
     }
 
-    @JavascriptInterface fun isApp(): Boolean = true
-    @JavascriptInterface fun isPhone(): Boolean = BuildConfig.TELEFOON
+    /** Waar de schermen plaatjes en servervragen heen sturen (de app geeft ze door aan tv-serverr). */
+    @JavascriptInterface fun base(): String = "https://appassets.androidplatform.net/srv"
+    @JavascriptInterface fun httpProxy(): String = "https://appassets.androidplatform.net/proxy?u="
+    /** Wat dit apparaat kan; de gedeelde schermen tonen alleen wat er werkt (telefoon en webversie kunnen minder). */
+    @JavascriptInterface fun features(): String = org.json.JSONObject()
+        .put("apps", !BuildConfig.TELEFOON).put("inputs", !BuildConfig.TELEFOON).put("saver", !BuildConfig.TELEFOON)
+        .put("system", !BuildConfig.TELEFOON).put("voice", !BuildConfig.TELEFOON).put("update", true).toString()
     /** Telefoon: Terug op het eerste scherm sluit de app (op de tv is Sjuul TV het startscherm en blijft hij staan). */
     @JavascriptInterface fun closeApp() { if (BuildConfig.TELEFOON) act.runOnUiThread { act.moveTaskToBack(true) } }
     /** Mobiel internet (of een andere verbinding met een databundel)? Dan zuiniger afspelen. */
