@@ -308,6 +308,8 @@ const server = http.createServer(async (req, res) => {
       return file(res, path.dirname(f), path.basename(f));
     }
     if (u.pathname === '/beheer' || u.pathname === '/') { res.setHeader('X-Frame-Options', 'DENY'); res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"); if (file(res, PUBLIC, 'beheer.html')) return; }
+    // Kort adres voor de webversie (iPhone, iPad, browser).
+    if (u.pathname === '/web' || u.pathname === '/web/') { res.writeHead(302, { Location: '/app/telefoon.html' }); return res.end(); }
     if (u.pathname.startsWith('/app/') && file(res, WEB, u.pathname.slice(5) || 'index.html')) return;
     send(res, 404, 'Niet gevonden', 'text/plain; charset=utf-8');
   } catch (e) {
