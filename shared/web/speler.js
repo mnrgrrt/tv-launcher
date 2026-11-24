@@ -26,13 +26,21 @@
     var v = h('video', { playsinline: '', 'webkit-playsinline': '', preload: 'auto' }), base = 0, id = '', src = '', live = false, aud = [], ai = 0;
     root.insertBefore(v, root.firstChild);
     ['playing', 'waiting', 'pause', 'play', 'ended', 'error'].forEach(function (n) { v.addEventListener(n, function () { if (ev[n]) ev[n](); }); });
+    // iPhone en iPad: afspelen mag alleen vlak na een tik. Het omzetten op de server duurt soms een paar seconden,
+    // dan is die tik "verlopen" en blijft het beeld stilstaan. Daarom de video al bij de eerste tik vrijgeven.
+    // Alleen zolang er niets speelt, anders zou elke tik de film pauzeren.
+    function vrijgeven() { if (v.getAttribute('src')) return; var p = v.play(); if (p) p.catch(function () {}); v.pause(); }
+    document.addEventListener('touchend', vrijgeven, true); document.addEventListener('click', vrijgeven, true);
+    // Lukt starten toch niet, dan zeggen dat je zelf op afspelen moet tikken (in plaats van stil beeld).
+    function start() { var p = v.play(); if (p) p.catch(function (e) { if (e && e.name === 'NotAllowedError' && ev.blocked) ev.blocked(); }); }
     function end() { try { return v.seekable.length ? v.seekable.end(v.seekable.length - 1) : 0; } catch (e) { return 0; } }
     var m = {
       load: function (s, from, isLive, audio) {
         if (s !== src) ai = audio || 0;
+        vrijgeven();   // nog binnen de tik die de speler opende
         src = s; live = !!isLive; base = live ? 0 : Math.floor(from || 0);
         return api('POST', '/api/hls/start', { src: s, from: base, low: !!S.low, audio: ai }).then(function (r) {
-          id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; v.src = r.url; v.play().catch(function () {}); return r.dur;
+          id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; v.src = r.url; start(); return r.dur;
         });
       },
       time: function () { return base + (v.currentTime || 0); },
@@ -77,10 +85,12 @@
       '<div class="sl-list" hidden><div class="sl-lt">Zenders</div><div class="sl-ll"></div></div>' +
       '<div class="sl-choice" hidden><span>● Live</span><span>↺ Vanaf begin</span></div>');
     E = window.SpelerMotor ? window.SpelerMotor(el, ev) : browserMotor(el);
-    ev.playing = function () { if (cur) { msgOff('Laden…'); paint(); } };
+    ev.playing = function () { if (cur) { msgOff('Laden…'); msgOff(TIK); paint(); } };
     ev.waiting = function () { if (cur && !cur.live) msg('Laden…', 0); };
     ev.pause = ev.play = function () { if (cur) paint(); };
     ev.ended = function () { if (cur && !cur.live) { report('stopped'); close(); } };
+    var TIK = 'Tik op afspelen om te starten';
+    ev.blocked = function () { if (cur) { msg(TIK, 0); paint(); } };
     ev.error = function () { if (cur) msg(cur.live ? 'Deze zender speelt nu niet af' : 'Dit speelt niet af', 0); };
     // Aanraken: tikken toont of verbergt de balk; de knoppen en lijsten reageren op een tik.
     el.addEventListener('click', function (e) {
