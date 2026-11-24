@@ -9,7 +9,8 @@
 html.sp-open, html.sp-open body { overflow: hidden; }
 /* Beeld onder de pagina (AVPlay op Samsung, ExoPlayer op Android): alles doorzichtig behalve de knoppen. */
 .sp.native, html.sp-native, html.sp-native body { background: transparent !important; }
-html.sp-native #app > :not(.overlay) { visibility: hidden; }
+/* Ook kinderen die zelf visibility: visible hebben (zoals de fanart achter de hero), anders blijft dat over het beeld staan. */
+html.sp-native #app > :not(.overlay), html.sp-native #app > :not(.overlay) *, html.sp-native #tabs { visibility: hidden !important; }
 /* Keuzevensters van de tv boven de speler. */
 html.sp-open .overlay { position: fixed; z-index: 40; }
 
@@ -96,6 +97,9 @@ html.sp-open .overlay { position: fixed; z-index: 40; }
 /* ---------- gids als raster (GuideView): kop met details, tijdlijn, rijen; beeld rechtsboven ---------- */
 .sl-guide { --name: 18%; --row: 7.8vh; position: absolute; inset: 0; background: rgba(10,13,18,.95); padding: 0 5%; }
 .sp.guide-on video { z-index: 1; }
+/* Beeld onder de pagina: de gids laat een gat rechtsboven waar het beeld doorheen komt. */
+.sp.native .sl-guide { background: transparent; }
+.sl-guide .gd-hole { position: absolute; box-shadow: 0 0 0 300vmax rgba(10,13,18,.95); pointer-events: none; }
 .sl-guide .gd-hd { position: absolute; left: 5%; top: 4.5vh; width: 57%; }
 .sl-guide .gd-k { font-size: 2.6vh; font-weight: 600; color: rgba(255,255,255,.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sl-guide .gd-t { font-size: 5.8vh; font-weight: 600; margin-top: 1.2vh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

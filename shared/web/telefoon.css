@@ -25,6 +25,7 @@ h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
 #tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--ink-3); padding: 4px 0; }
 #tabs button svg { width: 24px; height: 24px; }
 #tabs button.on { color: var(--ink); }
+#tabs button.uit { opacity: .35; pointer-events: none; }
 
 /* Rijen en tegels */
 .sec { margin: 18px 0 4px; }

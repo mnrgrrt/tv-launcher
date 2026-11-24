@@ -26,13 +26,21 @@
     var v = h('video', { playsinline: '', 'webkit-playsinline': '', preload: 'auto' }), base = 0, id = '', src = '', live = false, aud = [], ai = 0;
     root.insertBefore(v, root.firstChild);
     ['playing', 'waiting', 'pause', 'play', 'ended', 'error'].forEach(function (n) { v.addEventListener(n, function () { if (ev[n]) ev[n](); }); });
+    // iPhone en iPad: afspelen mag alleen vlak na een tik. Het omzetten op de server duurt soms een paar seconden,
+    // dan is die tik "verlopen" en blijft het beeld stilstaan. Daarom de video al bij de eerste tik vrijgeven.
+    // Alleen zolang er niets speelt, anders zou elke tik de film pauzeren.
+    function vrijgeven() { if (v.getAttribute('src')) return; var p = v.play(); if (p) p.catch(function () {}); v.pause(); }
+    document.addEventListener('touchend', vrijgeven, true); document.addEventListener('click', vrijgeven, true);
+    // Lukt starten toch niet, dan zeggen dat je zelf op afspelen moet tikken (in plaats van stil beeld).
+    function start() { var p = v.play(); if (p) p.catch(function (e) { if (e && e.name === 'NotAllowedError' && ev.blocked) ev.blocked(); }); }
     function end() { try { return v.seekable.length ? v.seekable.end(v.seekable.length - 1) : 0; } catch (e) { return 0; } }
     var m = {
       load: function (s, from, isLive, audio) {
         if (s !== src) ai = audio || 0;
+        vrijgeven();   // nog binnen de tik die de speler opende
         src = s; live = !!isLive; base = live ? 0 : Math.floor(from || 0);
         return api('POST', '/api/hls/start', { src: s, from: base, low: !!S.low, audio: ai }).then(function (r) {
-          id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; v.src = r.url; v.play().catch(function () {}); return r.dur;
+          id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; v.src = r.url; start(); return r.dur;
         });
       },
       time: function () { return base + (v.currentTime || 0); },
@@ -77,10 +85,12 @@
       '<div class="sl-list" hidden><div class="sl-lt">Zenders</div><div class="sl-ll"></div></div>' +
       '<div class="sl-choice" hidden><span>● Live</span><span>↺ Vanaf begin</span></div>');
     E = window.SpelerMotor ? window.SpelerMotor(el, ev) : browserMotor(el);
-    ev.playing = function () { if (cur) { msgOff('Laden…'); paint(); } };
+    ev.playing = function () { if (cur) { msgOff('Laden…'); msgOff(TIK); paint(); } };
     ev.waiting = function () { if (cur && !cur.live) msg('Laden…', 0); };
     ev.pause = ev.play = function () { if (cur) paint(); };
     ev.ended = function () { if (cur && !cur.live) { report('stopped'); close(); } };
+    var TIK = 'Tik op afspelen om te starten';
+    ev.blocked = function () { if (cur) { msg(TIK, 0); paint(); } };
     ev.error = function () { if (cur) msg(cur.live ? 'Deze zender speelt nu niet af' : 'Dit speelt niet af', 0); };
     // Aanraken: tikken toont of verbergt de balk; de knoppen en lijsten reageren op een tik.
     el.addEventListener('click', function (e) {
@@ -182,7 +192,7 @@
     if (cur.cues) for (var i = 0; i < cur.cues.length; i++) { var c = cur.cues[i]; if (c.s <= p && c.e > p) { cue = c; break; } }
     if (cue === subShown) return; subShown = cue;
     // Alleen schuin, vet en onderstreept blijven over; de rest is gewone tekst.
-    subEl.innerHTML = cue ? cue.t.split('\n').map(function (l) { return '<span>' + esc(l).replace(/&lt;(\/?[ibu])&gt;/g, '<$1>') + '</span>'; }).join('<br>') : '';
+    subEl.innerHTML = cue ? cue.t.split('\n').map(function (l) { return '<span>' + esc(l.replace(/\{\\[^}]*\}/g, '')).replace(/&lt;(\/?[ibu])&gt;/gi, '<$1>').replace(/&lt;\/?[a-z][\s\S]*?&gt;/gi, '') + '</span>'; }).join('<br>') : '';
   }
   // Tekst van de server (ondertitels). Via de app of, in de webversie, rechtstreeks met de cookie.
   function rawText(method, path, body) {
@@ -442,7 +452,10 @@
   // Het lopende beeld rechtsboven, net als op de JBL.
   function previewRect() {
     var w = el.clientWidth, hh = el.clientHeight, pw = w * 0.30;
-    if (E.rect) E.rect({ x: Math.round(w - pw - w * 0.04), y: Math.round(hh * 0.05), w: Math.round(pw), h: Math.round(pw * 9 / 16) });
+    var r = { x: Math.round(w - pw - w * 0.04), y: Math.round(hh * 0.05), w: Math.round(pw), h: Math.round(pw * 9 / 16) };
+    if (E.rect) E.rect(r);
+    // Beeld onder de pagina (Android, Samsung): een gat in de gids op dezelfde plek.
+    if (E.transparent && gd) { var g = h('div', { class: 'gd-hole' }); g.style.cssText = 'left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px'; gd.box.insertBefore(g, gd.box.firstChild); }
   }
   function guideClose() { if (!gd) return; gd.box.remove(); gd = null; el.classList.remove('guide-on'); if (E.rect) E.rect(null); }
   function progs(r) { var c = cur.list[r]; return c && epgCache[c.id] ? epgCache[c.id].l : []; }
@@ -680,5 +693,7 @@
     }).catch(function (e) { msg('Live tv lukt nu niet: ' + e.message, 0); });
   }
 
-  window.Speler = { vod: vod, live: live, isOpen: function () { return !!cur; }, back: back, close: close };
+  // key: een knop die het apparaat zelf doorgeeft (Android: zenders, kleuren, gids), met dezelfde codes als hierboven.
+  window.Speler = { vod: vod, live: live, isOpen: function () { return !!cur; }, back: back, close: close,
+    key: function (c, rep) { if (cur && !el.hidden && !document.querySelector('.sheet, .overlay')) handle(c, rep); } };
 })();
