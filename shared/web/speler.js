@@ -25,6 +25,8 @@
   function browserMotor(root) {
     var v = h('video', { playsinline: '', 'webkit-playsinline': '', preload: 'auto' }), base = 0, id = '', src = '', live = false, aud = [], ai = 0;
     root.insertBefore(v, root.firstChild);
+    // Kan deze browser HEVC (H.265) afspelen? Zo niet, dan zet de server het beeld om naar H.264.
+    var hevc = !!v.canPlayType('video/mp4; codecs="hvc1.1.6.L120.90"');
     ['playing', 'waiting', 'pause', 'play', 'ended', 'error'].forEach(function (n) { v.addEventListener(n, function () { if (ev[n]) ev[n](); }); });
     // iPhone en iPad: afspelen mag alleen vlak na een tik. Het omzetten op de server duurt soms een paar seconden,
     // dan is die tik "verlopen" en blijft het beeld stilstaan. Daarom de video al bij de eerste tik vrijgeven.
@@ -39,7 +41,7 @@
         if (s !== src) ai = audio || 0;
         vrijgeven();   // nog binnen de tik die de speler opende
         src = s; live = !!isLive; base = live ? 0 : Math.floor(from || 0);
-        return api('POST', '/api/hls/start', { src: s, from: base, low: !!S.low, audio: ai }).then(function (r) {
+        return api('POST', '/api/hls/start', { src: s, from: base, low: !!S.low, audio: ai, hevc: hevc }).then(function (r) {
           id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; if (!live && r.start != null) base = +r.start;   // de server begint bij het sleutelbeeld
           v.src = r.url; start(); return r.dur;
         });

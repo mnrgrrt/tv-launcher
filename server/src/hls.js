@@ -78,15 +78,16 @@ export function subText(url, headers, i) {
 
 /** Start omzetten. live: lopende zender (korte lijst die doorschuift); anders film of aflevering vanaf `from` seconden.
  *  audio: welk geluidsspoor (0 = eerste). */
-export async function start({ url, headers, live, from = 0, dev, low, audio = 0 }) {
+export async function start({ url, headers, live, from = 0, dev, low, audio = 0, hevc = false }) {
   for (const [id, s] of sessions) if (s.dev === dev) kill(id);   // per apparaat één tegelijk
   if (sessions.size >= MAX) kill([...sessions.entries()].sort((a, b) => a[1].seen - b[1].seen)[0][0]);
   const info = live ? await probe(url, headers) : await probeCached(url, headers);
   const auds = (info.streams || []).filter(s => s.codec_type === 'audio'), ai = Math.min(Math.max(0, +audio || 0), Math.max(0, auds.length - 1));
   const v = (info.streams || []).find(s => s.codec_type === 'video'), a = auds[ai];
-  const copyV = !low && v && ['h264', 'hevc'].includes(v.codec_name);
-  // Film of aflevering halverwege: het gekopieerde beeld kan alleen bij een sleutelbeeld beginnen, het geluid begint precies.
-  // Browsers zetten beide sporen dan tegen elkaar aan en het geluid loopt voor. Daarom precies bij dat sleutelbeeld beginnen.
+  // HEVC alleen kopiëren als de browser het zelf kan afspelen (iPad wel, Chrome zonder grafische kaart niet).
+  const copyV = !low && v && (v.codec_name === 'h264' || (v.codec_name === 'hevc' && hevc));
+  // Film of aflevering halverwege: het gekopieerde beeld kan alleen bij een sleutelbeeld beginnen. Daar beginnen we dan ook,
+  // zodat de tijd in de speler (en de ondertitels) klopt. Lukt het opzoeken niet, dan klopt alleen de tijd een paar seconden niet.
   if (!live && from > 0 && copyV) {
     const k = await keyframeBefore(url, headers, from);
     if (k != null && k >= 0 && k <= from && from - k < 30) from = Math.round(k * 1000) / 1000;
@@ -96,9 +97,11 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0 
   const args = ['-hide_banner', '-loglevel', 'error', ...(live || !from ? [] : ['-ss', String(Math.max(0, +from))]), ...hdrArgs(headers), '-i', url,
     '-map', '0:v:0?', '-map', '0:a:' + ai + '?',
     ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
-      : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', ...(low ? ['-vf', 'scale=-2:min(720\\,ih)', '-b:v', '1800k', '-maxrate', '2000k', '-bufsize', '4000k'] : ['-crf', '21'])]),
+      : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', ...(low ? ['-vf', 'scale=-2:min(720\\,ih)', '-b:v', '1800k', '-maxrate', '2000k', '-bufsize', '4000k'] : ['-vf', 'scale=-2:min(1080\\,ih)', '-crf', '21'])]),
     ...(a && a.codec_name === 'aac' && !low ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2']),
     '-f', 'hls', '-hls_time', live ? '4' : '6', '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4',
+    // Geen edit list: browsers negeren die, en dan loopt het geluid voor op het beeld. Zo staat de echte begintijd in de stukjes.
+    '-hls_segment_options', 'use_editlist=0',
     ...(live ? ['-hls_list_size', '15', '-hls_flags', 'delete_segments+independent_segments'] : ['-hls_playlist_type', 'event', '-hls_flags', 'independent_segments']),
     '-hls_segment_filename', path.join(dir, 's%05d.m4s'), path.join(dir, 'index.m3u8')];
   const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
