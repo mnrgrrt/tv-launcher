@@ -19,6 +19,7 @@ import * as photos from './photos.js';
 import * as saver from './saver.js';
 import * as fanart from './fanart.js';
 import { pipe, target } from './proxy.js';
+import * as hls from './hls.js';
 import { status } from './status.js';
 
 const PORT = +process.env.PORT || 8484;
@@ -155,6 +156,15 @@ on('GET', '/api/live/catchup/:id', 'device', ({ p, q }) => {
   return { url: auth.sign(`/stream/timeshift/${+p.id}/${stamp}/${minutes}`) };
 });
 on('GET', '/api/live/url/:id', 'device', ({ p }) => ({ url: auth.sign(`/stream/live/${+p.id}`) }));
+// HLS voor spelers die de bron niet zelf aankunnen. src is een ondertekende /stream/-link die het apparaat al kreeg.
+on('POST', '/api/hls/start', 'device', async ({ b, dev }) => {
+  const src = String(b.src || '');
+  if (!src.startsWith('/stream/') || !auth.verify(src)) throw Object.assign(new Error('Link ongeldig of verlopen'), { status: 403 });
+  const u = new URL(src, 'http://x'), t = target(u.pathname, u.searchParams); if (!t) throw Object.assign(new Error('Onbekend'), { status: 404 });
+  const s = await hls.start({ url: t.url, headers: t.headers, live: u.pathname.startsWith('/stream/live/'), from: +b.from || 0, dev: dev.id, low: !!b.low });
+  return { url: `/hls/${s.id}/index.m3u8`, id: s.id, dur: s.dur };
+});
+on('POST', '/api/hls/stop', 'device', ({ b, dev }) => { hls.stop(String(b.id || ''), dev.id); return { ok: true }; });
 
 // services = de diensten van dit profiel (de tv weet welke er op het apparaat staan); leeg = alle diensten.
 // Nieuw voor jou: nieuw uit alle bronnen, wat bij de smaak van dit profiel past bovenaan.
@@ -270,6 +280,12 @@ const server = http.createServer(async (req, res) => {
       if (!res.headersSent) send(res, 200, out ?? {});
       return;
     }
+    if (u.pathname.startsWith('/hls/')) {
+      const [, , id, name] = u.pathname.split('/'), f = hls.file(id, name);
+      if (!f) return send(res, 404, { error: 'Onbekend' });
+      res.writeHead(200, { 'Content-Type': name.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp4', 'Cache-Control': name.endsWith('.m3u8') ? 'no-cache' : 'max-age=3600' });
+      return fs.createReadStream(f).pipe(res);
+    }
     if (u.pathname.startsWith('/photo/')) {
       const f = profiles.photoPath(u.pathname.slice(7));
       if (!f || !auth.verify(req.url) || !fs.existsSync(f)) return send(res, 404, { error: 'Onbekend' });
@@ -298,4 +314,4 @@ setInterval(() => epg.refresh(), 6 * 3600e3);
 // Daarna elk uur, tot alles binnen is; ook de IMDb-cijfers (binnen de daglimiet van OMDb).
 setTimeout(() => catalog.enrich().catch(() => {}), 120e3);
 setInterval(() => catalog.enrich().catch(() => {}), 3600e3);
-process.on('SIGTERM', () => { server.close(); db.close(); process.exit(0); });
+process.on('SIGTERM', () => { hls.stopAll(); server.close(); db.close(); process.exit(0); });

@@ -6,6 +6,7 @@ Dit bestand geldt voor elke sessie in dit project. Lees het eerst, houd je eraan
 - **Sjuul TV** (eerst "Thuis"): eigen tv-startscherm (Android-app in `app/`, smaak `tv`, schermen in `shared/web/index.html` + `thuis.js`, Samsung-voorbereiding in `tizen/`).
 - **Sjuul TV telefoon**: zelfde app, smaak `telefoon` (`shared/web/telefoon.html` + `telefoon.js`). Release `telefoon-test` / `telefoon`, bestand `sjuul-telefoon.apk`. Gedeelde logica in `shared/web/kern.js`.
 - **Later iOS (iPad, iPhone)**: zelfde schermen (`telefoon.html` + `kern.js`) in een dunne Swift-schil. Daarom: alle opmaak en logica in `shared/web/`, en alleen wat echt per platform verschilt via `window.Native` (koppelen, server-aanroepen, spelers, updaten). Geen Android-only trucs in de webcode.
+- **Eén speler** (`shared/web/speler.js` + `speler.css`): knoppen, zappen, spoelen en kijkstand voor alle apparaten. Per apparaat alleen de motor eronder: browser (HLS via `/api/hls/start`, ffmpeg op de server), later AVPlay (Samsung) en ExoPlayer (Android). Daarna gaan de Kotlin-spelers en het oude `tizen/`-pakket eruit.
 - **tv-serverr**: de server (`server/`, Node 22, SQLite, geen npm-pakketten). Draait als Docker-container in docker-media (LXC 107, Proxmox-node dell), poort 8484, beheer op `/beheer`.
 - Tv's praten alleen met tv-serverr. Alle sleutels en wachtwoorden (Dispatcharr, Plex, TMDB, OpenSubtitles, Radarr, Sonarr, Home Assistant) staan alleen op de server.
 

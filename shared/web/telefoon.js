@@ -32,7 +32,7 @@
       });
     }, function () {});
   }
-  K.ui.toast = toast; K.ui.askWho = askWho; K.ui.unpaired = function () { go('pair', {}, true); };
+  K.ui.toast = toast; K.ui.sheet = sheet; K.ui.askWho = askWho; K.ui.unpaired = function () { go('pair', {}, true); };
 
   // ---------- schermen, tabbladen en Terug ----------
   var screens = {}, stack = [], current = null;
@@ -65,13 +65,18 @@
   function popPage() { closeSheet(); var p = stack.pop(); current = { name: p.name, args: p.args }; render(p.y); }
   function back() {
     if (closeSheet()) return;
+    if (window.Speler && Speler.isOpen()) return Speler.close();
     if (stack.length) { if (N) popPage(); else history.back(); return; }   // webversie: via de browsergeschiedenis, zodat vegen terug ook werkt
     if (current && current.name !== 'home' && S.profile) return go('home', {}, true);
     if (N && N.closeApp) N.closeApp();
   }
   window.__back = back;
   // Webversie: terugvegen of de terugknop van de browser.
-  if (!N) window.addEventListener('popstate', function () { if (stack.length) popPage(); });
+  if (!N) window.addEventListener('popstate', function () {
+    if (closeSheet()) return history.pushState(null, '');
+    if (window.Speler && Speler.isOpen()) return Speler.close(true);
+    if (stack.length) popPage();
+  });
   window.__resume = function () {};   // telefoon: geen "Wie kijkt er?" bij elk ontgrendelen
 
   // ---------- bouwstenen ----------
@@ -403,6 +408,11 @@
     l.appendChild(h('div', { class: 'r' }, '<span>tv-serverr</span><span class="v">' + esc(srv.url || '') + '</span>'));
     l.appendChild(h('div', { class: 'r' }, '<span>Dit apparaat</span><span class="v">' + esc(S.device ? S.device.device : '') + '</span>'));
     var l2 = h('div', { class: 'list' }); el.appendChild(l2);
+    // Webversie: Safari ziet niet of je op 4G/5G zit, dus zelf kiezen.
+    if (!N) l2.appendChild(tap(h('button', null, '<span>Data sparen (720p)</span><span class="v">' + (S.low ? 'Aan' : 'Uit') + '</span>'), function () {
+      S.low = !S.low; try { localStorage.setItem('sjuul-laag', S.low ? '1' : '0'); } catch (e) {}
+      this.querySelector('.v').textContent = S.low ? 'Aan' : 'Uit'; toast(S.low ? 'Data sparen staat aan. Geldt vanaf de volgende keer afspelen.' : 'Data sparen staat uit');
+    }));
     // Webversie: bijwerken gaat vanzelf, want de pagina komt altijd vers van tv-serverr.
     if (N) l2.appendChild(tap(h('button', null, '<span>Zoeken naar een nieuwe versie</span><span class="v">›</span>'), function () {
       toast('Even kijken…');
