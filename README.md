@@ -6,6 +6,7 @@ Eén gedeeld startscherm (HTML in `shared/web`) met per apparaat een eigen laag.
 |---|---|---|
 | Android TV (JBL, Formuler, ander Android-kastje) | `app/`, smaak `tv` | in gebruik, testkanaal |
 | Android-telefoon en -tablet | `app/`, smaak `telefoon` | testkanaal |
+| Samsung The Frame (Tizen 6) | `tizen/` (schil, schermen meegeleverd) | testapp |
 | iPad, iPhone, browser | `shared/web/telefoon.html` via tv-serverr (`/app/telefoon.html`) | testkanaal |
 
 ## Wat Sjuul TV doet

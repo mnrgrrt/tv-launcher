@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, thuis-1]
     # Alleen een nieuwe Thuis als de app zelf verandert, niet bij wijzigingen aan tv-serverr.
-    paths: ['app/**', 'shared/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml']
+    paths: ['app/**', 'shared/**', 'tizen/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/build.yml']
   workflow_dispatch:
 
 permissions:
@@ -51,6 +51,13 @@ jobs:
           cp app/build/outputs/apk/telefoon/release/app-telefoon-release.apk "sjuul-telefoon-${GITHUB_RUN_NUMBER}.apk"
           cp app/build/outputs/apk/telefoon/release/app-telefoon-release.apk sjuul-telefoon.apk
 
+      - name: Samsung-testapp (Tizen) inpakken
+        run: |
+          # Schil plus de schermen van deze versie (map app/). Ongesigneerd: bij installeren tekent Tizen Studio hem voor jouw tv.
+          sed "s#version=\"1.0.0\"#version=\"1.0.${GITHUB_RUN_NUMBER}\"#" tizen/config.xml > /tmp/config.xml
+          mkdir -p build-tizen && cp tizen/index.html tizen/sjuul-tizen.js tizen/icon.png build-tizen/ && cp /tmp/config.xml build-tizen/ && cp -r shared/web build-tizen/app
+          (cd build-tizen && zip -qr ../sjuul-samsung-test.wgt .)
+
       - uses: actions/upload-artifact@v4
         with:
           name: thuis-apk
@@ -82,7 +89,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete test --yes --cleanup-tag || true
-          gh release create test "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk --target "$GITHUB_SHA" --prerelease \
+          gh release create test "thuis-${GITHUB_RUN_NUMBER}.apk" thuis.apk sjuul-samsung-test.wgt --target "$GITHUB_SHA" --prerelease \
             --title "Sjuul TV $VERSIE (test)" \
             --notes "Testversie uit tak ${GITHUB_REF_NAME}, ${GITHUB_SHA::7}. Niet voor gewoon gebruik."
 

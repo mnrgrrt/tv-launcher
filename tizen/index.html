@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920">
+<title>Sjuul TV</title>
+<script src="$WEBAPIS/webapis/webapis.js"></script>
+<script src="sjuul-tizen.js"></script>
+<style>
+  html, body { margin: 0; background: #0e0e10; color: #fff; font-family: sans-serif; }
+  #opzet { position: absolute; left: 160px; top: 160px; width: 1100px; }
+  #opzet h1 { font-size: 56px; margin: 0 0 20px; }
+  #opzet p { font-size: 26px; color: #aaa; line-height: 1.5; }
+  #opzet input, #opzet button { display: block; width: 100%; box-sizing: border-box; font-size: 32px; padding: 18px 24px; border-radius: 16px; border: 3px solid transparent; margin-top: 18px; }
+  #opzet input { background: #222; color: #fff; }
+  #opzet button { background: #333; color: #fff; text-align: left; }
+  #opzet :focus { border-color: #fff; outline: none; }
+</style>
+</head>
+<body>
+<!-- Alleen bij de eerste start (of als de server niet bereikbaar is). Daarna komen de schermen van tv-serverr. -->
+<div id="opzet" hidden>
+  <h1>Sjuul TV</h1>
+  <p id="uitleg">Wat is het adres van tv-serverr? Hetzelfde adres als in de app op de andere tv's.</p>
+  <input id="adres" type="url" value="http://">
+  <button id="verder">Verder</button>
+</div>
+</body>
+</html>

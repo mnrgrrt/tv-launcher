@@ -1,7 +1,7 @@
 /* Sjuul TV: de gedeelde speler. Eén knoppenbalk en één manier van werken op elk apparaat.
    Onder de knoppen zit per apparaat een motor:
    - browser (iPad, iPhone): HLS van tv-serverr, die de bron omzet (staat hieronder);
-   - Android: ExoPlayer, dat de app klaarzet als window.SpelerMotor.
+   - Samsung (testapp): AVPlay, en straks Android: ExoPlayer. De schil van dat apparaat zet die klaar als window.SpelerMotor.
    Bediening: aanraken, of pijltjes, OK en terug. */
 (function () {
   'use strict';
