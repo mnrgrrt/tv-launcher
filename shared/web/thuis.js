@@ -148,6 +148,7 @@
   function contentReady() { if (overlay || touched) return; var f = firstContent(); if (f && f !== cur && !f.closest('.top')) focus(f); }
   function back() {
     if (overlay) { if (overlay._sticky) return; var o = overlay; closeOverlay(); if (o._onclose) o._onclose(); return; }
+    if (saverEl) return saverStop();
     if (window.Speler && Speler.isOpen()) return Speler.back();
     if (current && current.args && current.args._onback && current.args._onback() === true) return;
     if (stack.length) { current = stack.pop(); render(); return; }
@@ -1309,22 +1310,37 @@
     return el;
   };
 
-  // ---------- schermbeveiliging (Android-dagdroom van Thuis, instellingen op het apparaat) ----------
+  // ---------- schermbeveiliging ----------
+  // Android: de dagdroom van het systeem (werkt ook in andere apps). Andere tv's (Samsung): binnen Sjuul TV zelf, hieronder.
+  // Instellingen per apparaat; dezelfde keuzes op beide.
   var SAVERSRC = [['film', 'Filmart', 'Beelden van je eigen films en series'], ['album1', "Eigen foto's 1", 'Ook bovenaan Home'], ['album2', "Eigen foto's 2", ''],
     ['album3', "Eigen foto's 3", ''], ['kunst', 'Kunst', 'Schilderijen uit het Art Institute of Chicago'], ['klok', 'Alleen klok en weer', 'Rustig scherm zonder foto\'s']];
-  function saverPrefs() { try { return JSON.parse(N.saverGet()); } catch (e) { return null; } }
+  var APPSAVER = 'sjuul-schermbeveiliging';
+  function saverPrefs() {
+    if (K.can.saver) { try { return JSON.parse(N.saverGet()); } catch (e) { return null; } }
+    if (!K.can.appSaver) return null;
+    var p = { src: 'film', speed: 45, fixed: '', delay: 10, canDelay: true, active: true };
+    try { var o = JSON.parse(localStorage.getItem(APPSAVER) || '{}'); for (var k in o) p[k] = o[k]; } catch (e) {}
+    return p;
+  }
+  function saverSet(o) {
+    if (K.can.saver) return N.saverSet(JSON.stringify(o));
+    var p = saverPrefs(); for (var k in o) p[k] = o[k];
+    try { localStorage.setItem(APPSAVER, JSON.stringify(p)); } catch (e) {}
+    idleReset();
+  }
   function saverRows(row, redo) {
-    var sp = K.can.saver && saverPrefs(); if (!sp) return;
+    var sp = saverPrefs(); if (!sp) return;
     var src = sp.src.split(','), names = SAVERSRC.filter(function (x) { return src.indexOf(x[0]) >= 0; }).map(function (x) { return x[1]; });
     if (!sp.active) row('Schermbeveiliging is nog niet aangezet', 'Eenmalig via de computer in te stellen. Tot dan toont Android zijn eigen schermbeveiliging.', function () { N.openSystem('saver'); });
     row('Schermbeveiliging: beelden', names.join(', '), function () { pickSaverSources(sp, redo); });
     var DELAY = [['5', 'Na 5 minuten'], ['10', 'Na 10 minuten'], ['30', 'Na 30 minuten'], ['60', 'Na een uur'], ['0', 'Nooit']];
-    if (sp.canDelay) row('Schermbeveiliging start', labelOf(DELAY, String(sp.delay)), function () { N.saverSet(JSON.stringify({ delay: +nextOf(DELAY, String(sp.delay)) })); redo(); });
+    if (sp.canDelay) row('Schermbeveiliging start', labelOf(DELAY, String(sp.delay)), function () { saverSet({ delay: +nextOf(DELAY, String(sp.delay)) }); redo(); });
     else row('Schermbeveiliging start', sp.delay ? 'Na ' + sp.delay + ' minuten (aanpassen nog niet toegestaan)' : 'Nooit', function () { N.openSystem('saver'); });
     if (src.join() === 'klok') return;
     row('Foto', sp.fixed ? 'Steeds dezelfde' : 'Wisselen', function () { pickSaverPhoto(sp, redo); });
     var SPEED = [['45', 'Elke 45 seconden'], ['120', 'Elke 2 minuten'], ['300', 'Elke 5 minuten'], ['15', 'Elke 15 seconden']];
-    if (!sp.fixed) row('Wisselen van foto', labelOf(SPEED, String(sp.speed)), function () { N.saverSet(JSON.stringify({ speed: +nextOf(SPEED, String(sp.speed)) })); redo(); });
+    if (!sp.fixed) row('Wisselen van foto', labelOf(SPEED, String(sp.speed)), function () { saverSet({ speed: +nextOf(SPEED, String(sp.speed)) }); redo(); });
   }
   // Bronnen aan- en uitvinken. "Alleen klok en weer" sluit de rest uit.
   function pickSaverSources(sp, redo) {
@@ -1339,7 +1355,7 @@
             if (x[0] === 'klok') src = ['klok'];
             else { src = src.filter(function (k) { return k !== 'klok'; }); src = on ? src.filter(function (k) { return k !== x[0]; }) : src.concat(x[0]); }
             if (!src.length) src = ['film'];
-            N.saverSet(JSON.stringify({ src: src.join(','), fixed: '' })); sp.src = src.join(','); sp.fixed = '';
+            saverSet({ src: src.join(','), fixed: '' }); sp.src = src.join(','); sp.fixed = '';
             draw(); focus(list.querySelector('#ss-' + x[0]));
           }));
         });
@@ -1347,11 +1363,53 @@
       draw(); d.appendChild(list); openOverlay(d, redo);
     });
   }
+  // Schermbeveiliging binnen Sjuul TV: na een tijd niets doen, beelden met klok, datum en weer. Elke knop haalt hem weg.
+  var idleT = 0, saverEl = null;
+  function idleReset() {
+    clearTimeout(idleT);
+    var sp = K.can.appSaver && saverPrefs(); if (!sp || !+sp.delay) return;
+    idleT = setTimeout(saverStart, sp.delay * 60e3);
+  }
+  function saverStart() {
+    if ((window.Speler && Speler.isOpen()) || saverEl) return idleReset();
+    var sp = saverPrefs(), layers = [h('div', { class: 'sv-bg' }), h('div', { class: 'sv-bg' })], txt = h('div', { class: 'sv-tx' + (sp.src === 'klok' ? ' mid' : '') }, '<b></b><span class="d"></span><span class="w"></span>');
+    saverEl = h('div', { class: 'saver' }); layers.forEach(function (l) { saverEl.appendChild(l); }); saverEl.appendChild(txt);
+    saverEl.onclick = saverStop; document.body.appendChild(saverEl);
+    var clockT = setInterval(paint, 10e3), slideT = 0, imgs = [], n = 0, top = 0;
+    saverEl._stop = function () { clearInterval(clockT); clearInterval(slideT); };
+    function paint() {
+      var d = new Date(); txt.querySelector('b').textContent = d.getHours() + ':' + K.pad(d.getMinutes());
+      txt.querySelector('.d').textContent = d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, function (c) { return c.toUpperCase(); });
+    }
+    function next() {
+      if (!imgs.length) return;
+      var u = imgs[n++ % imgs.length].url, l = layers[top = 1 - top];
+      var im = new Image(); im.onload = function () { l.style.backgroundImage = "url('" + K.img(u).replace(/'/g, '%27') + "')"; l.classList.add('on'); layers[1 - top].classList.remove('on'); }; im.src = K.img(u);
+    }
+    paint();
+    get('/api/saver?src=' + encodeURIComponent(sp.src)).then(function (r) {
+      if (!saverEl) return;
+      if (r.weather) txt.querySelector('.w').textContent = r.weather.temp + '°  ' + r.weather.text + (r.weather.place ? '  ·  ' + r.weather.place : '');
+      if (sp.src === 'klok') return;
+      imgs = r.images || [];
+      var fixed = sp.fixed && imgs.filter(function (p) { return p.url.split('?')[0] === sp.fixed; })[0];
+      if (fixed) imgs = [fixed];
+      next(); if (imgs.length > 1) slideT = setInterval(next, (+sp.speed || 45) * 1000);
+    }).catch(function () {});
+  }
+  function saverStop() { if (!saverEl) return; saverEl._stop(); saverEl.remove(); saverEl = null; idleReset(); }
+  if (K.can.appSaver) {
+    // Eerst kijken of de schermbeveiliging aan staat: dan haalt de knop hem alleen weg en doet verder niets.
+    document.addEventListener('keydown', function (e) { if (saverEl) { e.preventDefault(); e.stopImmediatePropagation(); saverStop(); } else idleReset(); }, true);
+    document.addEventListener('click', idleReset, true);
+    idleReset();
+  }
+
   // Eén vaste foto kiezen uit de gekozen bronnen, of laten wisselen.
   function pickSaverPhoto(sp, redo) {
     get('/api/saver?src=' + encodeURIComponent(sp.src)).then(function (r) {
       var d = h('div', { class: 'dialog' }, '<h2>Foto in de schermbeveiliging</h2>'), box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;justify-content:center;max-width:1300px;max-height:640px;overflow:hidden' });
-      var pick = function (v) { N.saverSet(JSON.stringify({ fixed: v })); closeOverlay(); redo(); };
+      var pick = function (v) { saverSet({ fixed: v }); closeOverlay(); redo(); };
       box.appendChild(F(h('button', { class: 'pill' + (sp.fixed ? '' : ' on'), style: 'align-self:center' }, 'Wisselen'), function () { pick(''); }));
       r.images.slice(0, 24).forEach(function (p) {
         var key = p.url.split('?')[0];

@@ -18,7 +18,7 @@ const hdrArgs = h => (h && Object.keys(h).length ? ['-headers', Object.entries(h
 function probe(url, headers) {
   return new Promise((resolve, reject) => {
     execFile('ffprobe', ['-v', 'error', '-analyzeduration', '3000000', '-probesize', '3000000', ...hdrArgs(headers),
-      '-show_entries', 'stream=codec_type,codec_name:format=duration', '-of', 'json', url], { timeout: 20e3 }, (e, out) => {
+      '-show_entries', 'stream=codec_type,codec_name,channels:stream_tags=language,title:format=duration', '-of', 'json', url], { timeout: 20e3 }, (e, out) => {
       if (e) return reject(Object.assign(new Error('Bron niet te openen'), { status: 502 }));
       try { resolve(JSON.parse(out)); } catch { reject(new Error('Bron onleesbaar')); }
     });
@@ -32,17 +32,49 @@ function kill(id) {
   fs.rm(s.dir, { recursive: true, force: true }, () => {});
 }
 
-/** Start omzetten. live: lopende zender (korte lijst die doorschuift); anders film of aflevering vanaf `from` seconden. */
-export async function start({ url, headers, live, from = 0, dev, low }) {
+// Geluids- en ondertitelsporen van een bron, voor de keuzes in de speler. Tekstondertitels kunnen eruit gehaald worden.
+const TEXT = ['subrip', 'srt', 'ass', 'ssa', 'mov_text', 'webvtt', 'text'];
+function trackList(info) {
+  const st = info.streams || [], t = s => s.tags || {};
+  return {
+    audio: st.filter(s => s.codec_type === 'audio').map(s => ({ lang: t(s).language || '', title: t(s).title || '', codec: s.codec_name || '', channels: s.channels || 0 })),
+    subs: st.filter(s => s.codec_type === 'subtitle').map((s, i) => ({ i, lang: t(s).language || '', title: t(s).title || '', text: TEXT.includes(s.codec_name) }))
+  };
+}
+const probes = new Map();   // bron -> { at, info }: niet elke keer opnieuw meten
+async function probeCached(url, headers) {
+  const c = probes.get(url); if (c && Date.now() - c.at < 30 * 60e3) return c.info;
+  const info = await probe(url, headers); probes.set(url, { at: Date.now(), info });
+  if (probes.size > 200) probes.delete(probes.keys().next().value);
+  return info;
+}
+export const tracks = async (url, headers) => trackList(await probeCached(url, headers));
+
+/** Eén tekstondertitel uit het bestand als srt. Bewaard, want het hele bestand doorlezen kost even. */
+export function subText(url, headers, i) {
+  const f = path.join(ROOT, 'sub-' + crypto.createHash('sha1').update(url).digest('hex').slice(0, 16) + '-' + (+i) + '.srt');
+  if (fs.existsSync(f)) return Promise.resolve(fs.readFileSync(f, 'utf8'));
+  return new Promise((resolve, reject) => {
+    execFile('ffmpeg', ['-hide_banner', '-loglevel', 'error', ...hdrArgs(headers), '-i', url, '-map', '0:s:' + (+i), '-f', 'srt', f], { timeout: 180e3 }, e => {
+      if (e || !fs.existsSync(f)) return reject(Object.assign(new Error('Ondertitels uit het bestand lukken niet'), { status: 502 }));
+      resolve(fs.readFileSync(f, 'utf8'));
+    });
+  });
+}
+
+/** Start omzetten. live: lopende zender (korte lijst die doorschuift); anders film of aflevering vanaf `from` seconden.
+ *  audio: welk geluidsspoor (0 = eerste). */
+export async function start({ url, headers, live, from = 0, dev, low, audio = 0 }) {
   for (const [id, s] of sessions) if (s.dev === dev) kill(id);   // per apparaat één tegelijk
   if (sessions.size >= MAX) kill([...sessions.entries()].sort((a, b) => a[1].seen - b[1].seen)[0][0]);
-  const info = await probe(url, headers);
-  const v = (info.streams || []).find(s => s.codec_type === 'video'), a = (info.streams || []).find(s => s.codec_type === 'audio');
+  const info = live ? await probe(url, headers) : await probeCached(url, headers);
+  const auds = (info.streams || []).filter(s => s.codec_type === 'audio'), ai = Math.min(Math.max(0, +audio || 0), Math.max(0, auds.length - 1));
+  const v = (info.streams || []).find(s => s.codec_type === 'video'), a = auds[ai];
   const copyV = !low && v && ['h264', 'hevc'].includes(v.codec_name);
   const id = crypto.randomBytes(16).toString('hex'), dir = path.join(ROOT, id);
   fs.mkdirSync(dir);
   const args = ['-hide_banner', '-loglevel', 'error', ...(live || !from ? [] : ['-ss', String(Math.max(0, +from))]), ...hdrArgs(headers), '-i', url,
-    '-map', '0:v:0?', '-map', '0:a:0?',
+    '-map', '0:v:0?', '-map', '0:a:' + ai + '?',
     ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', ...(low ? ['-vf', 'scale=-2:min(720\\,ih)', '-b:v', '1800k', '-maxrate', '2000k', '-bufsize', '4000k'] : ['-crf', '21'])]),
     ...(a && a.codec_name === 'aac' && !low ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2']),
@@ -57,7 +89,7 @@ export async function start({ url, headers, live, from = 0, dev, low }) {
   // Wachten tot de eerste stukjes klaar staan, anders geeft de speler meteen op.
   const list = path.join(dir, 'index.m3u8');
   for (let i = 0; i < 100; i++) {
-    if (fs.existsSync(list) && /\.m4s/.test(fs.readFileSync(list, 'utf8'))) return { id, dur: live ? 0 : Math.round(+(info.format || {}).duration || 0) };
+    if (fs.existsSync(list) && /\.m4s/.test(fs.readFileSync(list, 'utf8'))) return { id, dur: live ? 0 : Math.round(+(info.format || {}).duration || 0), audio: trackList(info).audio, audioIndex: ai };
     if (done) break;
     await new Promise(r => setTimeout(r, 200));
   }

@@ -17,8 +17,8 @@
   window.Native = {
     base: function () { return url(); },
     httpProxy: function () { return ''; },
-    // Geen HDMI-tegels, schermbeveiliging, systeeminstellingen, inspreken of zelf bijwerken: dat regelt de Samsung zelf.
-    features: function () { return JSON.stringify({ apps: true, inputs: true, saver: false, system: false, voice: false, update: false }); },
+    // Geen systeeminstellingen, inspreken of zelf bijwerken: dat regelt de Samsung zelf. Schermbeveiliging binnen Sjuul TV (appSaver).
+    features: function () { return JSON.stringify({ apps: true, inputs: true, saver: false, appSaver: true, system: false, voice: false, update: false }); },
     // HDMI-ingangen met iets erop (bij het opstarten opgehaald, zie hieronder).
     getInputs: function () { return JSON.stringify(inputs.map(function (s) { return { id: 'HDMI' + s.number, port: s.number, label: 'HDMI ' + s.number, standby: false }; })); },
     // Naar een ingang: de bron van de tv omzetten en dan het gewone tv-beeld openen. De afstandsbediening werkt dan

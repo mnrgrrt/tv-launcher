@@ -298,3 +298,13 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .g-p.back { background: rgba(70,120,190,.22); color: rgba(220,232,255,.9); }
 .g-p.back.focus { background: var(--ink); color: #111; }
 /* Schermbeveiliging */
+/* Schermbeveiliging binnen Sjuul TV (tv's zonder Android-dagdroom). Rustig: alleen een zachte overgang. */
+.saver { position: fixed; inset: 0; z-index: 60; background: #000; cursor: none; }
+.saver .sv-bg { position: absolute; inset: 0; background: center/cover no-repeat; opacity: 0; transition: opacity 1.6s; }
+.saver .sv-bg.on { opacity: 1; }
+.saver .sv-tx { position: absolute; left: 112px; bottom: 88px; display: flex; flex-direction: column; gap: 6px; text-shadow: 0 2px 12px rgba(0,0,0,.6); }
+.saver .sv-tx b { font-size: 112px; font-weight: 400; line-height: 1; }
+.saver .sv-tx .d { font-size: 34px; font-weight: 500; }
+.saver .sv-tx .w { font-size: 30px; opacity: .85; }
+.saver .sv-tx.mid { left: 50%; top: 50%; bottom: auto; transform: translate(-50%, -50%); align-items: center; }
+.saver .sv-tx.mid b { font-size: 190px; }
