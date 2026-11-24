@@ -153,7 +153,7 @@
   }
   screens.live = function (a) {
     var el = h('div', { class: 'screen' }); el.appendChild(top('Live'));
-    var chips = h('div', { class: 'chips' }), list = h('div'); el.appendChild(chips); el.appendChild(list); list.appendChild(loading());
+    var chips = h('div', { class: 'chips' }), list = h('div', { class: 'chs' }); el.appendChild(chips); el.appendChild(list); list.appendChild(loading());
     liveCats().then(function (cats) {
       var shown = cats.filter(function (c) { return c.channels.length; });
       var cat = shown.filter(function (c) { return c.id === (a.cat || S.liveCat); })[0] || shown.filter(function (c) { return c.id !== 'alle' && !c.parent; })[0] || shown[0];

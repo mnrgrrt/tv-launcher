@@ -28,6 +28,9 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Telefoon: altijd staand. Tablet (kortste zijde 600dp of meer): draait mee met het scherm.
+        if (BuildConfig.TELEFOON && resources.configuration.smallestScreenWidthDp < 600)
+            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         registerReceiver(screen, android.content.IntentFilter().apply { addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_SCREEN_ON) })
         hideSystemUi()
 
