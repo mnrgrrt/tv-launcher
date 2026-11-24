@@ -405,7 +405,7 @@
       native('checkUpdate').then(function (t) {
         var u = JSON.parse(t); if (!u.newer) return toast('Je hebt de nieuwste versie (' + u.current + ')');
         toast('Sjuul TV ' + u.latest + ' wordt gedownload…', 8000);
-        native('installUpdate').then(function (r) { toast(r === 'permission' ? 'Sta het installeren van apps toe en kies daarna opnieuw' : 'Kies Installeren in het scherm dat nu opent', 6000); }, function (e) { toast('Bijwerken lukt niet: ' + e.message, 8000); });
+        native('installUpdate').then(function (r) { toast(r === 'permission' ? 'Sta het installeren van apps toe en kies daarna opnieuw' : 'Bezig met bijwerken. De app gaat zo even dicht, open hem daarna opnieuw.', 8000); }, function (e) { toast('Bijwerken lukt niet: ' + e.message, 8000); });
       }, function (e) { toast('Zoeken lukt niet: ' + e.message); });
     }));
     l2.appendChild(tap(h('button', null, '<span>Ontkoppelen</span><span class="v">›</span>'), function () {

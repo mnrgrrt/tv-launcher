@@ -76,7 +76,11 @@ object Updater {
             val got = ctx.packageManager.getPackageArchiveInfo(tmp.path, 0)?.let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode.toInt() else it.versionCode } ?: 0
             if (got <= installedVersion(ctx)) throw RuntimeException("De download was nog de oude versie. Probeer het over een minuut opnieuw.")
             val pi = ctx.packageManager.packageInstaller
-            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply { setAppPackageName(ctx.packageName) }
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+                setAppPackageName(ctx.packageName)
+                // Android 12+: zichzelf bijwerken zonder "Wil je deze app updaten?". Lukt dat niet, dan vraagt Android het alsnog (InstallResult).
+                if (Build.VERSION.SDK_INT >= 31) setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            }
             val id = pi.createSession(params)
             pi.openSession(id).use { session ->
                 session.openWrite("thuis.apk", 0, tmp.length()).use { out -> tmp.inputStream().use { it.copyTo(out) }; session.fsync(out) }

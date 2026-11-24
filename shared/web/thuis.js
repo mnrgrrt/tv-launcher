@@ -1414,7 +1414,7 @@
           toast('Sjuul TV ' + u.latest + ' wordt gedownload…', 8000);
           native('installUpdate').then(function (r) {
             if (r === 'permission') toast('Sta het installeren van apps toe en kies daarna opnieuw', 6000);
-            else toast('Klaar. Kies Installeren in het scherm dat nu opent.', 6000);
+            else toast('Bezig met bijwerken. Sjuul TV start zo opnieuw.', 8000);
           }, function (e) { toast('Bijwerken lukt niet: ' + e.message, 8000); });
         }, function (e) { toast('Zoeken lukt niet: ' + e.message); });
       });
