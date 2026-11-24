@@ -166,7 +166,7 @@ function srcOf(src) {
 }
 on('POST', '/api/hls/start', 'device', async ({ b, dev }) => {
   const t = srcOf(b.src);
-  const s = await hls.start({ url: t.url, headers: t.headers, live: t.live, from: +b.from || 0, dev: dev.id, low: !!b.low, audio: +b.audio || 0 });
+  const s = await hls.start({ url: t.url, headers: t.headers, live: t.live, from: +b.from || 0, dev: dev.id, low: !!b.low, audio: +b.audio || 0, hevc: b.hevc === true });
   return { url: `/hls/${s.id}/index.m3u8`, id: s.id, start: s.start, dur: s.dur, audio: s.audio, audioIndex: s.audioIndex };
 });
 // Sporen van een film of aflevering, en een tekstondertitel uit het bestand zelf.
