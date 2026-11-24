@@ -1,0 +1,37 @@
+/* Sjuul TV: de gedeelde speler (zie speler.js). Licht voor zwakke tv's: geen blur, geen maskers. */
+.sp { position: fixed; inset: 0; z-index: 28; background: #000; color: #fff; font-family: Inter, system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+.sp[hidden] { display: none; }
+.sp video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.sp video::cue { background: rgba(0,0,0,.55); color: #fff; font-family: Inter, system-ui, sans-serif; font-size: 1em; line-height: 1.3; }
+.sp-top, .sp-mid, .sp-bot { position: absolute; left: 0; right: 0; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.sp.osd .sp-top, .sp.osd .sp-mid, .sp.osd .sp-bot { opacity: 1; pointer-events: auto; }
+.sp-top { top: 0; display: flex; align-items: flex-start; gap: 12px; padding: calc(14px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 40px calc(18px + env(safe-area-inset-left));
+  background: linear-gradient(180deg, rgba(0,0,0,.75), rgba(0,0,0,0)); }
+.sp-tt { flex: 1; min-width: 0; }
+.sp-tt b { display: block; font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-tt span { display: block; font-size: 13px; color: rgba(255,255,255,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.sp-mid { top: 50%; transform: translateY(-50%); display: flex; justify-content: center; align-items: center; gap: 44px; }
+.sp-bot { bottom: 0; padding: 40px calc(18px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left));
+  background: linear-gradient(0deg, rgba(0,0,0,.8), rgba(0,0,0,0)); }
+.sp .sb { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.12); color: #fff; border: 0; padding: 0; }
+.sp .sb svg { width: 24px; height: 24px; }
+.sp .sb.big { width: 68px; height: 68px; background: rgba(255,255,255,.18); }
+.sp .sb.big svg { width: 34px; height: 34px; }
+.sp .sb.x { background: rgba(0,0,0,.35); flex: none; }
+.sp .sb:focus-visible, .sp .st:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.sp-bar { position: relative; height: 22px; cursor: pointer; touch-action: none; }
+.sp-bar::before, .sp-bar i { content: ""; position: absolute; left: 0; top: 9px; height: 4px; border-radius: 2px; }
+.sp-bar::before { right: 0; background: rgba(255,255,255,.25); }
+.sp-bar i.b { background: rgba(255,255,255,.4); width: 0; }
+.sp-bar i.p { background: #fff; width: 0; }
+.sp-bar s { position: absolute; top: 4px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #fff; left: 0; }
+.sp-time { display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,.8); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.sp-row { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+.sp .st { height: 36px; padding: 0 14px; border-radius: 18px; border: 0; background: rgba(255,255,255,.14); color: #fff; font: 600 14px Inter, system-ui, sans-serif; }
+.sp-row .sb { width: 36px; height: 36px; }
+.sp-row .sb svg { width: 20px; height: 20px; }
+.sp-spin { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid rgba(255,255,255,.2); border-top-color: #fff; opacity: 0; animation: sp-rond 1s linear infinite; pointer-events: none; }
+.sp.busy .sp-spin { opacity: 1; }
+.sp.busy.osd .sp-spin { opacity: 0; }
+@keyframes sp-rond { to { transform: rotate(360deg); } }
+html.sp-open, html.sp-open body { overflow: hidden; }

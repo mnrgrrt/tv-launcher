@@ -4,7 +4,7 @@
   'use strict';
   var N = window.Native || null;               // Android-brug; null in de webversie (iPad, iPhone, browser)
   // Wat het scherm zelf invult: meldingen, "wie kijkt er" bij afspelen, en wat er gebeurt als de koppeling weg is.
-  var ui = { toast: function () {}, askWho: function () { return Promise.resolve(); }, unpaired: function () {} };
+  var ui = { toast: function () {}, sheet: function () {}, askWho: function () { return Promise.resolve(); }, unpaired: function () {} };
 
   // ---------- hulpjes ----------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -59,6 +59,8 @@
   var S = { profile: 0, profiles: [], device: null, svcList: [], apps: null, cats: null, ov: {}, art: {}, reminders: {} };
 
   try { S.reminders = JSON.parse(localStorage.getItem('thuis-herinneringen') || '{}'); } catch (e) {}
+  // Lagere kwaliteit (720p) om data te sparen; de speler vraagt het de server bij het omzetten.
+  try { S.low = localStorage.getItem('sjuul-laag') === '1'; } catch (e) {}
   function me() { for (var i = 0; i < S.profiles.length; i++) if (S.profiles[i].id === S.profile) return S.profiles[i]; return S.profiles[0] || { id: 1, name: 'Samen', avatarUrl: '' }; }
   function setProfile(id) { S.profile = id; if (N) N.srvSetProfile(id); else try { localStorage.setItem(WEBPROF, String(id)); } catch (e) {} }
 
@@ -72,7 +74,7 @@
   }
   function start(item) {
     item.server = true; item.profile = S.profile;
-    if (N) N.playItem(JSON.stringify(item)); else ui.toast('Afspelen in de webversie komt in de volgende stap');
+    if (N) N.playItem(JSON.stringify(item)); else window.Speler.vod(item);
   }
   function playPlex(key, meta) {
     var k = 'plex:' + key;
@@ -112,8 +114,8 @@
     }
   }
   // Live en terugkijken gaan allebei naar de live-speler (daar kun je ook spoelen, pauzeren en zappen).
-  function playLive(catId, ch) { if (N) N.playLive(catId || 'alle', ch.id, 0, 0, ''); else ui.toast('Live kijken in de webversie komt in de volgende stap'); }
-  function playCatchup(ch, p, catId) { if (N) N.playLive(catId || 'alle', ch.id, p.start, p.end, p.title || ''); else ui.toast('Terugkijken in de webversie komt in de volgende stap'); }
+  function playLive(catId, ch) { if (N) N.playLive(catId || 'alle', ch.id, 0, 0, ''); else window.Speler.live(catId || 'alle', ch.id, 0, 0, ''); }
+  function playCatchup(ch, p, catId) { if (N) N.playLive(catId || 'alle', ch.id, p.start, p.end, p.title || ''); else window.Speler.live(catId || 'alle', ch.id, p.start, p.end, p.title || ''); }
   // Gezien of niet gezien, ook in de andere bron (Plex of IPTV).
   function setWatched(items, on) {
     return api('POST', '/api/watched', { profile: S.profile, items: items, on: on }).then(function () { S.ov = {}; }, function (e) { ui.toast(e.message); throw e; });
