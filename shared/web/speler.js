@@ -192,7 +192,7 @@
     if (cur.cues) for (var i = 0; i < cur.cues.length; i++) { var c = cur.cues[i]; if (c.s <= p && c.e > p) { cue = c; break; } }
     if (cue === subShown) return; subShown = cue;
     // Alleen schuin, vet en onderstreept blijven over; de rest is gewone tekst.
-    subEl.innerHTML = cue ? cue.t.split('\n').map(function (l) { return '<span>' + esc(l).replace(/&lt;(\/?[ibu])&gt;/g, '<$1>') + '</span>'; }).join('<br>') : '';
+    subEl.innerHTML = cue ? cue.t.split('\n').map(function (l) { return '<span>' + esc(l.replace(/\{\\[^}]*\}/g, '')).replace(/&lt;(\/?[ibu])&gt;/gi, '<$1>').replace(/&lt;\/?[a-z][\s\S]*?&gt;/gi, '') + '</span>'; }).join('<br>') : '';
   }
   // Tekst van de server (ondertitels). Via de app of, in de webversie, rechtstreeks met de cookie.
   function rawText(method, path, body) {
