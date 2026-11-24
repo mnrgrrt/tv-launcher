@@ -281,10 +281,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (u.pathname.startsWith('/hls/')) {
-      const [, , id, name] = u.pathname.split('/'), f = hls.file(id, name);
-      if (!f) return send(res, 404, { error: 'Onbekend' });
-      res.writeHead(200, { 'Content-Type': name.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp4', 'Cache-Control': name.endsWith('.m3u8') ? 'no-cache' : 'max-age=3600' });
-      return fs.createReadStream(f).pipe(res);
+      const [, , id, name] = u.pathname.split('/'), x = hls.file(id, name);
+      if (!x) return send(res, 404, { error: 'Onbekend' });
+      if (!name.endsWith('.m3u8')) { res.writeHead(200, { 'Content-Type': 'video/mp4', 'Cache-Control': 'max-age=3600' }); return fs.createReadStream(x.f).pipe(res); }
+      // Film of aflevering: de lijst groeit nog tijdens het omzetten; zeg de speler dat hij vooraan moet beginnen, niet bij het nieuwste stuk.
+      const list = fs.readFileSync(x.f, 'utf8');
+      return send(res, 200, x.live ? list : list.replace('#EXTM3U\n', '#EXTM3U\n#EXT-X-START:TIME-OFFSET=0,PRECISE=YES\n'), 'application/vnd.apple.mpegurl');
     }
     if (u.pathname.startsWith('/photo/')) {
       const f = profiles.photoPath(u.pathname.slice(7));

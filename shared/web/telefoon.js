@@ -65,7 +65,7 @@
   function popPage() { closeSheet(); var p = stack.pop(); current = { name: p.name, args: p.args }; render(p.y); }
   function back() {
     if (closeSheet()) return;
-    if (window.Speler && Speler.isOpen()) return Speler.close();
+    if (window.Speler && Speler.isOpen()) return Speler.back();
     if (stack.length) { if (N) popPage(); else history.back(); return; }   // webversie: via de browsergeschiedenis, zodat vegen terug ook werkt
     if (current && current.name !== 'home' && S.profile) return go('home', {}, true);
     if (N && N.closeApp) N.closeApp();
