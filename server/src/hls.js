@@ -25,6 +25,20 @@ function probe(url, headers) {
   });
 }
 
+/** Het sleutelbeeld vlak voor `sec` (in seconden vanaf het begin van de film). Leest maar één pakketje; null als het niet lukt. */
+function keyframeBefore(url, headers, sec) {
+  return new Promise(resolve => {
+    execFile('ffprobe', ['-v', 'error', ...hdrArgs(headers), '-select_streams', 'v:0', '-read_intervals', `${sec}%+#1`,
+      '-show_entries', 'packet=pts_time:format=start_time', '-of', 'json', url], { timeout: 15e3 }, (e, out) => {
+      if (e) return resolve(null);
+      try {
+        const j = JSON.parse(out), pts = +((j.packets || [])[0] || {}).pts_time, st = +((j.format || {}).start_time) || 0;
+        resolve(Number.isFinite(pts) ? pts - st : null);
+      } catch { resolve(null); }
+    });
+  });
+}
+
 function kill(id) {
   const s = sessions.get(id); if (!s) return;
   sessions.delete(id);
@@ -71,16 +85,19 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0 
   const auds = (info.streams || []).filter(s => s.codec_type === 'audio'), ai = Math.min(Math.max(0, +audio || 0), Math.max(0, auds.length - 1));
   const v = (info.streams || []).find(s => s.codec_type === 'video'), a = auds[ai];
   const copyV = !low && v && ['h264', 'hevc'].includes(v.codec_name);
+  // Film of aflevering halverwege: het gekopieerde beeld kan alleen bij een sleutelbeeld beginnen, het geluid begint precies.
+  // Browsers zetten beide sporen dan tegen elkaar aan en het geluid loopt voor. Daarom precies bij dat sleutelbeeld beginnen.
+  if (!live && from > 0 && copyV) {
+    const k = await keyframeBefore(url, headers, from);
+    if (k != null && k >= 0 && k <= from && from - k < 30) from = Math.round(k * 1000) / 1000;
+  }
   const id = crypto.randomBytes(16).toString('hex'), dir = path.join(ROOT, id);
   fs.mkdirSync(dir);
   const args = ['-hide_banner', '-loglevel', 'error', ...(live || !from ? [] : ['-ss', String(Math.max(0, +from))]), ...hdrArgs(headers), '-i', url,
     '-map', '0:v:0?', '-map', '0:a:' + ai + '?',
     ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', ...(low ? ['-vf', 'scale=-2:min(720\\,ih)', '-b:v', '1800k', '-maxrate', '2000k', '-bufsize', '4000k'] : ['-crf', '21'])]),
-    // Film of aflevering: het beeld (gekopieerd) begint bij het vorige sleutelbeeld, het geluid precies op het gekozen punt.
-    // Browsers laten het geluid dan te vroeg starten. Daarom het geluid vooraan aanvullen met stilte, zodat beide op 0 beginnen.
-    ...(a && a.codec_name === 'aac' && !low && live ? ['-c:a', 'copy']
-      : ['-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2', ...(live ? [] : ['-af', 'aresample=async=1:first_pts=0'])]),
+    ...(a && a.codec_name === 'aac' && !low ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2']),
     '-f', 'hls', '-hls_time', live ? '4' : '6', '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4',
     ...(live ? ['-hls_list_size', '15', '-hls_flags', 'delete_segments+independent_segments'] : ['-hls_playlist_type', 'event', '-hls_flags', 'independent_segments']),
     '-hls_segment_filename', path.join(dir, 's%05d.m4s'), path.join(dir, 'index.m3u8')];
@@ -92,7 +109,7 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0 
   // Wachten tot de eerste stukjes klaar staan, anders geeft de speler meteen op.
   const list = path.join(dir, 'index.m3u8');
   for (let i = 0; i < 100; i++) {
-    if (fs.existsSync(list) && /\.m4s/.test(fs.readFileSync(list, 'utf8'))) return { id, dur: live ? 0 : Math.round(+(info.format || {}).duration || 0), audio: trackList(info).audio, audioIndex: ai };
+    if (fs.existsSync(list) && /\.m4s/.test(fs.readFileSync(list, 'utf8'))) return { id, start: live ? 0 : from, dur: live ? 0 : Math.round(+(info.format || {}).duration || 0), audio: trackList(info).audio, audioIndex: ai };
     if (done) break;
     await new Promise(r => setTimeout(r, 200));
   }
