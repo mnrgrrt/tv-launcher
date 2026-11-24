@@ -4,7 +4,7 @@
   'use strict';
   var K = window.Kern, N = K.N, S = K.S, esc = K.esc, h = K.h, clock = K.clock, dayName = K.dayName, native = K.native, api = K.api, get = K.get,
     img = K.img, bg = K.bg, me = K.me, setProfile = K.setProfile, playPlex = K.playPlex, playMovie = K.playMovie, playEpisode = K.playEpisode,
-    resume = K.resume, playLive = K.playLive, playCatchup = K.playCatchup, setWatched = K.setWatched, rating = K.rating, nextUp = K.nextUp, hideCont = K.hideCont;
+    resume = K.resume, info = K.info, playLive = K.playLive, playCatchup = K.playCatchup, setWatched = K.setWatched, rating = K.rating, nextUp = K.nextUp, hideCont = K.hideCont;
   var $app = document.getElementById('app'), $tabs = document.getElementById('tabs');
 
   // ---------- meldingen en vensters ----------
@@ -53,7 +53,7 @@
   // go(naam, args): nieuwe pagina; root = true: opnieuw beginnen (tabblad, profiel, koppelen).
   function go(name, args, root) {
     closeSheet();
-    if (root) stack = []; else if (current) stack.push({ name: current.name, args: current.args, y: window.scrollY });
+    if (root) stack = []; else if (current) { stack.push({ name: current.name, args: current.args, y: window.scrollY }); if (!N) history.pushState(null, ''); }
     current = { name: name, args: args || {} };
     render(0);
   }
@@ -62,13 +62,16 @@
     drawTabs(); window.scrollTo(0, y || 0);
   }
   // Terug: eerst een open venster dicht, dan een pagina terug, dan naar Home; op Home sluit de app.
+  function popPage() { closeSheet(); var p = stack.pop(); current = { name: p.name, args: p.args }; render(p.y); }
   function back() {
     if (closeSheet()) return;
-    if (stack.length) { var p = stack.pop(); current = { name: p.name, args: p.args }; render(p.y); return; }
+    if (stack.length) { if (N) popPage(); else history.back(); return; }   // webversie: via de browsergeschiedenis, zodat vegen terug ook werkt
     if (current && current.name !== 'home' && S.profile) return go('home', {}, true);
     if (N && N.closeApp) N.closeApp();
   }
   window.__back = back;
+  // Webversie: terugvegen of de terugknop van de browser.
+  if (!N) window.addEventListener('popstate', function () { if (stack.length) popPage(); });
   window.__resume = function () {};   // telefoon: geen "Wie kijkt er?" bij elk ontgrendelen
 
   // ---------- bouwstenen ----------
@@ -140,7 +143,7 @@
     get('/api/continue?profile=' + S.profile).then(function (l) { cont.appendChild(section('Verder kijken', l.map(function (c) { return contCard(c, again); }))); }).catch(function () {});
     news.appendChild(loading());
     get('/api/foryou?profile=' + S.profile).then(function (d) {
-      news.innerHTML = '';
+      news.innerHTML = d.now.length ? '' : '<div class="empty">Nu niets nieuws voor jou. Kijk in Bibliotheek of Live.</div>';
       news.appendChild(section('Nieuw voor jou', d.now.map(function (o) { return poster(o, o.kind); })));
     }).catch(function (e) { news.innerHTML = '<div class="empty">tv-serverr is nu niet bereikbaar. ' + esc(e.message) + '</div>'; });
     return el;
@@ -394,14 +397,15 @@
   screens.settings = function () {
     var el = h('div', { class: 'screen' }); el.appendChild(backBar('Terug'));
     el.appendChild(h('div', { class: 'top', style: 'padding-top:0' }, '<h1>Instellingen</h1>'));
-    var info = N ? JSON.parse(N.srvInfo()) : { url: location.origin };
+    var srv = info();
     var l = h('div', { class: 'list' }); el.appendChild(l);
-    l.appendChild(h('div', { class: 'r' }, '<span>Versie</span><span class="v">Sjuul TV ' + esc(N ? N.appVersion() : 'browser') + '</span>'));
-    l.appendChild(h('div', { class: 'r' }, '<span>tv-serverr</span><span class="v">' + esc(info.url || '') + '</span>'));
+    l.appendChild(h('div', { class: 'r' }, '<span>Versie</span><span class="v">Sjuul TV ' + esc(N ? N.appVersion() : 'webversie') + '</span>'));
+    l.appendChild(h('div', { class: 'r' }, '<span>tv-serverr</span><span class="v">' + esc(srv.url || '') + '</span>'));
     l.appendChild(h('div', { class: 'r' }, '<span>Dit apparaat</span><span class="v">' + esc(S.device ? S.device.device : '') + '</span>'));
     var l2 = h('div', { class: 'list' }); el.appendChild(l2);
-    l2.appendChild(tap(h('button', null, '<span>Zoeken naar een nieuwe versie</span><span class="v">›</span>'), function () {
-      if (!N) return; toast('Even kijken…');
+    // Webversie: bijwerken gaat vanzelf, want de pagina komt altijd vers van tv-serverr.
+    if (N) l2.appendChild(tap(h('button', null, '<span>Zoeken naar een nieuwe versie</span><span class="v">›</span>'), function () {
+      toast('Even kijken…');
       native('checkUpdate').then(function (t) {
         var u = JSON.parse(t); if (!u.newer) return toast('Je hebt de nieuwste versie (' + u.current + ')');
         toast('Sjuul TV ' + u.latest + ' wordt gedownload…', 8000);
@@ -409,7 +413,7 @@
       }, function (e) { toast('Zoeken lukt niet: ' + e.message); });
     }));
     l2.appendChild(tap(h('button', null, '<span>Ontkoppelen</span><span class="v">›</span>'), function () {
-      sheet('Deze telefoon ontkoppelen?', [['Ja, ontkoppelen', function () { if (N) N.srvUnpair(); S.profile = 0; go('pair', {}, true); }], ['Annuleren', function () {}]]);
+      sheet('Deze telefoon ontkoppelen?', [['Ja, ontkoppelen', function () { K.unpair().then(function () { S.profile = 0; go('pair', {}, true); }); }], ['Annuleren', function () {}]]);
     }));
     return el;
   };
@@ -417,13 +421,15 @@
   // ---------- Koppelen en wie kijkt er ----------
   screens.pair = function () {
     var el = h('div', { class: 'screen' }, '<div class="top"><h1>Sjuul TV koppelen</h1></div>');
+    // Webversie: het adres is gewoon deze pagina; wel een naam, zodat je in beheer ziet welk apparaat het is.
     var f = h('div', { class: 'form' }, '<div class="dim">Open de beheerpagina van tv-serverr, kies "Nieuwe code" en typ die hier in. Onderweg: zet eerst je VPN naar huis aan.</div>' +
-      '<label>Adres van tv-serverr</label><input id="u" inputmode="url" autocomplete="off"><label>Code</label><input id="c" inputmode="numeric" autocomplete="one-time-code"><div class="err" id="err"></div>');
+      (N ? '<label>Adres van tv-serverr</label><input id="u" inputmode="url" autocomplete="off">' : '<label>Naam van dit apparaat</label><input id="u" autocomplete="off" placeholder="Bijvoorbeeld iPad">') +
+      '<label>Code</label><input id="c" inputmode="numeric" autocomplete="one-time-code"><div class="err" id="err"></div>');
     var go2 = h('button', { class: 'btn main' }, 'Koppelen'); f.appendChild(go2); el.appendChild(f);
-    var info = N ? JSON.parse(N.srvInfo()) : {}; f.querySelector('#u').value = info.url || '';
+    if (N) f.querySelector('#u').value = info().url || '';
     go2.onclick = function () {
       var u = f.querySelector('#u').value.trim(), c = f.querySelector('#c').value.trim(); f.querySelector('#err').textContent = '';
-      if (!N) return; native('srvPair', u, c, 'Telefoon').then(function () { boot(); }, function (e) { f.querySelector('#err').textContent = e.message; });
+      (N ? K.pair(u, c, 'Telefoon') : K.pair('', c, u || 'Browser')).then(function () { boot(); }, function (e) { f.querySelector('#err').textContent = e.message; });
     };
     return el;
   };
@@ -435,9 +441,9 @@
 
   // ---------- opstarten ----------
   function boot() {
-    var info = N ? JSON.parse(N.srvInfo()) : { paired: true, profile: 0 };
-    if (!info.paired) return go('pair', {}, true);
-    S.profile = info.profile || 0;
+    var srv = info();
+    if (!srv.paired) return go('pair', {}, true);
+    S.profile = srv.profile || 0;
     Promise.all([get('/api/whoami'), get('/api/profiles')]).then(function (r) {
       S.device = r[0]; S.profiles = r[1];
       if (S.device.profile && !S.profile) setProfile(S.device.profile);

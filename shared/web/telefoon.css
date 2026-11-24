@@ -19,6 +19,7 @@ h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
 .av { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--card2); }
 
 /* Tabbladen onderin */
+#tabs[hidden], #toast[hidden] { display: none; }
 #tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; justify-content: space-around; padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
   background: rgba(14,14,16,.94); border-top: 1px solid rgba(255,255,255,.07); }
 #tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--ink-3); padding: 4px 0; }

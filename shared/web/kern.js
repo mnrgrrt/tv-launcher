@@ -2,7 +2,7 @@
    Het scherm zelf (tv: thuis.js, telefoon: telefoon.js) geeft via Kern.ui door hoe het meldingen en vragen toont. */
 (function () {
   'use strict';
-  var N = window.Native || null;               // Android-brug; null in een gewone browser
+  var N = window.Native || null;               // Android-brug; null in de webversie (iPad, iPhone, browser)
   // Wat het scherm zelf invult: meldingen, "wie kijkt er" bij afspelen, en wat er gebeurt als de koppeling weg is.
   var ui = { toast: function () {}, askWho: function () { return Promise.resolve(); }, unpaired: function () {} };
 
@@ -26,14 +26,25 @@
   var cbs = {}, cbId = 0;
   window.__nativeCb = function (id, ok, data) { var c = cbs[id]; delete cbs[id]; if (!c) return; if (ok) c.res(data); else c.rej(new Error(data)); };
   function native(fn) { var args = [].slice.call(arguments, 1); return new Promise(function (res, rej) { var id = ++cbId; cbs[id] = { res: res, rej: rej }; N[fn].apply(N, [id].concat(args)); }); }
-  // In een browser (testen op de pc): rechtstreeks met een sleutel uit localStorage.
-  function api(method, path, body) {
-    if (N) return native('srv', method, path, body ? JSON.stringify(body) : '').then(function (t) { return t ? JSON.parse(t) : {}; }, onApiError);
-    var key = ''; try { key = localStorage.getItem('thuis-key') || ''; } catch (e) {}
-    return fetch(path, { method: method, headers: { 'X-Thuis-Key': key, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+  // Webversie: de server zet de sleutel in een cookie die deze pagina niet kan lezen; X-Thuis bewijst dat wij het zijn.
+  function web(method, path, body) {
+    return fetch(path, { method: method, credentials: 'same-origin', headers: { 'X-Thuis': '1', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
       .then(function (r) { if (r.status === 401) throw new Error('NIET_GEKOPPELD'); return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
   }
+  function api(method, path, body) {
+    var p = N ? native('srv', method, path, body ? JSON.stringify(body) : '').then(function (t) { return t ? JSON.parse(t) : {}; }) : web(method, path, body);
+    return p.catch(onApiError);
+  }
   function onApiError(e) { if (e.message === 'NIET_GEKOPPELD') { if (N) N.srvUnpair(); ui.unpaired(); } throw e; }
+  // Koppelen, ontkoppelen en wat we van dit apparaat weten: via de app, of in de webversie via de server en localStorage.
+  var WEBPROF = 'sjuul-profiel';
+  function info() {
+    if (N) return JSON.parse(N.srvInfo());
+    var p = 0; try { p = +localStorage.getItem(WEBPROF) || 0; } catch (e) {}
+    return { paired: true, profile: p, url: location.origin, web: true };   // of het echt gekoppeld is, blijkt bij de eerste vraag aan de server
+  }
+  function pair(url, code, name) { return N ? native('srvPair', url, code, name) : web('POST', '/api/web/pair', { code: code, name: name }); }
+  function unpair() { if (N) { N.srvUnpair(); return Promise.resolve(); } return web('POST', '/api/web/unpair').catch(function () {}); }
   var get = function (p) { return api('GET', p); };
   // Plaatjes: van de server (pad met /) via de app, https rechtstreeks, http via de app (anders blokkeert de pagina ze).
   function img(u) {
@@ -49,7 +60,7 @@
 
   try { S.reminders = JSON.parse(localStorage.getItem('thuis-herinneringen') || '{}'); } catch (e) {}
   function me() { for (var i = 0; i < S.profiles.length; i++) if (S.profiles[i].id === S.profile) return S.profiles[i]; return S.profiles[0] || { id: 1, name: 'Samen', avatarUrl: '' }; }
-  function setProfile(id) { S.profile = id; if (N) N.srvSetProfile(id); }
+  function setProfile(id) { S.profile = id; if (N) N.srvSetProfile(id); else try { localStorage.setItem(WEBPROF, String(id)); } catch (e) {} }
 
 
   // ---------- afspelen ----------
@@ -61,7 +72,7 @@
   }
   function start(item) {
     item.server = true; item.profile = S.profile;
-    if (N) N.playItem(JSON.stringify(item)); else ui.toast('Afspelen kan alleen in de app');
+    if (N) N.playItem(JSON.stringify(item)); else ui.toast('Afspelen in de webversie komt in de volgende stap');
   }
   function playPlex(key, meta) {
     var k = 'plex:' + key;
@@ -101,8 +112,8 @@
     }
   }
   // Live en terugkijken gaan allebei naar de live-speler (daar kun je ook spoelen, pauzeren en zappen).
-  function playLive(catId, ch) { if (N) N.playLive(catId || 'alle', ch.id, 0, 0, ''); else ui.toast('Live tv kan alleen in de app'); }
-  function playCatchup(ch, p, catId) { if (N) N.playLive(catId || 'alle', ch.id, p.start, p.end, p.title || ''); else ui.toast('Terugkijken kan alleen in de app'); }
+  function playLive(catId, ch) { if (N) N.playLive(catId || 'alle', ch.id, 0, 0, ''); else ui.toast('Live kijken in de webversie komt in de volgende stap'); }
+  function playCatchup(ch, p, catId) { if (N) N.playLive(catId || 'alle', ch.id, p.start, p.end, p.title || ''); else ui.toast('Terugkijken in de webversie komt in de volgende stap'); }
   // Gezien of niet gezien, ook in de andere bron (Plex of IPTV).
   function setWatched(items, on) {
     return api('POST', '/api/watched', { profile: S.profile, items: items, on: on }).then(function () { S.ov = {}; }, function (e) { ui.toast(e.message); throw e; });
@@ -124,7 +135,7 @@
   // Uit Verder kijken halen (zonder op bekeken te zetten).
   function hideCont(c) { return api('POST', '/api/continue/hide', { profile: S.profile, key: c.key }).then(function () { ui.toast('Weggehaald uit Verder kijken'); }, function (e) { ui.toast(e.message); }); }
 
-  window.Kern = { N: N, ui: ui, S: S, esc: esc, h: h, pad: pad, clock: clock, dayName: dayName, native: native, api: api, get: get, img: img, bg: bg,
+  window.Kern = { N: N, ui: ui, info: info, pair: pair, unpair: unpair, S: S, esc: esc, h: h, pad: pad, clock: clock, dayName: dayName, native: native, api: api, get: get, img: img, bg: bg,
     me: me, setProfile: setProfile, position: position, start: start, playPlex: playPlex, playMovie: playMovie, playEpisode: playEpisode, resume: resume,
     playLive: playLive, playCatchup: playCatchup, setWatched: setWatched, rating: rating, whereFrom: whereFrom, nextUp: nextUp, hideCont: hideCont };
 })();
