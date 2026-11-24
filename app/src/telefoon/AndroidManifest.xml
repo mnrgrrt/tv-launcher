@@ -3,7 +3,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <!-- Staand op de telefoon, meedraaien op een tablet: dat regelt MainActivity zelf -->
-        <activity android:name=".MainActivity" android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+        <activity android:name=".MainActivity" />
         <activity android:name=".VodActivity" android:screenOrientation="sensorLandscape" />
         <activity android:name=".PlayerActivity" android:screenOrientation="sensorLandscape" />
     </application>
