@@ -40,7 +40,8 @@
         vrijgeven();   // nog binnen de tik die de speler opende
         src = s; live = !!isLive; base = live ? 0 : Math.floor(from || 0);
         return api('POST', '/api/hls/start', { src: s, from: base, low: !!S.low, audio: ai }).then(function (r) {
-          id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; v.src = r.url; start(); return r.dur;
+          id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; if (!live && r.start != null) base = +r.start;   // de server begint bij het sleutelbeeld
+          v.src = r.url; start(); return r.dur;
         });
       },
       time: function () { return base + (v.currentTime || 0); },

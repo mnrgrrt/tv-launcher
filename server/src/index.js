@@ -167,7 +167,7 @@ function srcOf(src) {
 on('POST', '/api/hls/start', 'device', async ({ b, dev }) => {
   const t = srcOf(b.src);
   const s = await hls.start({ url: t.url, headers: t.headers, live: t.live, from: +b.from || 0, dev: dev.id, low: !!b.low, audio: +b.audio || 0 });
-  return { url: `/hls/${s.id}/index.m3u8`, id: s.id, dur: s.dur, audio: s.audio, audioIndex: s.audioIndex };
+  return { url: `/hls/${s.id}/index.m3u8`, id: s.id, start: s.start, dur: s.dur, audio: s.audio, audioIndex: s.audioIndex };
 });
 // Sporen van een film of aflevering, en een tekstondertitel uit het bestand zelf.
 on('POST', '/api/media/tracks', 'device', async ({ b }) => { const t = srcOf(b.src); if (t.live) return { audio: [], subs: [] }; return hls.tracks(t.url, t.headers); });
