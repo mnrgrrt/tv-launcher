@@ -113,10 +113,11 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   proc.stderr.on('data', d => { err = (err + d).slice(-400); });
   proc.on('exit', () => { done = true; });
   sessions.set(id, { proc, dir, dev, seen: Date.now(), live: !!live });
-  // Wachten tot de eerste stukjes klaar staan, anders geeft de speler meteen op.
-  const list = path.join(dir, 'index.m3u8');
-  for (let i = 0; i < 100; i++) {
-    if (fs.existsSync(list) && /\.m4s/.test(fs.readFileSync(list, 'utf8'))) return { id, start: live ? 0 : from, dur: live ? 0 : Math.round(+(info.format || {}).duration || 0), audio: trackList(info).audio, audioIndex: ai };
+  // Wachten tot er genoeg stukjes klaar staan. Bij film of aflevering drie: met maar één stukje slaat Chrome het begin over
+  // of geeft hij een leesfout (vooral als het beeld omgezet wordt en dat langzamer gaat).
+  const list = path.join(dir, 'index.m3u8'), need = live ? 1 : 3;
+  for (let i = 0; i < 150; i++) {
+    if (fs.existsSync(list) && ((fs.readFileSync(list, 'utf8').match(/\.m4s/g) || []).length >= need || (done && /\.m4s/.test(fs.readFileSync(list, 'utf8'))))) return { id, start: live ? 0 : from, dur: live ? 0 : Math.round(+(info.format || {}).duration || 0), audio: trackList(info).audio, audioIndex: ai };
     if (done) break;
     await new Promise(r => setTimeout(r, 200));
   }
