@@ -727,6 +727,9 @@
   }
 
   // key: een knop die het apparaat zelf doorgeeft (Android: zenders, kleuren, gids), met dezelfde codes als hierboven.
+  // stand(): voor testen en foutzoeken (positie, lengte, getoonde ondertitel).
   window.Speler = { vod: vod, live: live, isOpen: function () { return !!cur; }, back: back, close: close,
+    stand: function () { return cur ? { pos: pos(), dur: cur.dur, live: !!cur.live, paused: E.paused(), sub: subShown ? subShown.t : '' } : null; },
+    spoel: function (sec) { seekTo(sec); },
     key: function (c, rep) { if (cur && !el.hidden && !document.querySelector('.sheet, .overlay')) handle(c, rep); } };
 })();
