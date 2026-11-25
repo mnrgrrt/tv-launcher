@@ -3,12 +3,12 @@
    - live: balk met zender, programma en tijden; knoppenrij na OK; zenderlijst links; gids als raster met het beeld rechtsboven.
    Onder de knoppen zit per apparaat een motor:
    - browser (iPad, iPhone): HLS van tv-serverr, die de bron omzet (staat hieronder);
-   - Samsung (testapp): AVPlay, en straks Android: ExoPlayer. De schil van dat apparaat zet die klaar als window.SpelerMotor.
+   - Samsung (testapp): films ook via HLS van tv-serverr; live met AVPlay. De schil zet AVPlay klaar als window.SpelerMotor.
    Bediening: pijltjes, OK en terug, of aanraken. */
 (function () {
   'use strict';
   var K = window.Kern, S = K.S, esc = K.esc, h = K.h, get = K.get, api = K.api;
-  var el = null, E = null, cur = null, ev = {};
+  var el = null, E = null, WEB = null, NATIVE = null, cur = null, ev = {};
   var pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
   var hhmm = function (t) { var d = new Date(t); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
 
@@ -80,7 +80,7 @@
           var r = x[0];
           if (mine !== loads) return r.dur;   // intussen alweer verder gespoeld
           id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; if (!live && r.start != null) base = +r.start;   // de server begint bij het sleutelbeeld
-          attach(r.url); pending = false; start(); return r.dur;
+          attach(K.img(r.url)); pending = false; start(); return r.dur;   // Samsung-app: adres van de server ervoor
         }, function (e) { if (mine !== loads) return 0; pending = false; throw e; });   // vervangen door een nieuwere: geen melding
       },
       time: function () { return base + (pending ? 0 : v.currentTime || 0); },
@@ -124,7 +124,10 @@
       '<div class="sl-time"><span class="sl-ta"></span><div class="sl-pg"><i></i></div><span class="sl-tb"></span></div><div class="sl-btns"></div></div>' +
       '<div class="sl-list" hidden><div class="sl-lt">Zenders</div><div class="sl-ll"></div></div>' +
       '<div class="sl-choice" hidden><span>● Live</span><span>↺ Vanaf begin</span></div>');
-    E = window.SpelerMotor ? window.SpelerMotor(el, ev) : browserMotor(el);
+    // Films en afleveringen altijd via HLS van de server (ook op de Samsung): één verbinding met de bron (Dispatcharr staat er
+    // maar één toe), ondertitels lezen mee, en geluid en beeld in een vorm die elk apparaat aankan.
+    // Live op de Samsung: rechtstreeks met AVPlay, dat zapt sneller.
+    WEB = browserMotor(el); NATIVE = window.SpelerMotor ? window.SpelerMotor(el, ev) : null; E = WEB;
     // Webversie (aanraken, geen afstandsbediening): knoppen Terug en Home linksboven, zichtbaar samen met de balk.
     if (!window.SpelerMotor) {
       var nav = h('div', { class: 'sp-nav' });   // klasse sp-touch zet open()
@@ -741,6 +744,7 @@
   // ---------- openen en sluiten ----------
   function open(isLive) {
     if (!el) build();
+    E = (isLive && NATIVE) || WEB;
     clearInterval(tickT); tickT = setInterval(tick, 250);
     el.hidden = false; el.className = 'sp ' + (isLive ? 'is-live' : 'is-vod') + (E.transparent ? ' native' : '') + (window.SpelerMotor ? '' : ' sp-touch');
     document.documentElement.classList.add('sp-open'); if (E.transparent) document.documentElement.classList.add('sp-native');
