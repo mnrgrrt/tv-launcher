@@ -41,6 +41,7 @@
     var ua = navigator.userAgent;
     var apple = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || (/Safari/.test(ua) && !/Chrome|Chromium|Edg|Firefox|Android/.test(ua));
     var useHls = !apple && !!(window.MediaSource || window.ManagedMediaSource), hls = null, laden = null;
+    var pending = false, loads = 0, herstart = 0;
     function need() {
       if (!useHls || window.Hls) return Promise.resolve();
       return laden || (laden = new Promise(function (res) {
@@ -58,7 +59,9 @@
       hls = new Hls({ startPosition: live ? -1 : 0, maxBufferLength: 60, backBufferLength: 90 });
       hls.on(Hls.Events.ERROR, function (e, d) {
         if (!d.fatal) return;
-        if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+        // Film of aflevering: sessie weg op de server (lang op pauze, server herstart)? Opnieuw beginnen op dezelfde plek.
+        if (d.type === Hls.ErrorTypes.NETWORK_ERROR && !live && src && Date.now() - herstart > 20e3) { herstart = Date.now(); m.load(src, m.time(), false).catch(function () { if (ev.error) ev.error(); }); }
+        else if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
         else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
         else if (ev.error) ev.error();
       });
@@ -68,17 +71,21 @@
       load: function (s, from, isLive, audio) {
         if (s !== src) ai = audio || 0;
         vrijgeven();   // nog binnen de tik die de speler opende
-        src = s; live = !!isLive; base = live ? 0 : Math.floor(from || 0);
+        // Spoelen of ander geluidsspoor: het oude beeld meteen stil, en de balk staat al op het nieuwe punt terwijl de server bezig is.
+        if (v.getAttribute('src')) v.pause();
+        src = s; live = !!isLive; base = live ? 0 : Math.floor(from || 0); pending = true;
+        var mine = ++loads;
         return Promise.all([api('POST', '/api/hls/start', { src: s, from: base, low: !!S.low, audio: ai, hevc: hevc }), need()]).then(function (x) {
           var r = x[0];
+          if (mine !== loads) return r.dur;   // intussen alweer verder gespoeld
           id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; if (!live && r.start != null) base = +r.start;   // de server begint bij het sleutelbeeld
-          attach(r.url); start(); return r.dur;
-        });
+          attach(r.url); pending = false; start(); return r.dur;
+        }, function (e) { if (mine === loads) pending = false; throw e; });
       },
-      time: function () { return base + (v.currentTime || 0); },
-      buffered: function () { try { return v.buffered.length ? base + v.buffered.end(v.buffered.length - 1) : 0; } catch (e) { return 0; } },
+      time: function () { return base + (pending ? 0 : v.currentTime || 0); },
+      buffered: function () { try { return !pending && v.buffered.length ? base + v.buffered.end(v.buffered.length - 1) : 0; } catch (e) { return 0; } },
       // Binnen wat al omgezet is: meteen. Verder weg, of terug voor het beginpunt: de server begint opnieuw vanaf daar.
-      seek: function (sec) { var rel = sec - base; if (rel >= 0 && rel <= end() - 2) { v.currentTime = rel; return Promise.resolve(); } return m.load(src, sec, false); },
+      seek: function (sec) { var rel = sec - base; if (!pending && rel >= 0 && rel <= end() - 2) { v.currentTime = rel; return Promise.resolve(); } return m.load(src, sec, false); },
       paused: function () { return v.paused; }, play: function () { v.play().catch(function () {}); }, pause: function () { v.pause(); },
       stop: function () { if (id) { api('POST', '/api/hls/stop', { id: id }).catch(function () {}); id = ''; } src = ''; if (hls) { hls.destroy(); hls = null; } v.pause(); v.removeAttribute('src'); v.load(); },
       audio: function () { return aud.map(function (t, i) { return { label: trackLabel(t, i), lang: t.lang, codec: t.codec, on: i === ai }; }); },
