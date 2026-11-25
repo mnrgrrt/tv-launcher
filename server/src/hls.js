@@ -28,15 +28,19 @@ function probe(url, headers) {
 }
 
 /** Het sleutelbeeld vlak voor `sec` (in seconden vanaf het begin van de film). Leest maar één pakketje; null als het niet lukt. */
+let kfLast = '';   // waarom het laatste opzoeken mislukte (zonder adressen), voor foutzoeken via /api/hls/start
 function keyframeBefore(url, headers, sec) {
+  const t0 = Date.now();
   return new Promise(resolve => {
     execFile('ffprobe', ['-v', 'error', ...hdrArgs(headers), '-select_streams', 'v:0', '-read_intervals', `${sec}%+#1`,
-      '-show_entries', 'packet=pts_time:format=start_time', '-of', 'json', url], { timeout: 15e3 }, (e, out) => {
-      if (e) return resolve(null);
+      '-show_entries', 'packet=pts_time:format=start_time', '-of', 'json', url], { timeout: 15e3 }, (e, out, errOut) => {
+      const why = m => { kfLast = (m + ' ' + String(errOut || '').replace(/\w+:\/\/\S+/g, 'ADRES').trim().slice(-200) + ' ' + (Date.now() - t0) + 'ms').trim(); resolve(null); };
+      if (e) return why('fout' + (e.killed ? ' (te lang)' : ''));
       try {
         const j = JSON.parse(out), pts = +((j.packets || [])[0] || {}).pts_time, st = +((j.format || {}).start_time) || 0;
-        resolve(Number.isFinite(pts) ? pts - st : null);
-      } catch { resolve(null); }
+        if (!Number.isFinite(pts)) return why('geen pakket: ' + String(out).replace(/\s+/g, ' ').slice(0, 120));
+        kfLast = 'ok ' + (Date.now() - t0) + 'ms'; resolve(pts - st);
+      } catch { why('onleesbaar'); }
     });
   });
 }
@@ -151,7 +155,7 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   for (let i = 0; i < 200; i++) {
     if (i >= 40 && (live ? 0 : segments(s).length) >= 1) return { id, start: live ? 0 : from, dur: Math.round(dur), audio: trackList(info).audio, audioIndex: ai };
     const n = live ? ((read(path.join(dir, 'index.m3u8')).match(/\.m4s/g) || []).length) : segments(s).length;
-    if (n >= need || (s.final && n)) return { id, start: live ? 0 : from, dur: Math.round(dur), audio: trackList(info).audio, audioIndex: ai };
+    if (n >= need || (s.final && n)) return { id, start: live ? 0 : from, dur: Math.round(dur), audio: trackList(info).audio, audioIndex: ai, kf: kfLast };
     if (s.final || (s.rounds > 2 && !n)) break;
     await new Promise(r => setTimeout(r, 200));
   }
