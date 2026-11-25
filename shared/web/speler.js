@@ -68,6 +68,7 @@
       hls.loadSource(url); hls.attachMedia(v);
     }
     var m = {
+      dvr: true,   // live: de server bewaart de laatste 30 minuten, pauzeren en verder kijken kan zonder terugkijken
       load: function (s, from, isLive, audio) {
         if (s !== src) ai = audio || 0;
         vrijgeven();   // nog binnen de tik die de speler opende
@@ -405,7 +406,9 @@
   function toggle() {
     if (!cur) return;
     if (cur.live && !cur.replay) {
-      if (cur.pausedAt) { var from = cur.pausedAt, p = cur.prog && cur.prog.start <= from ? cur.prog : { title: cur.ch.name, start: from, end: Date.now() + 3600e3 }; return replay(p, from); }
+      // Webversie: de server houdt zelf de laatste 30 minuten vast, dus pauze is gewoon pauze.
+      if (E.dvr) { if (E.paused()) E.play(); else E.pause(); return barShow(true); }
+      if (cur.pausedAt) { var from = cur.pausedAt, p = cur.prog && cur.prog.start <= from ? cur.prog : { title: cur.ch.name, start: from, end: Date.now() + 3600e3 }; return replay(p, from, true); }
       if (cur.ch.archive) { cur.pausedAt = Date.now(); E.pause(); }
       else if (E.paused()) tune(cur.ch); else E.pause();
       return barShow(true);
@@ -414,13 +417,18 @@
     if (cur.live) barShow(true); else osdShow();
   }
   // Terugkijken vanaf from (kloktijd). De aanbieder werkt per minuut, dus afronden.
-  function replay(p, from) {
+  function replay(p, from, afterPause) {
     from -= from % 60e3;
     cur.replay = p; cur.pausedAt = 0; cur.dur = (p.end - p.start) / 1000;
     var go = function (t) { return get('/api/live/catchup/' + cur.ch.id + '?start=' + t + '&end=' + p.end).then(function (r) { cur.off = (t - p.start) / 1000; return E.load(r.url, 0, false, audioFor(cur.ch)); }); };
     paint(); barShow(menuOpen); msg('Laden…', 0);
     var mine = cur;
-    go(from).then(function () { if (cur === mine) msgOff('Laden…'); }, function (e) { if (cur === mine) msg('Terugkijken lukt niet: ' + e.message, 0); });
+    go(from).then(function () { if (cur === mine) msgOff('Laden…'); }, function (e) {
+      if (cur !== mine) return;
+      // Verder na pauze: de aanbieder heeft de laatste minuten niet altijd klaar. Dan gewoon live verder.
+      if (afterPause) { tune(cur.ch); return msg('Verder kijken lukt nu niet, live verder', 4000); }
+      msg('Terugkijken lukt niet: ' + e.message, 0);
+    });
   }
   // Spoelen bij terugkijken: stappen van 1 minuut, vasthouden = 5 en daarna 10 minuten. Pas na loslaten laden.
   var seekT = null;
