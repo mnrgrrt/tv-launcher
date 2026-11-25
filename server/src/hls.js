@@ -17,7 +17,14 @@ const IDLE_VOD = 20 * 60e3;   // film of aflevering: op pauze vraagt de speler n
 
 const hdrArgs = h => (h && Object.keys(h).length ? ['-headers', Object.entries(h).map(([k, v]) => `${k}: ${v}\r\n`).join('')] : []);
 
-function probe(url, headers) {
+// De bron soms even niet te openen (aanbieder bij terugkijken, Dispatcharr net bezet): nog twee keer proberen.
+async function probe(url, headers) {
+  for (let i = 0; ; i++) {
+    try { return await probeOnce(url, headers); }
+    catch (e) { if (i >= 2) throw e; await new Promise(r => setTimeout(r, 2000)); }
+  }
+}
+function probeOnce(url, headers) {
   return new Promise((resolve, reject) => {
     execFile('ffprobe', ['-v', 'error', '-analyzeduration', '3000000', '-probesize', '3000000', ...hdrArgs(headers),
       '-show_entries', 'stream=codec_type,codec_name,channels:stream_tags=language,title:format=duration,format_name', '-of', 'json', url], { timeout: 20e3 }, (e, out) => {
