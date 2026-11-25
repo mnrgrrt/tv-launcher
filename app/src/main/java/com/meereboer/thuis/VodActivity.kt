@@ -284,8 +284,13 @@ class VodActivity : Activity() {
         val a = org.json.JSONArray(Server.call(this, "GET", q))
         return (0 until a.length()).map { a.getJSONObject(it) }
     }
-    private fun subsDownload(fileId: Long): java.io.File =
-        java.io.File(cacheDir, "os-$fileId.srt").apply { if (!exists()) writeText(Server.call(this@VodActivity, "GET", "/api/subs/file/$fileId")) }
+    // Met de link naar het bestand zet de server de ondertitel gelijk met een ondertitel die in het bestand zelf zit.
+    private fun subsDownload(fileId: Long): java.io.File {
+        val src = item.optString("url").takeIf { it.startsWith("/stream/") }
+        val q = src?.let { "?src=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: ""
+        val name = "os-$fileId" + (src?.let { "-" + Integer.toHexString(it.substringBefore('?').hashCode()) } ?: "") + ".srt"
+        return java.io.File(cacheDir, name).apply { if (!exists()) writeText(Server.call(this@VodActivity, "GET", "/api/subs/file/$fileId$q")) }
+    }
 
     private val hideOsd = Runnable { hideBar() }
     private fun hideBar() {

@@ -10,6 +10,7 @@ import * as epg from './epg.js';
 import * as tmdb from './tmdb.js';
 import * as plex from './plex.js';
 import * as subs from './subs.js';
+import { parseSrt, toSrt, fit, shift } from './subsync.js';
 import * as profiles from './profiles.js';
 import * as catalog from './catalog.js';
 import * as taste from './taste.js';
@@ -236,7 +237,33 @@ on('GET', '/api/subs/search', 'device', async ({ q }) => {
   if (q.get('src')) { try { const t = srcOf(q.get('src')); if (!t.live) hash = await subs.movieHash(t.url, t.headers); } catch {} }
   return subs.search({ ...Object.fromEntries(q), hash });
 });
-on('GET', '/api/subs/file/:id', 'device', async ({ res, p }) => { send(res, 200, await subs.download(+p.id), 'application/x-subrip; charset=utf-8'); });
+// Met src: gelijkzetten met een ondertitel die in het bestand zelf zit (zie subsync.js). Lukt dat niet, dan de ondertitel zoals hij is.
+const synced = new Map();
+on('GET', '/api/subs/file/:id', 'device', async ({ res, p, q }) => {
+  let txt = await subs.download(+p.id), how = 'niet';
+  if (q.get('src')) {
+    try {
+      const t = srcOf(q.get('src')), key = p.id + '|' + t.url;
+      if (!t.live) {
+        if (!synced.has(key)) {
+          let done = null;
+          const mi = await hls.mediaInfo(t.url, t.headers), ext = parseSrt(txt);
+          for (const sub of mi.subs.filter(x => x.text && !/forced|geforceerd/i.test(x.title)).slice(0, 2)) {
+            // Twee stukken van 10 minuten: het begin en rond 60%. Genoeg om verschuiving en snelheid te bepalen.
+            const parts = await Promise.all([hls.subPart(t.url, t.headers, sub.i, 0, 600), mi.dur > 1800 ? hls.subPart(t.url, t.headers, sub.i, Math.round(mi.dur * 0.6), 600) : '']);
+            const ref = parts.flatMap(x => parseSrt(x).map(c => c.s)), f = fit(ref, ext.map(c => c.s));
+            if (f) { done = { f, txt: Math.abs(f.offset) > 0.05 || f.scale !== 1 ? toSrt(shift(ext, f)) : txt }; break; }
+          }
+          synced.set(key, done); if (synced.size > 100) synced.delete(synced.keys().next().value);
+        }
+        const d = synced.get(key);
+        if (d) { txt = d.txt; how = `${d.f.offset >= 0 ? '+' : ''}${d.f.offset.toFixed(2)} s, snelheid ${d.f.scale.toFixed(4)}, ${d.f.hits} van ${d.f.of} zinnen`; }
+      }
+    } catch {}
+  }
+  res.setHeader('X-Gelijkgezet', encodeURIComponent(how));
+  send(res, 200, txt, 'application/x-subrip; charset=utf-8');
+});
 
 on('POST', '/api/progress', 'device', ({ b }) => { profiles.progress(+b.profile || 1, b); return { ok: true }; });
 on('GET', '/api/position', 'device', async ({ q }) => {
