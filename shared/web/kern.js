@@ -78,7 +78,9 @@
   }
   function start(item) {
     item.server = true; item.profile = S.profile;
-    window.Speler.vod(item);
+    // Android (JBL, telefoon): voorlopig weer de eigen Android-spelers; die werkten goed. De gedeelde speler eronder (ExoPlayer)
+    // was nog niet klaar. Webversie en Samsung (geen playItem) gebruiken de gedeelde speler.
+    if (N && N.playItem) N.playItem(JSON.stringify(item)); else window.Speler.vod(item);
   }
   function playPlex(key, meta) {
     var k = 'plex:' + key;
@@ -118,8 +120,8 @@
     }
   }
   // Live en terugkijken gaan allebei naar de live-speler (daar kun je ook spoelen, pauzeren en zappen).
-  function playLive(catId, ch) { window.Speler.live(catId || 'alle', ch.id, 0, 0, ''); }
-  function playCatchup(ch, p, catId) { window.Speler.live(catId || 'alle', ch.id, p.start, p.end, p.title || ''); }
+  function playLive(catId, ch) { if (N && N.playLive) N.playLive(catId || 'alle', ch.id, 0, 0, ''); else window.Speler.live(catId || 'alle', ch.id, 0, 0, ''); }
+  function playCatchup(ch, p, catId) { if (N && N.playLive) N.playLive(catId || 'alle', ch.id, p.start, p.end, p.title || ''); else window.Speler.live(catId || 'alle', ch.id, p.start, p.end, p.title || ''); }
   // Gezien of niet gezien, ook in de andere bron (Plex of IPTV).
   function setWatched(items, on) {
     return api('POST', '/api/watched', { profile: S.profile, items: items, on: on }).then(function () { S.ov = {}; }, function (e) { ui.toast(e.message); throw e; });
