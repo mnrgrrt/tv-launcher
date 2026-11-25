@@ -20,7 +20,7 @@ const hdrArgs = h => (h && Object.keys(h).length ? ['-headers', Object.entries(h
 function probe(url, headers) {
   return new Promise((resolve, reject) => {
     execFile('ffprobe', ['-v', 'error', '-analyzeduration', '3000000', '-probesize', '3000000', ...hdrArgs(headers),
-      '-show_entries', 'stream=codec_type,codec_name,channels:stream_tags=language,title:format=duration', '-of', 'json', url], { timeout: 20e3 }, (e, out) => {
+      '-show_entries', 'stream=codec_type,codec_name,channels:stream_tags=language,title:format=duration,format_name', '-of', 'json', url], { timeout: 20e3 }, (e, out) => {
       if (e) return reject(Object.assign(new Error('Bron niet te openen'), { status: 502 }));
       try { resolve(JSON.parse(out)); } catch { reject(new Error('Bron onleesbaar')); }
     });
@@ -90,6 +90,7 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   const auds = (info.streams || []).filter(s => s.codec_type === 'audio'), ai = Math.min(Math.max(0, +audio || 0), Math.max(0, auds.length - 1));
   const v = (info.streams || []).find(s => s.codec_type === 'video'), a = auds[ai];
   const dur = live ? 0 : +(info.format || {}).duration || 0;
+  const isFile = !live && /matroska|mov|mp4/.test((info.format || {}).format_name || '');
   // HEVC alleen kopiëren als de browser het zelf kan afspelen (iPad wel, Chrome zonder grafische kaart niet).
   const copyV = !low && v && (v.codec_name === 'h264' || (v.codec_name === 'hevc' && hevc));
   // Film of aflevering halverwege: het gekopieerde beeld kan alleen bij een sleutelbeeld beginnen. Daar beginnen we dan ook,
@@ -108,8 +109,9 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   const pre = k => live ? '' : 'r' + k;
   const args = (k, at, loose) => ['-hide_banner', '-loglevel', 'error',
     ...(live || !at ? [] : ['-ss', String(Math.max(0, +at)), ...(loose ? ['-noaccurate_seek'] : [])]),
-    // Film of aflevering: niet de hele film in een paar minuten binnenhalen. Eerst 30 s in één keer, daarna 4x de kijksnelheid.
-    ...(live ? [] : ['-readrate', '4', '-readrate_initial_burst', '30']), ...hdrArgs(headers), '-i', url,
+    // Filmbestand: niet de hele film in een paar minuten binnenhalen. Eerst 30 s in één keer, daarna 4x de kijksnelheid.
+    // Niet bij tv-streams (terugkijken): daar rekent de rem met rare tijdstempels en staat alles bijna stil.
+    ...(isFile ? ['-readrate', '4', '-readrate_initial_burst', '30'] : []), ...hdrArgs(headers), '-i', url,
     '-map', '0:v:0?', '-map', '0:a:' + ai + '?',
     ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', '-pix_fmt', 'yuv420p',   // 8-bit: 10-bit H.264 speelt in geen enkele browser
