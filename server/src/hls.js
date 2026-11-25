@@ -126,7 +126,8 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
     '-f', 'hls', '-hls_time', live ? '4' : '6', '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', pre(k) + 'init.mp4',
     // Geen edit list: browsers negeren die, en dan loopt het geluid voor op het beeld. Zo staat de echte begintijd in de stukjes.
     '-hls_segment_options', 'use_editlist=0',
-    ...(live ? ['-hls_list_size', '15', '-hls_flags', 'delete_segments+independent_segments'] : ['-hls_playlist_type', 'event', '-hls_flags', 'independent_segments']),
+    // Live: de laatste 30 minuten bewaren (450 stukjes van 4 s), zodat pauzeren en even terug kan zonder de aanbieder.
+    ...(live ? ['-hls_list_size', '450', '-hls_flags', 'delete_segments+independent_segments'] : ['-hls_playlist_type', 'event', '-hls_flags', 'independent_segments']),
     '-hls_segment_filename', path.join(dir, pre(k) + 's%05d.m4s'), path.join(dir, live ? 'index.m3u8' : pre(k) + '.m3u8')];
   const s = { dir, dev, seen: Date.now(), live: !!live, err: '', final: false, rounds: 0 };
   sessions.set(id, s);
