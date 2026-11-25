@@ -262,10 +262,10 @@
   }
   function osSearch() {
     var it = cur.item;
-    return get('/api/subs/search?kind=' + encodeURIComponent(it.kind || '') + '&title=' + encodeURIComponent(it.title || '') + '&tmdbId=' + (it.tmdb || 0) + '&season=' + (it.season || 0) + '&episode=' + (it.episode || 0));
+    return get('/api/subs/search?kind=' + encodeURIComponent(it.kind || '') + '&title=' + encodeURIComponent(it.title || '') + '&tmdbId=' + (it.tmdb || 0) + '&season=' + (it.season || 0) + '&episode=' + (it.episode || 0) + (it.url ? '&src=' + encodeURIComponent(it.url) : ''));
   }
   function osSource(r) {
-    return { lang: r.lang, label: 'OpenSubtitles · ' + r.lang + ' · ' + String(r.release || '').slice(0, 40) + (r.hearing ? ' · SDH' : ''), load: function () { return rawText('GET', '/api/subs/file/' + r.fileId); } };
+    return { lang: r.lang, label: 'OpenSubtitles · ' + r.lang + (r.match ? ' · past bij dit bestand' : '') + ' · ' + String(r.release || '').slice(0, 40) + (r.hearing ? ' · SDH' : ''), load: function () { return rawText('GET', '/api/subs/file/' + r.fileId); } };
   }
   // Net als VodActivity: uit, wat er is, gelijkzetten, versies van OpenSubtitles en de weergave.
   function subtitleMenu() {
