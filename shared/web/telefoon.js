@@ -77,6 +77,8 @@
     if (N && N.closeApp) N.closeApp();
   }
   window.__back = back;
+  // Home-knop in de speler (webversie): naar het beginscherm.
+  window.__home = function () { closeSheet(); if (S.profile) go('home', {}, true); };
   // Webversie: terugvegen of de terugknop van de browser.
   if (!N) window.addEventListener('popstate', function () {
     if (closeSheet()) return history.pushState(null, '');
