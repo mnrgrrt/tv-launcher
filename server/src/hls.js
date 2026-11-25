@@ -114,7 +114,9 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
     ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', '-pix_fmt', 'yuv420p',   // 8-bit: 10-bit H.264 speelt in geen enkele browser
          ...(low ? ['-vf', 'scale=-2:min(720\\,ih)', '-b:v', '1800k', '-maxrate', '2000k', '-bufsize', '4000k'] : ['-vf', 'scale=-2:min(1080\\,ih)', '-crf', '21'])]),
-    ...(a && a.codec_name === 'aac' && !low ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2']),
+    // Geluid altijd opnieuw naar AAC: bij kopiëren uit een tv-stream mist soms het precieze AAC-type in het init-bestand
+    // (mp4a.40 in plaats van mp4a.40.2), en dan weigert Chrome het hele stuk. Opnieuw coderen kost bijna niets.
+    '-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2',
     '-f', 'hls', '-hls_time', live ? '4' : '6', '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', pre(k) + 'init.mp4',
     // Geen edit list: browsers negeren die, en dan loopt het geluid voor op het beeld. Zo staat de echte begintijd in de stukjes.
     '-hls_segment_options', 'use_editlist=0',
@@ -142,8 +144,10 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   run(0, from, loose);
   // Wachten tot er genoeg stukjes klaar staan. Bij film of aflevering drie: met maar één stukje slaat Chrome het begin over
   // of geeft hij een leesfout (vooral als het beeld omgezet wordt en dat langzamer gaat).
+  // Komt de bron langzaam binnen (terugkijken), dan na 8 s ook met minder stukjes beginnen.
   const need = live ? 1 : 3;
   for (let i = 0; i < 200; i++) {
+    if (i >= 40 && (live ? 0 : segments(s).length) >= 1) return { id, start: live ? 0 : from, dur: Math.round(dur), audio: trackList(info).audio, audioIndex: ai };
     const n = live ? ((read(path.join(dir, 'index.m3u8')).match(/\.m4s/g) || []).length) : segments(s).length;
     if (n >= need || (s.final && n)) return { id, start: live ? 0 : from, dur: Math.round(dur), audio: trackList(info).audio, audioIndex: ai };
     if (s.final || (s.rounds > 2 && !n)) break;
