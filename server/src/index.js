@@ -152,7 +152,8 @@ on('GET', '/api/live/catchup/:id', 'device', ({ p, q }) => {
   if (!start || start > Date.now()) throw Object.assign(new Error('Dit programma is nog niet geweest'), { status: 400 });
   const f = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(start));
   const stamp = f.replace(' ', ':').replace(/:(\d{2})$/, '-$1');      // 2026-11-22:20-00
-  const minutes = Math.min(Math.ceil((end - start) / 60000) + 10, 600);  // 10 minuten marge voor uitloop
+  // 10 minuten marge voor uitloop, maar nooit voorbij "nu": dan weigert de aanbieder de hele stream (pauze bij live tv).
+  const minutes = Math.max(1, Math.min(Math.ceil((end - start) / 60000) + 10, Math.floor((Date.now() - start) / 60000), 600));
   return { url: auth.sign(`/stream/timeshift/${+p.id}/${stamp}/${minutes}`) };
 });
 on('GET', '/api/live/url/:id', 'device', ({ p }) => ({ url: auth.sign(`/stream/live/${+p.id}`) }));
