@@ -179,9 +179,17 @@
     if (wrap) { var e = base(el); el.style.marginRight = (e.r - cg) + 'px'; el.style.marginBottom = (e.b - rg) + 'px'; }
   }
   // Tegels zonder hoogte: hoogte uit de breedte (16:9, afleveringen 16:10).
+  // In een knop rekent deze browser `width: 100%` niet goed uit (de tegel werd zo smal als zijn inhoud),
+  // dus de breedte nemen we zelf over van de knop eromheen.
   function setRatio(el) {
     if (!el.classList.contains('thumb')) return;
-    var w = el.offsetWidth; if (w) el.style.height = Math.round(w / (el.closest('.ep') ? 1.6 : 16 / 9)) + 'px';
+    var p = el.parentElement, w = el.offsetWidth;
+    if (p && p.tagName === 'BUTTON') {
+      var s = getComputedStyle(p);
+      w = p.clientWidth - px(s.paddingLeft) - px(s.paddingRight);
+      if (w > 0) el.style.width = w + 'px';
+    }
+    if (w > 0) el.style.height = Math.round(w / (el.closest('.ep') ? 1.6 : 16 / 9)) + 'px';
   }
   function fixTree(root) {
     if (root.nodeType !== 1) return;
@@ -221,15 +229,18 @@
       var doc = new DOMParser().parseFromString(html, 'text/html'), app = '';
       // Alles in de schermen (scripts, stijlen, services.json) is relatief aan app/, net als op de andere apparaten.
       var bs = document.createElement('base'); bs.href = 'app/'; document.head.insertBefore(bs, document.head.firstChild);
-      [].forEach.call(doc.querySelectorAll('link[rel=stylesheet]'), function (l) { var n = document.createElement('link'); n.rel = 'stylesheet'; n.href = app + l.getAttribute('href'); document.head.appendChild(n); });
+      // Eerst de stijlen helemaal laden: anders worden tegels gemeten voordat ze hun maat hebben.
+      var css = [].map.call(doc.querySelectorAll('link[rel=stylesheet]'), function (l) {
+        return new Promise(function (done) { var n = document.createElement('link'); n.rel = 'stylesheet'; n.href = app + l.getAttribute('href'); n.onload = n.onerror = done; document.head.appendChild(n); });
+      });
       [].forEach.call(doc.body.children, function (n) { if (n.tagName !== 'SCRIPT') document.body.appendChild(document.importNode(n, true)); });
       var scripts = [].map.call(doc.querySelectorAll('script[src]'), function (s) { return app + s.getAttribute('src'); });
-      (function next() {
+      Promise.all(css).then(function next() {
         var s = scripts.shift(); if (!s) return;
-        var n = document.createElement('script'); n.src = s; n.onload = next;
+        var n = document.createElement('script'); n.src = s; n.onload = function () { next(); };
         n.onerror = function () { opzet('Een deel van Sjuul TV ontbreekt in dit pakket. Installeer de testversie opnieuw.'); };
         document.body.appendChild(n);
-      })();
+      });
     }).catch(function () { opzet('tv-serverr is niet bereikbaar op ' + base + '. Klopt het adres?'); });
   }
   document.addEventListener('DOMContentLoaded', start);
