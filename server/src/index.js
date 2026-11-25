@@ -249,8 +249,10 @@ on('GET', '/api/subs/file/:id', 'device', async ({ res, p, q }) => {
           let done = null, why = '';
           const mi = await hls.mediaInfo(t.url, t.headers), ext = parseSrt(txt);
           for (const sub of mi.subs.filter(x => x.text && !/forced|geforceerd/i.test(x.title)).slice(0, 2)) {
-            // Twee stukken van 10 minuten: het begin en rond 60%. Genoeg om verschuiving en snelheid te bepalen.
-            const parts = await Promise.all([hls.subPart(t.url, t.headers, sub.i, 0, 600), mi.dur > 1800 ? hls.subPart(t.url, t.headers, sub.i, Math.round(mi.dur * 0.6), 600) : '']);
+            // Twee stukken van 4 minuten, op 15% en 70%: genoeg zinnen voor verschuiving en snelheid, en snel gelezen
+            // (10 minuten uit een groot 4K-bestand kostte een minuut). Korte bestanden: alles.
+            const parts = mi.dur > 1200 ? await Promise.all([0.15, 0.7].map(x => hls.subPart(t.url, t.headers, sub.i, Math.round(mi.dur * x), 240)))
+              : [await hls.subPart(t.url, t.headers, sub.i, 0, Math.ceil(mi.dur) || 1200)];
             const ref = parts.flatMap(x => parseSrt(x).map(c => c.s)), f = fit(ref, ext.map(c => c.s));
             if (f) { done = { f, txt: Math.abs(f.offset) > 0.05 || f.scale !== 1 ? toSrt(shift(ext, f)) : txt }; break; }
             why = `spoor ${sub.i}: ${fit.last}`;
