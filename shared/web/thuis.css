@@ -32,7 +32,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .btn { display: inline-flex; align-items: center; gap: 12px; padding: 16px 34px; border-radius: 999px; font-size: 24px; font-weight: 600; background: var(--glass); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); white-space: nowrap; }
 .btn.focus { background: var(--ink); color: var(--bg); transform: scale(1.07); box-shadow: 0 14px 40px rgba(0,0,0,.5); }
 .row-item.focus .thumb, .tile.focus .thumb, .poster.focus .pimg { transform: scale(1.08); transform-origin: 50% 60%; box-shadow: 0 26px 44px rgba(0,0,0,.7); }
-.thumb::after, .pimg::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .3s;
+.thumb::after, .pimg::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .3s;
   background: linear-gradient(125deg, rgba(255,255,255,.26) 0%, rgba(255,255,255,.06) 32%, rgba(255,255,255,0) 50%); }
 .focus .thumb::after, .focus .pimg::after { opacity: 1; }
 /* Titels onder posters alleen bij de poster waar je op staat; zo blijft een rij rustig */
@@ -86,18 +86,18 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .vscroll { scroll-behavior: smooth; }
 
 /* Scherm met rijen */
-.screen { position: absolute; inset: 0; }
+.screen { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
 .scroll { position: absolute; left: 0; right: 0; top: 120px; bottom: 0; overflow: hidden; }
 .scroll-inner { transition: transform .25s var(--ease); padding-bottom: 120px; }
 /* Grote afbeelding op Thuis: eerst een rustige foto, bij een tegel met een mooie achtergrond faden we over. */
 /* De foto heeft 16:9, dus over het hele scherm (1080 hoog) staat hij er in zijn geheel; onderaan loopt hij weg naar de achtergrond. */
 .hero { position: relative; height: 780px; margin-bottom: -200px; padding: 0 80px; }
-.hero-bg { position: absolute; inset: 0; transition: opacity .6s var(--ease); }
+.hero-bg { position: absolute; top: 0; right: 0; bottom: 0; left: 0; transition: opacity .6s var(--ease); }
 .screen.down .hero-bg, .hero-bg.dim { opacity: .32; }
-.hero-bg .bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; visibility: hidden; transition: opacity 1.2s var(--ease), visibility 0s 1.2s; }
+.hero-bg .bg { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background-size: cover; background-position: center; opacity: 0; visibility: hidden; transition: opacity 1.2s var(--ease), visibility 0s 1.2s; }
 .hero-bg .bg.on { opacity: 1; visibility: visible; transition: opacity 1.2s var(--ease); }
 /* Onderkant van de foto zelf laten wegvloeien: ook bij inzoomen en scrollen geen harde rand */
-.hero-bg::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg, var(--bg) 0%, rgba(14,14,16,.6) 22%, rgba(14,14,16,0) 50%), linear-gradient(90deg, rgba(14,14,16,.55) 0%, rgba(14,14,16,0) 45%), linear-gradient(180deg, rgba(14,14,16,.45) 0%, rgba(14,14,16,0) 18%); }
+.hero-bg::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; background: linear-gradient(0deg, var(--bg) 0%, rgba(14,14,16,.6) 22%, rgba(14,14,16,0) 50%), linear-gradient(90deg, rgba(14,14,16,.55) 0%, rgba(14,14,16,0) 45%), linear-gradient(180deg, rgba(14,14,16,.45) 0%, rgba(14,14,16,0) 18%); }
 /* Eerste blok vult het scherm; een zacht pijltje onderin wijst naar wat eronder staat */
 .fold { position: relative; }
 .lsearch { position: absolute; right: 80px; top: 40px; z-index: 5; display: flex; align-items: center; gap: 10px; font-size: 20px; background: rgba(20,20,24,.55); }
@@ -181,18 +181,18 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .g-info .kicker { font-size: 15px; }
 /* Programmabeeld rechtsboven: vervaagt naar links en naar onder, de bovenste zenders lopen er half overheen */
 .g-art { position: absolute; right: 0; top: 40px; width: 1040px; height: 585px; pointer-events: none; }  /* 16:9; hogere beelden tonen de bovenkant */
-.g-art > div { position: absolute; inset: 0; background: center top/cover no-repeat; opacity: 0; transition: opacity .7s var(--ease);
+.g-art > div { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: center top/cover no-repeat; opacity: 0; transition: opacity .7s var(--ease);
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.55) 28%, #000 60%), linear-gradient(180deg, #000 45%, transparent 100%);
   -webkit-mask-composite: source-in; mask-composite: intersect; }
 .g-art > div.on { opacity: .9; }
 .g-art > div.logo { background-size: 300px auto; background-position: 66% 40%; filter: drop-shadow(0 0 60px rgba(255,255,255,.18)); -webkit-mask-image: none; }
 .g-art > div.logo.on { opacity: .85; }
-.g-art::after { content: ""; position: absolute; inset: 0; background: radial-gradient(60% 70% at 70% 35%, rgba(90,110,150,.16), transparent 70%); }
+.g-art::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: radial-gradient(60% 70% at 70% 35%, rgba(90,110,150,.16), transparent 70%); }
 
 /* Infopagina: beeld over de volle breedte, tekst linksonder */
 .ihero { position: relative; height: 780px; }
-.ibg { position: absolute; inset: 0; background: var(--card) center 25%/cover no-repeat; }
-.ihero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+.ibg { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: var(--card) center 25%/cover no-repeat; }
+.ihero::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none;
   background: linear-gradient(0deg, var(--bg) 0%, rgba(14,14,16,.85) 22%, rgba(14,14,16,0) 55%), linear-gradient(90deg, rgba(14,14,16,.7) 0%, rgba(14,14,16,0) 50%); }
 .itxt { position: absolute; left: 80px; bottom: 60px; width: 900px; display: flex; flex-direction: column; gap: 16px; z-index: 2; }
 .itxt h1 { font-size: 76px; line-height: 1; letter-spacing: -.03em; text-shadow: 0 2px 24px rgba(0,0,0,.4); }
@@ -204,7 +204,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 /* Aflevering als kaart: tekst op het beeld */
 .row-item.ep { width: 400px; }
 .ep .thumb { aspect-ratio: 16/10; overflow: hidden; }
-.ep .cap { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; padding: 18px 20px 22px; border-radius: inherit;
+.ep .cap { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; padding: 18px 20px 22px; border-radius: inherit;
   background: linear-gradient(0deg, rgba(0,0,0,.88) 0%, rgba(0,0,0,.55) 45%, rgba(0,0,0,0) 75%); }
 .ep .cap .k { font-size: 14px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-3); }
 .ep .cap b { font-size: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -213,7 +213,7 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .ep .bar { bottom: 8px; height: 4px; }
 
 /* Dialogen en menu's */
-.overlay { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 20; }
+.overlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 20; }
 .dialog { min-width: 760px; max-width: 1200px; border-radius: 28px; background: rgba(36,36,40,.82); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); padding: 52px; display: flex; flex-direction: column; align-items: center; gap: 34px; box-shadow: 0 40px 120px rgba(0,0,0,.6); text-align: center; }
 .dialog h2 { font-size: 44px; }
 .who { display: flex; gap: 56px; justify-content: center; flex-wrap: wrap; }
@@ -299,8 +299,8 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .g-p.back.focus { background: var(--ink); color: #111; }
 /* Schermbeveiliging */
 /* Schermbeveiliging binnen Sjuul TV (tv's zonder Android-dagdroom). Rustig: alleen een zachte overgang. */
-.saver { position: fixed; inset: 0; z-index: 60; background: #000; cursor: none; }
-.saver .sv-bg { position: absolute; inset: 0; background: center/cover no-repeat; opacity: 0; transition: opacity 1.6s; }
+.saver { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 60; background: #000; cursor: none; }
+.saver .sv-bg { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: center/cover no-repeat; opacity: 0; transition: opacity 1.6s; }
 .saver .sv-bg.on { opacity: 1; }
 .saver .sv-tx { position: absolute; left: 112px; bottom: 88px; display: flex; flex-direction: column; gap: 6px; text-shadow: 0 2px 12px rgba(0,0,0,.6); }
 .saver .sv-tx b { font-size: 112px; font-weight: 400; line-height: 1; }

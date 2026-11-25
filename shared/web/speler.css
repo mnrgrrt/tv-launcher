@@ -1,7 +1,7 @@
 /* Sjuul TV: de gedeelde speler (zie speler.js). Maten en kleuren gelijk aan de JBL-spelers.
    --dp is één dp van Android: op een tv-scherm (1920 breed = 960 dp) schaalt hij mee, op telefoon en iPad is het 1px.
    Licht voor zwakke tv's: geen blur, geen maskers. */
-.sp { --dp: 1px; position: fixed; inset: 0; z-index: 28; background: #000; color: #fff; font-family: Inter, system-ui, sans-serif; -webkit-user-select: none; user-select: none; overflow: hidden; }
+.sp { --dp: 1px; position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 28; background: #000; color: #fff; font-family: Inter, system-ui, sans-serif; -webkit-user-select: none; user-select: none; overflow: hidden; }
 @media (min-width: 1500px) { .sp { --dp: calc(100vw / 960); } }
 .sp[hidden], .sp [hidden] { display: none !important; }
 .sp button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
@@ -95,7 +95,7 @@ html.sp-open .overlay { position: fixed; z-index: 40; }
 .sl-choice span.on { background: #fff; color: #05070a; }
 
 /* ---------- gids als raster (GuideView): kop met details, tijdlijn, rijen; beeld rechtsboven ---------- */
-.sl-guide { --name: 18%; --row: 7.8vh; position: absolute; inset: 0; background: rgba(10,13,18,.95); padding: 0 5%; }
+.sl-guide { --name: 18%; --row: 7.8vh; position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: rgba(10,13,18,.95); padding: 0 5%; }
 .sp.guide-on video { z-index: 1; }
 /* Beeld onder de pagina: de gids laat een gat rechtsboven waar het beeld doorheen komt. */
 .sp.native .sl-guide { background: transparent; }

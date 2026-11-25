@@ -488,7 +488,7 @@
   // ---------- wie kijkt er ----------
   screens.who = function () {
     var el = h('div', { class: 'screen', style: 'background:radial-gradient(1200px 700px at 50% 30%, #13242e 0%, #05070a 70%)' });
-    var box = h('div', { style: 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:90px' }, '<h1 style="font-size:64px;font-weight:600">Wie kijkt er?</h1>');
+    var box = h('div', { style: 'position:absolute;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:90px' }, '<h1 style="font-size:64px;font-weight:600">Wie kijkt er?</h1>');
     var row = h('div', { class: 'who' });
     S.profiles.forEach(function (p) {
       var b = F(h('button', { class: 'who-item' }, '<img alt="" src="' + esc(img(p.avatarUrl)) + '"><span>' + esc(p.name) + '</span>'), function () { setProfile(p.id); go('home', {}, 'root'); });
