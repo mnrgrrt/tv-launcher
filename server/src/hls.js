@@ -161,7 +161,7 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   // Wachten tot er genoeg stukjes klaar staan. Bij film of aflevering drie: met maar één stukje slaat Chrome het begin over
   // of geeft hij een leesfout (vooral als het beeld omgezet wordt en dat langzamer gaat).
   // Komt de bron langzaam binnen (terugkijken), dan na 8 s ook met minder stukjes beginnen.
-  const need = live ? 1 : 3;
+  const need = live || !isFile ? 1 : 3;   // tv-stream (terugkijken): komt langzaam binnen, met één stukje beginnen
   for (let i = 0; i < 200; i++) {
     if (i >= 40 && (live ? 0 : segments(s).length) >= 1) return { id, start: live ? 0 : from, dur: Math.round(dur), audio: trackList(info).audio, audioIndex: ai };
     const n = live ? ((read(path.join(dir, 'index.m3u8')).match(/\.m4s/g) || []).length) : segments(s).length;
