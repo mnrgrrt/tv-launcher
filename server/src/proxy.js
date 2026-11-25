@@ -10,13 +10,16 @@ const PASS = ['content-type', 'content-length', 'content-range', 'accept-ranges'
 export async function pipe(req, res, url, extraHeaders = {}) {
   const ctl = new AbortController();
   req.on('close', () => ctl.abort());
-  const headers = { ...extraHeaders };
+  // Niet ingepakt vragen: fetch pakt gzip zelf uit, en dan klopt de doorgegeven lengte niet meer. Dan stuurt de server meer
+  // bytes dan hij aankondigt, en die rest blijft in de verbinding hangen (de telefoon-app las die als volgend antwoord).
+  const headers = { 'Accept-Encoding': 'identity', ...extraHeaders };
   if (req.headers.range) headers.Range = req.headers.range;
   let up;
   try { up = await fetch(url, { headers, signal: ctl.signal, redirect: 'follow' }); }
   catch (e) { if (!res.headersSent) { res.writeHead(502); res.end('Bron niet bereikbaar'); } return; }
   const out = {};
   PASS.forEach(h => { const v = up.headers.get(h); if (v) out[h] = v; });
+  if (up.headers.get('content-encoding')) delete out['content-length'];   // toch ingepakt: lengte onbekend, Node stuurt het in stukken
   res.writeHead(up.status, out);
   if (!up.body || req.method === 'HEAD') return res.end();
   Readable.fromWeb(up.body).on('error', () => res.destroy()).pipe(res);
