@@ -147,6 +147,60 @@
     if (window.__home) window.__home();
   });
 
+  // ---------- oude browser van Tizen 6 (Chromium 76) ----------
+  // De schermen gebruiken `gap` in flex-rijen en `aspect-ratio` op tegels. Die kent deze browser nog niet:
+  // tegels en knoppen kwamen tegen elkaar aan en tegels werden plat. Hier rekenen we dat na in marges en hoogtes,
+  // alleen als de browser het zelf niet kan. Op nieuwere Samsungs doet dit dus niets.
+  var flexGap = (function () {
+    var d = document.createElement('div');
+    d.style.cssText = 'display:flex;flex-direction:column;row-gap:1px;position:absolute;visibility:hidden';
+    d.appendChild(document.createElement('div')); d.appendChild(document.createElement('div'));
+    document.documentElement.appendChild(d); var ok = d.scrollHeight === 1; d.remove(); return ok;
+  })();
+  var ratio = window.CSS && CSS.supports && CSS.supports('aspect-ratio', '1 / 1');
+  function px(v) { v = parseFloat(v); return isNaN(v) ? 0 : v; }
+  function shown(c) { var s = getComputedStyle(c); return s.display !== 'none' && s.position !== 'absolute' && s.position !== 'fixed'; }
+  // Marge altijd vanaf de eigen marge van het element, zodat opnieuw rekenen (er komt een tegel bij) niets optelt.
+  function base(el) { if (!el._gb) { var s = getComputedStyle(el); el._gb = { r: px(s.marginRight), b: px(s.marginBottom) }; } return el._gb; }
+  function setGap(el) {
+    var s = getComputedStyle(el);
+    if (s.display !== 'flex' && s.display !== 'inline-flex') return;
+    var rg = px(s.rowGap), cg = px(s.columnGap);
+    if (!rg && !cg && !el._gapped) return;
+    el._gapped = true;
+    var col = s.flexDirection.indexOf('column') === 0, wrap = s.flexWrap !== 'nowrap';
+    var items = [].filter.call(el.children, shown);
+    items.forEach(function (c, i) {
+      var b = base(c), last = i === items.length - 1;
+      // Ruimte achter elk element behalve het laatste: zo blijft een `margin-left: auto` (klok, aantal titels) werken.
+      c.style.marginRight = (b.r + (wrap || (!col && !last) ? cg : 0)) + 'px';
+      c.style.marginBottom = (b.b + (wrap || (col && !last) ? rg : 0)) + 'px';
+    });
+    if (wrap) { var e = base(el); el.style.marginRight = (e.r - cg) + 'px'; el.style.marginBottom = (e.b - rg) + 'px'; }
+  }
+  // Tegels zonder hoogte: hoogte uit de breedte (16:9, afleveringen 16:10).
+  function setRatio(el) {
+    if (!el.classList.contains('thumb')) return;
+    var w = el.offsetWidth; if (w) el.style.height = Math.round(w / (el.closest('.ep') ? 1.6 : 16 / 9)) + 'px';
+  }
+  function fixTree(root) {
+    if (root.nodeType !== 1) return;
+    var all = [root].concat([].slice.call(root.querySelectorAll('*')));
+    if (!ratio) all.forEach(setRatio);
+    if (!flexGap) all.forEach(setGap);
+  }
+  if (!flexGap || !ratio) {
+    new MutationObserver(function (list) {
+      var added = [], parents = [];
+      list.forEach(function (m) {
+        [].forEach.call(m.addedNodes, function (n) { if (n.nodeType === 1) added.push(n); });
+        if (parents.indexOf(m.target) < 0) parents.push(m.target);   // rij kreeg er een tegel bij of eraf
+      });
+      added.forEach(function (n) { if (n.isConnected) fixTree(n); });
+      if (!flexGap) parents.forEach(function (n) { if (n.nodeType === 1 && n.isConnected) setGap(n); });
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   // ---------- opstarten: eerst het adres van tv-serverr, dan de schermen ----------
   function opzet(msg) {
     var o = document.getElementById('opzet'), a = document.getElementById('adres'), b = document.getElementById('verder');
