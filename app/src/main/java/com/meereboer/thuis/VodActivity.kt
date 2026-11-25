@@ -278,7 +278,9 @@ class VodActivity : Activity() {
     private fun subsSearch(): List<JSONObject> {
         fun e(v: String) = java.net.URLEncoder.encode(v, "UTF-8")
         val q = "/api/subs/search?kind=${e(item.optString("kind"))}&title=${e(item.optString("title"))}&tmdbId=${item.optInt("tmdb")}" +
-            "&season=${item.optInt("season")}&episode=${item.optInt("episode")}"
+            "&season=${item.optInt("season")}&episode=${item.optInt("episode")}" +
+            // de link naar het bestand: dan zoekt de server ook op de vingerafdruk, en komen passende ondertitels bovenaan
+            (item.optString("url").takeIf { it.startsWith("/stream/") }?.let { "&src=${e(it)}" } ?: "")
         val a = org.json.JSONArray(Server.call(this, "GET", q))
         return (0 until a.length()).map { a.getJSONObject(it) }
     }

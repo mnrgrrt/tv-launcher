@@ -230,7 +230,12 @@ on('GET', '/api/searches', 'device', ({ q }) => searches.list(+q.get('profile') 
 on('POST', '/api/searches', 'device', ({ b }) => { searches.add(+b.profile || 1, b.q); return { ok: true }; });
 on('DELETE', '/api/searches', 'device', ({ q }) => { searches.remove(+q.get('profile') || 1, q.get('q') || ''); return searches.list(+q.get('profile') || 1); });
 
-on('GET', '/api/subs/search', 'device', ({ q }) => subs.search(Object.fromEntries(q)));
+// src (de ondertekende /stream/-link) is optioneel: dan zoeken we ook op de vingerafdruk van het bestand.
+on('GET', '/api/subs/search', 'device', async ({ q }) => {
+  let hash = '';
+  if (q.get('src')) { try { const t = srcOf(q.get('src')); if (!t.live) hash = await subs.movieHash(t.url, t.headers); } catch {} }
+  return subs.search({ ...Object.fromEntries(q), hash });
+});
 on('GET', '/api/subs/file/:id', 'device', async ({ res, p }) => { send(res, 200, await subs.download(+p.id), 'application/x-subrip; charset=utf-8'); });
 
 on('POST', '/api/progress', 'device', ({ b }) => { profiles.progress(+b.profile || 1, b); return { ok: true }; });
