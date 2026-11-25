@@ -80,7 +80,7 @@
           if (mine !== loads) return r.dur;   // intussen alweer verder gespoeld
           id = r.id; aud = r.audio || []; ai = r.audioIndex || 0; if (!live && r.start != null) base = +r.start;   // de server begint bij het sleutelbeeld
           attach(r.url); pending = false; start(); return r.dur;
-        }, function (e) { if (mine === loads) pending = false; throw e; });
+        }, function (e) { if (mine !== loads) return 0; pending = false; throw e; });   // vervangen door een nieuwere: geen melding
       },
       time: function () { return base + (pending ? 0 : v.currentTime || 0); },
       buffered: function () { try { return !pending && v.buffered.length ? base + v.buffered.end(v.buffered.length - 1) : 0; } catch (e) { return 0; } },
@@ -127,7 +127,11 @@
     ev.playing = function () { if (cur) { msgOff('Laden…'); msgOff(TIK); paint(); } };
     ev.waiting = function () { if (cur && !cur.live) msg('Laden…', 0); };
     ev.pause = ev.play = function () { if (cur) paint(); };
-    ev.ended = function () { if (cur && !cur.live) { report('stopped'); close(); } };
+    ev.ended = function () {
+      if (cur && !cur.live) { report('stopped'); close(); return; }
+      // Terugkijken (of verder na pauze) tot "nu" is op: dicht bij live weer live, anders het volgende stuk tot het nieuwe "nu".
+      if (cur && cur.replay) { var at = cur.replay.start + pos() * 1000; if (Date.now() - at < 90e3) tune(cur.ch); else replay(cur.replay, at); }
+    };
     var TIK = 'Tik op afspelen om te starten';
     ev.blocked = function () { if (cur) { msg(TIK, 0); paint(); } };
     ev.error = function () { if (cur) msg(cur.live ? 'Deze zender speelt nu niet af' : 'Dit speelt niet af', 0); };
@@ -384,7 +388,7 @@
     cur.live = true; cur.ch = ch; cur.replay = null; cur.reseek = null; cur.prog = cur.next = null; cur.noGuide = false; cur.off = 0; cur.dur = 0; cur.pausedAt = 0;
     paint(); barShow(menuOpen); nowNext(); msg('Laden…', 0);
     get('/api/live/url/' + ch.id).then(function (r) { return E.load(r.url, 0, true, audioFor(ch)); }).then(function () { if (cur && cur.ch === ch) { msgOff('Laden…'); paint(); } })
-      .catch(function (e) { msg('Deze zender speelt nu niet af\n' + e.message, 0); });
+      .catch(function (e) { if (cur && cur.ch === ch) msg('Deze zender speelt nu niet af\n' + e.message, 0); });
   }
   // Geluid: groen wisselt naar het volgende spoor en onthoudt dat per zender (zoals op de JBL).
   function audioFor(ch) { try { return +(JSON.parse(localStorage.getItem('sjuul-geluid-zender') || '{}')[ch.id] || 0); } catch (e) { return 0; } }
@@ -415,7 +419,8 @@
     cur.replay = p; cur.pausedAt = 0; cur.dur = (p.end - p.start) / 1000;
     var go = function (t) { return get('/api/live/catchup/' + cur.ch.id + '?start=' + t + '&end=' + p.end).then(function (r) { cur.off = (t - p.start) / 1000; return E.load(r.url, 0, false, audioFor(cur.ch)); }); };
     paint(); barShow(menuOpen); msg('Laden…', 0);
-    go(from).then(function () { msgOff('Laden…'); }, function (e) { msg('Terugkijken lukt niet: ' + e.message, 0); });
+    var mine = cur;
+    go(from).then(function () { if (cur === mine) msgOff('Laden…'); }, function (e) { if (cur === mine) msg('Terugkijken lukt niet: ' + e.message, 0); });
   }
   // Spoelen bij terugkijken: stappen van 1 minuut, vasthouden = 5 en daarna 10 minuten. Pas na loslaten laden.
   var seekT = null;
