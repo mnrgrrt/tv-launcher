@@ -254,11 +254,17 @@
     return fetch('/api/media/sub', { method: 'POST', credentials: 'same-origin', headers: { 'X-Thuis': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ src: src, i: i }) })
       .then(function (r) { return r.text().then(function (t) {
         if (!r.ok) { var m = t; try { m = JSON.parse(t).error; } catch (e) {} throw new Error(m); }
-        if (r.headers.get('X-Deels') === '1') { var mine = cur, label; setTimeout(function () { label = cur && cur.subLabel; }, 0);
-          setTimeout(function again() {
+        if (r.headers.get('X-Deels') === '1') {
+          var mine = cur, label;
+          // Nog genoeg ondertitels vooruit (anderhalve minuut): over 30 s aanvullen. Net gespoeld of bijna op: over 5 s.
+          var next = function () { var c = cur && cur.cues, ahead = c && c.length ? c[c.length - 1].s - pos() : 0; return ahead > 90 ? 30e3 : 5e3; };
+          var again = function () {
             if (!cur || cur !== mine || cur.subLabel !== label) return;
-            fileSub(src, i).then(function (t2) { if (cur === mine && cur.subLabel === label) { cur.cues = parseSrt(t2); subShown = null; } }).catch(function () {});
-          }, 30e3); }
+            fileSub(src, i).then(function (t2) { if (cur === mine && cur.subLabel === label) { cur.cues = parseSrt(t2); subShown = null; } })
+              .catch(function () { setTimeout(again, next()); });   // mislukt (bijvoorbeeld net gespoeld): later opnieuw
+          };
+          setTimeout(function () { label = cur && cur.subLabel; setTimeout(again, next()); }, 0);
+        }
         return t;
       }); });
   }

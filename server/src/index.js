@@ -175,9 +175,14 @@ on('POST', '/api/hls/start', 'device', async ({ b, dev }) => {
 on('POST', '/api/media/tracks', 'device', async ({ b }) => { const t = srcOf(b.src); if (t.live) return { audio: [], subs: [] }; return hls.tracks(t.url, t.headers); });
 // Loopt er voor dit bestand een film-sessie, dan de meegelezen ondertitel (X-Deels: 1 = nog niet compleet, later opnieuw ophalen).
 on('POST', '/api/media/sub', 'device', async ({ res, b }) => {
-  const t = srcOf(b.src), x = hls.sessionSub(t.url, +b.i || 0);
+  const t = srcOf(b.src), i = +b.i || 0;
+  // Net gespoeld: de nieuwe sessie start nog. Even wachten in plaats van het hele bestand apart door te lezen.
+  let x = hls.sessionSub(t.url, i);
+  for (let n = 0; !x && n < 40; n++) { await new Promise(r => setTimeout(r, 250)); x = hls.sessionSub(t.url, i); }
   if (x) { res.setHeader('X-Deels', x.done ? '0' : '1'); return send(res, 200, x.text, 'application/x-subrip; charset=utf-8'); }
-  send(res, 200, await hls.subText(t.url, t.headers, +b.i || 0), 'application/x-subrip; charset=utf-8');
+  // Dispatcharr: nooit een tweede verbinding (die kapt de film af). Leeg antwoord, de speler probeert het later opnieuw.
+  if (S('server') && t.url.startsWith(S('server'))) { res.setHeader('X-Deels', '1'); return send(res, 200, '', 'application/x-subrip; charset=utf-8'); }
+  send(res, 200, await hls.subText(t.url, t.headers, i), 'application/x-subrip; charset=utf-8');
 });
 on('POST', '/api/hls/stop', 'device', ({ b, dev }) => { hls.stop(String(b.id || ''), dev.id); return { ok: true }; });
 
