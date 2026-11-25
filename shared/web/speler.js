@@ -247,10 +247,25 @@
       .then(function (r) { return r.text().then(function (t) { if (!r.ok) { var m = t; try { m = JSON.parse(t).error; } catch (e) {} throw new Error(m); } return t; }); });
   }
   // Waar ondertitels vandaan kunnen komen: het bestand zelf en Plex (losse bestanden). OpenSubtitles komt erbij in het menu.
+  // Ondertitel uit het bestand. Loopt de film al, dan leest de server hem mee en is hij nog niet compleet (X-Deels: 1):
+  // dan elke 30 s het volgende stuk ophalen, zolang dezelfde ondertitel aan staat. De gelijkzet-correctie (subOff) blijft.
+  function fileSub(src, i) {
+    if (K.N) return rawText('POST', '/api/media/sub', { src: src, i: i });
+    return fetch('/api/media/sub', { method: 'POST', credentials: 'same-origin', headers: { 'X-Thuis': '1', 'Content-Type': 'application/json' }, body: JSON.stringify({ src: src, i: i }) })
+      .then(function (r) { return r.text().then(function (t) {
+        if (!r.ok) { var m = t; try { m = JSON.parse(t).error; } catch (e) {} throw new Error(m); }
+        if (r.headers.get('X-Deels') === '1') { var mine = cur, label; setTimeout(function () { label = cur && cur.subLabel; }, 0);
+          setTimeout(function again() {
+            if (!cur || cur !== mine || cur.subLabel !== label) return;
+            fileSub(src, i).then(function (t2) { if (cur === mine && cur.subLabel === label) { cur.cues = parseSrt(t2); subShown = null; } }).catch(function () {});
+          }, 30e3); }
+        return t;
+      }); });
+  }
   function subSources() {
     var it = cur.item, l = [];
     ((cur.tracks || {}).subs || []).filter(function (s) { return s.text; }).forEach(function (s) {
-      l.push({ lang: s.lang, label: [s.title, lang(s.lang)].filter(Boolean).join(' · ') || 'Ondertitels', load: function () { return rawText('POST', '/api/media/sub', { src: it.url, i: s.i }); } });
+      l.push({ lang: s.lang, label: [s.title, lang(s.lang)].filter(Boolean).join(' · ') || 'Ondertitels', load: function () { return fileSub(it.url, s.i); } });
     });
     (it.subs || []).filter(function (s) { return /srt|subrip/i.test(s.codec || 'srt'); }).forEach(function (s) {
       l.push({ lang: s.lang, label: s.label || lang(s.lang) || 'Ondertitels', load: function () { return fetch(K.img(s.url)).then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); }); } });

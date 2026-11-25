@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { parseSrt, toSrt } from './subsync.js';
 
 // Op schijf in de datamap, niet in /tmp: dat is in de container een RAM-schijf, en een film kan gigabytes zijn.
 const ROOT = path.join(process.env.THUIS_DATA || os.tmpdir(), 'hls');
@@ -126,6 +127,10 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
     const k = await keyframeBefore(url, headers, from);
     if (k != null && k >= 0 && k <= from && from - k < 30) from = Math.round(k * 1000) / 1000; else loose = true;
   }
+  // Tekstondertitels meelezen in dezelfde ffmpeg (Nederlands en Engels eerst, max 12). Een aparte verbinding om ze uit het
+  // bestand te halen gaat niet: Dispatcharr staat per film maar één verbinding toe en kapt dan de film af.
+  const subIdx = live ? [] : trackList(info).subs.filter(x => x.text)
+    .sort((x, y) => (/^(nl|nld|dut|en|eng)$/.test(y.lang) ? 1 : 0) - (/^(nl|nld|dut|en|eng)$/.test(x.lang) ? 1 : 0)).slice(0, 12).map(x => x.i);
   const id = crypto.randomBytes(16).toString('hex'), dir = path.join(ROOT, id);
   fs.mkdirSync(dir);
   // Eén ffmpeg-ronde. Film of aflevering: stopt de bron te vroeg (verbinding afgekapt), dan gaat een nieuwe ronde verder waar
@@ -149,10 +154,15 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
     '-hls_segment_options', 'use_editlist=0',
     // Live: de laatste 30 minuten bewaren (450 stukjes van 4 s), zodat pauzeren en even terug kan zonder de aanbieder.
     ...(live ? ['-hls_list_size', '450', '-hls_flags', 'delete_segments+independent_segments'] : ['-hls_playlist_type', 'event', '-hls_flags', 'independent_segments']),
-    '-hls_segment_filename', path.join(dir, pre(k) + 's%05d.m4s'), path.join(dir, live ? 'index.m3u8' : pre(k) + '.m3u8')];
-  const s = { dir, dev, seen: Date.now(), live: !!live, err: '', final: false, rounds: 0, log: [] };
+    '-hls_segment_filename', path.join(dir, pre(k) + 's%05d.m4s'), path.join(dir, live ? 'index.m3u8' : pre(k) + '.m3u8'),
+    // De ondertitels als losse srt-bestanden per ronde (tijden vanaf het begin van die ronde). flush_packets: meteen wegschrijven,
+    // anders blijven ze tot het eind in een buffer en ziet de speler niets. avoid_negative_ts uit: anders schuift een zin die net
+    // voor het startpunt begon alle tijden op.
+    ...subIdx.flatMap(i => ['-map', '0:s:' + i, '-c:s', 'srt', '-flush_packets', '1', '-avoid_negative_ts', 'disabled', '-f', 'srt', path.join(dir, `${pre(k)}sub${i}.srt`)])];
+  const s = { dir, dev, seen: Date.now(), live: !!live, err: '', final: false, rounds: 0, log: [], url, subIdx, at: [] };
   sessions.set(id, s);
   const run = (k, at, loose) => {
+    s.at[k] = +at || 0;
     const proc = spawn('ffmpeg', args(k, at, loose), { stdio: ['ignore', 'ignore', 'pipe'] });
     s.proc = proc;
     proc.stderr.on('data', d => { s.err = (s.err + d).slice(-400); });
@@ -186,6 +196,24 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   const err = s.err;
   kill(id);
   throw Object.assign(new Error('Omzetten lukt niet' + (err ? ': ' + err.trim().split('\n').pop() : '')), { status: 502 });
+}
+
+/**
+ * Ondertitel uit een lopende film-sessie (meegelezen door ffmpeg), met de echte tijden in de film.
+ * done = false: de film komt nog binnen, de speler haalt later het volgende stuk op. null als er geen sessie is.
+ */
+export function sessionSub(url, i) {
+  for (const s of sessions.values()) {
+    if (s.live || s.url !== url || !s.subIdx.includes(+i)) continue;
+    let cues = [];
+    for (let k = 0; k <= s.rounds; k++) {
+      const add = parseSrt(read(path.join(s.dir, `r${k}sub${+i}.srt`))).map(c => ({ s: c.s + s.at[k], e: c.e + s.at[k], t: c.t }));
+      const last = cues.length ? cues[cues.length - 1].s : -1;
+      cues = cues.concat(add.filter(c => c.s > last + 0.05));   // na een nieuwe ronde: dubbele zinnen weg
+    }
+    return { text: toSrt(cues), done: s.final, cues: cues.length };
+  }
+  return null;
 }
 
 const read = f => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
