@@ -5,7 +5,12 @@ export async function http(url, opt = {}) {
   try {
     const r = await fetch(url, { method: opt.method || 'GET', headers: opt.headers || {}, body: opt.body, signal: ctl.signal });
     const text = await r.text();
-    if (!r.ok) throw new Error(`fout ${r.status}${opt.what ? ' bij ' + opt.what : ''}`);
+    if (!r.ok) {
+      // De melding van de dienst zelf erbij (bv. OMDb: "Request limit reached!"), kort en zonder adressen.
+      let why = ''; try { const j = JSON.parse(text); why = String(j.Error || j.error || j.message || j.status_message || ''); } catch {}
+      why = why.replace(/\w+:\/\/\S+/g, '').trim().slice(0, 80);
+      throw new Error(`fout ${r.status}${opt.what ? ' bij ' + opt.what : ''}${why ? ': ' + why : ''}`);
+    }
     return text;
   } catch (e) {
     if (e.name === 'AbortError') throw new Error('time-out' + (opt.what ? ' bij ' + opt.what : ''));
