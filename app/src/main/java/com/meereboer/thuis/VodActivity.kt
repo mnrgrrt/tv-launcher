@@ -223,10 +223,7 @@ class VodActivity : Activity() {
                     val label = "OpenSubtitles · $lang · " + r.optString("release").take(40) + (if (r.optBoolean("hearing")) " · SDH" else "")
                     Opt("$label  (${r.optInt("downloads")}×)") {
                         flash("Ondertitel ophalen…")
-                        bg.execute {
-                            val f = try { subsDownload(r.optLong("fileId")) } catch (e: Exception) { null }
-                            ui.post { if (f == null) flash("Ophalen lukt niet") else addExternal(f, r.optString("lang"), label) }
-                        }
+                        waitForSubs({ subsDownload(r.optLong("fileId")) }) { f, _ -> if (f == null) flash("Ophalen lukt niet") else addExternal(f, r.optString("lang"), label) }
                     }
                 }
                 openMenu("Ondertitels", opts + more, menuList.selectedItemPosition.coerceAtLeast(sel))
@@ -263,14 +260,30 @@ class VodActivity : Activity() {
         if (!manual && (hasNlText || nlAudio)) return
         subsTried = true
         if (manual) flash("Ondertitels zoeken…")
+        waitForSubs({ subsSearch().firstOrNull { it.optString("lang") == "nl" }?.let { subsDownload(it.optLong("fileId")) } }) { f, err ->
+            if (player == null) return@waitForSubs
+            if (err != null) { if (manual) flash("Ondertitels zoeken lukt niet: ${err.message?.take(60)}"); return@waitForSubs }
+            if (f == null) { if (manual) flash("Geen Nederlandse ondertitels gevonden"); return@waitForSubs }
+            addExternal(f, "nl", "Nederlands · OpenSubtitles")
+            flash("Nederlandse ondertitels geladen (omlaag = andere kiezen)")
+        }
+    }
+
+    /**
+     * Ondertitel ophalen op de achtergrond. Duurt het langer dan even (de server zet hem gelijk met de ondertitel in het bestand),
+     * dan de film op pauze met een melding en daarna vanzelf verder. Na 30 s gaat hij toch verder; komt de ondertitel later, dan alsnog.
+     */
+    private fun waitForSubs(work: () -> java.io.File?, done: (java.io.File?, Exception?) -> Unit) {
+        var waiting = false; var was = false
+        val text = "Ondertitels gelijkzetten…"
+        val stop = { if (waiting) { waiting = false; center.visibility = View.GONE; if (was) player?.play() } }
+        val pauseLater = Runnable { player?.let { p -> waiting = true; was = p.playWhenReady; p.pause(); show(text, 0) } }
+        val giveUp = Runnable { if (waiting) { stop(); flash("Ondertitels duren te lang, de film gaat verder") } }
+        ui.postDelayed(pauseLater, 400); ui.postDelayed(giveUp, 30_000)
         bg.execute {
-            val f = try { subsSearch().firstOrNull { it.optString("lang") == "nl" }?.let { subsDownload(it.optLong("fileId")) } } catch (e: Exception) { ui.post { if (manual) flash("Ondertitels zoeken lukt niet: ${e.message?.take(60)}") }; null }
-            ui.post {
-                val p = player ?: return@post
-                if (f == null) { if (manual) flash("Geen Nederlandse ondertitels gevonden"); return@post }
-                addExternal(f, "nl", "Nederlands · OpenSubtitles")
-                flash("Nederlandse ondertitels geladen (omlaag = andere kiezen)")
-            }
+            var f: java.io.File? = null; var err: Exception? = null
+            try { f = work() } catch (e: Exception) { err = e }
+            ui.post { ui.removeCallbacks(pauseLater); ui.removeCallbacks(giveUp); stop(); done(f, err) }
         }
     }
 
