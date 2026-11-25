@@ -6,12 +6,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const ROOT = path.join(os.tmpdir(), 'sjuul-hls');
+// Op schijf in de datamap, niet in /tmp: dat is in de container een RAM-schijf, en een film kan gigabytes zijn.
+const ROOT = path.join(process.env.THUIS_DATA || os.tmpdir(), 'hls');
 fs.rmSync(ROOT, { recursive: true, force: true });
 fs.mkdirSync(ROOT, { recursive: true });
 const sessions = new Map();   // id -> { proc, dir, dev, seen, live }
 const MAX = 4;                // meer tegelijk trekt de server niet netjes
-const IDLE = 60e3;            // een minuut niets opgevraagd: kijker is weg, ffmpeg stopt
+const IDLE = 60e3;            // live: een minuut niets opgevraagd, dan is de kijker weg en stopt ffmpeg
+const IDLE_VOD = 20 * 60e3;   // film of aflevering: op pauze vraagt de speler niets, dus langer bewaren
 
 const hdrArgs = h => (h && Object.keys(h).length ? ['-headers', Object.entries(h).map(([k, v]) => `${k}: ${v}\r\n`).join('')] : []);
 
@@ -105,7 +107,9 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   // file() maakt daar één lijst van. Live: één ronde met index.m3u8.
   const pre = k => live ? '' : 'r' + k;
   const args = (k, at, loose) => ['-hide_banner', '-loglevel', 'error',
-    ...(live || !at ? [] : ['-ss', String(Math.max(0, +at)), ...(loose ? ['-noaccurate_seek'] : [])]), ...hdrArgs(headers), '-i', url,
+    ...(live || !at ? [] : ['-ss', String(Math.max(0, +at)), ...(loose ? ['-noaccurate_seek'] : [])]),
+    // Film of aflevering: niet de hele film in een paar minuten binnenhalen. Eerst 30 s in één keer, daarna 4x de kijksnelheid.
+    ...(live ? [] : ['-readrate', '4', '-readrate_initial_burst', '30']), ...hdrArgs(headers), '-i', url,
     '-map', '0:v:0?', '-map', '0:a:' + ai + '?',
     ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', '-pix_fmt', 'yuv420p',   // 8-bit: 10-bit H.264 speelt in geen enkele browser
@@ -185,5 +189,5 @@ export function file(id, name) {
   return fs.existsSync(f) ? { f, live: s.live } : null;
 }
 
-setInterval(() => { for (const [id, s] of sessions) if (Date.now() - s.seen > IDLE) kill(id); }, 15e3).unref();
+setInterval(() => { for (const [id, s] of sessions) if (Date.now() - s.seen > (s.live ? IDLE : IDLE_VOD)) kill(id); }, 15e3).unref();
 export const stopAll = () => { for (const id of [...sessions.keys()]) kill(id); };
