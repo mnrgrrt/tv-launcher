@@ -150,14 +150,16 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
     // Live: de laatste 30 minuten bewaren (450 stukjes van 4 s), zodat pauzeren en even terug kan zonder de aanbieder.
     ...(live ? ['-hls_list_size', '450', '-hls_flags', 'delete_segments+independent_segments'] : ['-hls_playlist_type', 'event', '-hls_flags', 'independent_segments']),
     '-hls_segment_filename', path.join(dir, pre(k) + 's%05d.m4s'), path.join(dir, live ? 'index.m3u8' : pre(k) + '.m3u8')];
-  const s = { dir, dev, seen: Date.now(), live: !!live, err: '', final: false, rounds: 0 };
+  const s = { dir, dev, seen: Date.now(), live: !!live, err: '', final: false, rounds: 0, log: [] };
   sessions.set(id, s);
   const run = (k, at, loose) => {
     const proc = spawn('ffmpeg', args(k, at, loose), { stdio: ['ignore', 'ignore', 'pipe'] });
     s.proc = proc;
     proc.stderr.on('data', d => { s.err = (s.err + d).slice(-400); });
-    proc.on('exit', () => {
+    proc.on('exit', code => {
       if (sessions.get(id) !== s || s.proc !== proc) return;   // gestopt of vervangen
+      // Waarom deze ronde stopte (zonder adressen), voor foutzoeken: komt mee in het antwoord van /api/hls/start.
+      s.log.push(`ronde ${k}: code ${code}, ${String(s.err).replace(/\w+:\/\/\S+/g, 'ADRES').trim().split('\n').slice(-2).join(' / ').slice(0, 200)}`); s.err = '';
       if (live) { s.final = true; return; }
       const made = segments(s).reduce((t, x) => t + x.len, 0);
       // Nog niet aan het eind (meer dan 15 s over) en niet te vaak geprobeerd: verder waar we waren. Beeld en geluid allebei
@@ -177,7 +179,7 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   for (let i = 0; i < 200; i++) {
     if (i >= 40 && (live ? 0 : segments(s).length) >= 1) return { id, start: live ? 0 : from, dur: Math.round(dur), audio: trackList(info).audio, audioIndex: ai };
     const n = live ? ((read(path.join(dir, 'index.m3u8')).match(/\.m4s/g) || []).length) : segments(s).length;
-    if (n >= need || (s.final && n)) return { id, start: live ? 0 : from, dur: Math.round(dur), audio: trackList(info).audio, audioIndex: ai, kf: kfLast };
+    if (n >= need || (s.final && n)) return { id, start: live ? 0 : from, dur: Math.round(dur), audio: trackList(info).audio, audioIndex: ai, kf: kfLast, rondes: s.log };
     if (s.final || (s.rounds > 2 && !n)) break;
     await new Promise(r => setTimeout(r, 200));
   }
