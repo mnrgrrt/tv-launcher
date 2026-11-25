@@ -173,7 +173,12 @@ on('POST', '/api/hls/start', 'device', async ({ b, dev }) => {
 });
 // Sporen van een film of aflevering, en een tekstondertitel uit het bestand zelf.
 on('POST', '/api/media/tracks', 'device', async ({ b }) => { const t = srcOf(b.src); if (t.live) return { audio: [], subs: [] }; return hls.tracks(t.url, t.headers); });
-on('POST', '/api/media/sub', 'device', async ({ res, b }) => { const t = srcOf(b.src); send(res, 200, await hls.subText(t.url, t.headers, +b.i || 0), 'application/x-subrip; charset=utf-8'); });
+// Loopt er voor dit bestand een film-sessie, dan de meegelezen ondertitel (X-Deels: 1 = nog niet compleet, later opnieuw ophalen).
+on('POST', '/api/media/sub', 'device', async ({ res, b }) => {
+  const t = srcOf(b.src), x = hls.sessionSub(t.url, +b.i || 0);
+  if (x) { res.setHeader('X-Deels', x.done ? '0' : '1'); return send(res, 200, x.text, 'application/x-subrip; charset=utf-8'); }
+  send(res, 200, await hls.subText(t.url, t.headers, +b.i || 0), 'application/x-subrip; charset=utf-8');
+});
 on('POST', '/api/hls/stop', 'device', ({ b, dev }) => { hls.stop(String(b.id || ''), dev.id); return { ok: true }; });
 
 // services = de diensten van dit profiel (de tv weet welke er op het apparaat staan); leeg = alle diensten.
@@ -246,23 +251,27 @@ on('GET', '/api/subs/file/:id', 'device', async ({ res, p, q }) => {
       const t = srcOf(q.get('src')), key = p.id + '|' + t.url;
       if (!t.live) {
         if (!synced.has(key)) {
-          let done = null, why = '';
+          let done = null, why = '', partial = false;
           const mi = await hls.mediaInfo(t.url, t.headers), ext = parseSrt(txt);
           for (const sub of mi.subs.filter(x => x.text && !/forced|geforceerd/i.test(x.title)).slice(0, 2)) {
             // Twee stukken van 4 minuten, op 15% en 70%: genoeg zinnen voor verschuiving en snelheid, en snel gelezen
             // (10 minuten uit een groot 4K-bestand kostte een minuut). Korte bestanden: alles.
-            const parts = mi.dur > 1200 ? await Promise.all([0.15, 0.7].map(x => hls.subPart(t.url, t.headers, sub.i, Math.round(mi.dur * x), 240)))
+            // Loopt de film al (Dispatcharr: maar één verbinding), dan de meegelezen ondertitel als maatstaf, niet nog een verbinding.
+            const live = S('server') && t.url.startsWith(S('server')) ? hls.sessionSub(t.url, sub.i) : null;   // alleen bij Dispatcharr; Plex mag meerdere verbindingen
+            const parts = live ? [live.text] : mi.dur > 1200 ? await Promise.all([0.15, 0.7].map(x => hls.subPart(t.url, t.headers, sub.i, Math.round(mi.dur * x), 240)))
               : [await hls.subPart(t.url, t.headers, sub.i, 0, Math.ceil(mi.dur) || 1200)];
             const ref = parts.flatMap(x => parseSrt(x).map(c => c.s)), f = fit(ref, ext.map(c => c.s));
+            if (!f && live && !live.done) { partial = true; continue; }   // nog te weinig binnen: niet onthouden, later opnieuw
             if (f) { done = { f, txt: Math.abs(f.offset) > 0.05 || f.scale !== 1 ? toSrt(shift(ext, f)) : txt }; break; }
             why = `spoor ${sub.i}: ${fit.last}`;
           }
           if (!mi.subs.some(x => x.text)) why = 'geen tekstondertitel in het bestand';
-          synced.set(key, done || { why }); if (synced.size > 100) synced.delete(synced.keys().next().value);
+          if (!partial || done) { synced.set(key, done || { why }); if (synced.size > 100) synced.delete(synced.keys().next().value); }
         }
         const d = synced.get(key);
-        if (d && d.why != null) how = 'niet: ' + d.why;
-        else if (d) { txt = d.txt; how = `${d.f.offset >= 0 ? '+' : ''}${d.f.offset.toFixed(2)} s, snelheid ${d.f.scale.toFixed(4)}, ${d.f.hits} van ${d.f.of} zinnen`; }
+        if (!d) how = 'nog niet: de film komt nog binnen';
+        else if (d.why != null) how = 'niet: ' + d.why;
+        else { txt = d.txt; how = `${d.f.offset >= 0 ? '+' : ''}${d.f.offset.toFixed(2)} s, snelheid ${d.f.scale.toFixed(4)}, ${d.f.hits} van ${d.f.of} zinnen`; }
       }
     } catch (e) { how = 'niet: ' + e.message; }
   }
