@@ -28,7 +28,8 @@ const SCALES = [1, 25 / 23.976, 23.976 / 25, 24 / 23.976, 23.976 / 24, 25 / 24, 
  * Geeft null als er geen duidelijke overeenkomst is.
  */
 export function fit(ref, ext) {
-  if (ref.length < 8 || ext.length < 8) return null;
+  fit.last = '';   // waarom het niet lukte, voor foutzoeken
+  if (ref.length < 8 || ext.length < 8) { fit.last = `te weinig zinnen: ${ref.length} uit het bestand, ${ext.length} van buiten`; return null; }
   const R = [...ref].sort((a, b) => a - b);
   const near = (x, tol) => { let lo = 0, hi = R.length - 1; while (lo < hi) { const mid = (lo + hi) >> 1; if (R[mid] < x) lo = mid + 1; else hi = mid; }
     return [R[lo], R[lo - 1]].some(r => r != null && Math.abs(r - x) <= tol); };
@@ -48,7 +49,7 @@ export function fit(ref, ext) {
   const ranges = []; for (const r of R) { const l = ranges[ranges.length - 1]; if (l && r - l[1] < 300) l[1] = r; else ranges.push([r, r]); }
   const inside = ext.map(e => e * best.scale + best.offset).filter(x => ranges.some(([a, b]) => x >= a - 2 && x <= b + 2));
   const hits = inside.filter(x => near(x, 0.3)).length;
-  if (hits < 10 || hits < 0.55 * Math.min(inside.length, R.length)) return null;
+  if (hits < 10 || hits < 0.55 * Math.min(inside.length, R.length)) { fit.last = `beste ${hits} van ${inside.length} zinnen (${R.length} uit het bestand), verschuiving ${best.offset} s, snelheid ${best.scale.toFixed(4)}`; return null; }
   // Verfijnen: gemiddelde afwijking van de treffers.
   const diffs = [];
   for (const e of ext) { const x = e * best.scale + best.offset; let bd = null; for (const r of R) { const d = r - x; if (Math.abs(d) <= 0.3 && (bd == null || Math.abs(d) < Math.abs(bd))) bd = d; } if (bd != null) diffs.push(bd); }
