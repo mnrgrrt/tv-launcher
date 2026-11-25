@@ -102,8 +102,10 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   const v = (info.streams || []).find(s => s.codec_type === 'video'), a = auds[ai];
   const dur = live ? 0 : +(info.format || {}).duration || 0;
   const isFile = !live && /matroska|mov|mp4/.test((info.format || {}).format_name || '');
-  // HEVC alleen kopiëren als de browser het zelf kan afspelen (iPad wel, Chrome zonder grafische kaart niet).
-  const copyV = !low && v && (v.codec_name === 'h264' || (v.codec_name === 'hevc' && hevc));
+  // HEVC alleen kopiëren als de browser het zelf kan afspelen (iPad wel, Chrome zonder grafische kaart niet), en alleen uit een
+  // filmbestand: uit een tv-stream mist ffmpeg dan de beeldinstellingen (PPS) en komt er niets uit. Dan omzetten naar H.264.
+  const copyV = !low && v && (v.codec_name === 'h264' || (v.codec_name === 'hevc' && hevc && isFile));
+
   // Film of aflevering halverwege: het gekopieerde beeld kan alleen bij een sleutelbeeld beginnen. Daar beginnen we dan ook,
   // zodat de tijd in de speler (en de ondertitels) klopt. Lukt het opzoeken niet (bij IPTV soms), dan ook het geluid bij het
   // sleutelbeeld laten beginnen: anders zit er een gat aan het begin en slaat de browser het eerste stukje over.
