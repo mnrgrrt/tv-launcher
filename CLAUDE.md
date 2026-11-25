@@ -3,6 +3,8 @@
 Dit bestand geldt voor elke sessie in dit project. Lees het eerst, houd je eraan, en werk het bij als er iets verandert.
 
 ## Wat het is
+- **Namen die we gebruiken**: de **Android-versie** is de app op de JBL en de telefoon (één app, smaak `tv` en `telefoon`, met de eigen Android-spelers VodActivity/PlayerActivity). De **webversie** is iPad, iPhone en browser. De **Samsung-versie** is de testapp op The Frame.
+- **Android-versie speelt nu met de eigen Android-spelers** (`N.playItem` / `N.playLive` in `kern.js`). De gedeelde speler met ExoPlayer eronder (`Motor.kt`, `motor.js`) staat er nog maar wordt niet gebruikt: die gaf fouten. Grote overstappen pas naar het testkanaal als ze op het toestel zelf getest zijn.
 - **Sjuul TV** (eerst "Thuis"): eigen tv-startscherm (Android-app in `app/`, smaak `tv`, schermen in `shared/web/index.html` + `thuis.js`). Op de Samsung The Frame voorlopig een testapp (`tizen/`, release "test", `sjuul-samsung-test.wgt`): schil met de schermen van dezelfde testversie (map `app/` in het pakket) en AVPlay als motor onder de speler. Samsung laat de Home-knop niet over; een Android-kastje is het alternatief. Installeren doet Gerry zelf.
 - **Sjuul TV telefoon**: zelfde app, smaak `telefoon` (`shared/web/telefoon.html` + `telefoon.js`). Release `telefoon-test` / `telefoon`, bestand `sjuul-telefoon.apk`. Gedeelde logica in `shared/web/kern.js`.
 - **Webversie (iPad, iPhone, browser)**: `telefoon.html` rechtstreeks van tv-serverr (`/app/telefoon.html`), koppelen met een cookie. Daarom: alle opmaak en logica in `shared/web/`, en alleen wat per platform verschilt via `window.Native` (koppelen, server-aanroepen, spelers, updaten, `features()`). Geen Android-only trucs in de webcode.
