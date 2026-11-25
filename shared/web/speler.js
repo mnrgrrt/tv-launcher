@@ -257,8 +257,15 @@
     });
     return l;
   }
+  // Duurt ophalen langer dan even (OpenSubtitles gelijkzetten, ondertitel uit het bestand halen): film op pauze met een melding,
+  // daarna vanzelf verder. Na 30 s gaat hij toch verder; komt de ondertitel later, dan verschijnt hij alsnog.
   function loadSub(src, quiet) {
-    return src.load().then(function (t) { if (!cur) return; useSubs(t, src.label); if (!quiet) msg('Ondertitels: ' + src.label); }, function (e) { if (!quiet) msg('Ophalen lukt niet'); throw e; });
+    var mine = cur, waiting = false, was = false, text = /OpenSubtitles/.test(src.label) ? 'Ondertitels gelijkzetten…' : 'Ondertitels laden…';
+    var stop = function () { if (!waiting) return; waiting = false; clearTimeout(tOut); if (cur === mine) { msgOff(text); if (was) E.play(); } };
+    var tWait = setTimeout(function () { if (cur !== mine) return; waiting = true; was = !E.paused(); if (was) E.pause(); msg(text, 0); }, 400);
+    var tOut = setTimeout(function () { if (waiting) { stop(); if (cur === mine) msg('Ondertitels duren te lang, de film gaat verder'); } }, 30e3);
+    return src.load().then(function (t) { clearTimeout(tWait); stop(); if (!cur || cur !== mine) return; useSubs(t, src.label); if (!quiet) msg('Ondertitels: ' + src.label); },
+      function (e) { clearTimeout(tWait); stop(); if (!quiet) msg('Ophalen lukt niet'); throw e; });
   }
   function osSearch() {
     var it = cur.item;
