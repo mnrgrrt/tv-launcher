@@ -78,6 +78,18 @@ async function probeCached(url, headers) {
 export const tracks = async (url, headers) => trackList(await probeCached(url, headers));
 
 /** Eén tekstondertitel uit het bestand als srt. Bewaard, want het hele bestand doorlezen kost even. */
+/** Een stuk van een tekstondertitel uit het bestand (vanaf `start` s, `len` s lang), met de echte tijden.
+ *  Om andere ondertitels gelijk te zetten: zo hoeft niet het hele bestand gelezen te worden. */
+export function subPart(url, headers, i, start, len) {
+  return new Promise(resolve => {
+    // -ss en -t vóór -i (alleen dit stuk lezen); -copyts houdt de echte tijden in de film aan.
+    execFile('ffmpeg', ['-hide_banner', '-loglevel', 'error', ...(start > 0 ? ['-ss', String(start)] : []), '-t', String(len), ...hdrArgs(headers), '-i', url,
+      '-copyts', '-map', '0:s:' + (+i), '-f', 'srt', 'pipe:1'], { timeout: 60e3, maxBuffer: 8e6 }, (e, out) => resolve(e ? '' : String(out)));
+  });
+}
+/** Sporen (geluid, ondertitels) en lengte, voor het gelijkzetten van ondertitels. */
+export async function mediaInfo(url, headers) { const info = await probeCached(url, headers); return { ...trackList(info), dur: +(info.format || {}).duration || 0 }; }
+
 export function subText(url, headers, i) {
   const f = path.join(ROOT, 'sub-' + crypto.createHash('sha1').update(url).digest('hex').slice(0, 16) + '-' + (+i) + '.srt');
   if (fs.existsSync(f)) return Promise.resolve(fs.readFileSync(f, 'utf8'));
