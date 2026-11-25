@@ -128,3 +128,10 @@ html.sp-open .overlay { position: fixed; z-index: 40; }
   .sl-guide .gd-tbtn button { padding: 8px 16px; border-radius: 999px; background: rgba(255,255,255,.16); font-size: 15px; font-weight: 600; }
   .sp .sp-rb { width: max(44px, calc(44 * var(--dp))); height: max(44px, calc(44 * var(--dp))); }
 }
+
+/* Webversie: Terug en Home linksboven, alleen samen met de balk (zoals de andere knoppen). */
+.sp-nav { display: none; }
+.sp.sp-touch .sp-nav { display: flex; gap: calc(10 * var(--dp)); position: absolute; z-index: 6; top: calc(14 * var(--dp) + env(safe-area-inset-top)); left: calc(14 * var(--dp) + env(safe-area-inset-left));
+  opacity: 0; pointer-events: none; transition: opacity .2s; }
+.sp.sp-touch.is-vod.osd-on .sp-nav, .sp.sp-touch.is-live.bar-on .sp-nav { opacity: 1; pointer-events: auto; }
+.sp-nav .sp-rb { background: rgba(0,0,0,.45); }

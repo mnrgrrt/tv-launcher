@@ -125,6 +125,20 @@
       '<div class="sl-list" hidden><div class="sl-lt">Zenders</div><div class="sl-ll"></div></div>' +
       '<div class="sl-choice" hidden><span>● Live</span><span>↺ Vanaf begin</span></div>');
     E = window.SpelerMotor ? window.SpelerMotor(el, ev) : browserMotor(el);
+    // Webversie (aanraken, geen afstandsbediening): knoppen Terug en Home linksboven, zichtbaar samen met de balk.
+    if (!window.SpelerMotor) {
+      el.classList.add('sp-touch');
+      var nav = h('div', { class: 'sp-nav' });
+      var nb = function (label, d, fn) { var b = h('button', { class: 'sp-rb', 'aria-label': label }, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>'); b.onclick = function (e) { e.stopPropagation(); fn(); }; return b; };
+      nav.appendChild(nb('Terug', '<path d="M15 5l-7 7 7 7"/>', function () {
+        if (menu) return menuClose(); if (gd) return guideClose(); if (list) return listHide(); if (choice) return choiceHide();
+        close();
+      }));
+      nav.appendChild(nb('Home', '<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>', function () {
+        close(); setTimeout(function () { if (window.__home) window.__home(); }, 60);
+      }));
+      el.appendChild(nav);
+    }
     ev.playing = function () { if (cur) { msgOff('Laden…'); msgOff(TIK); paint(); } };
     ev.waiting = function () { if (cur && !cur.live) msg('Laden…', 0); };
     ev.pause = ev.play = function () { if (cur) paint(); };
