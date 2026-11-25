@@ -127,8 +127,7 @@
     E = window.SpelerMotor ? window.SpelerMotor(el, ev) : browserMotor(el);
     // Webversie (aanraken, geen afstandsbediening): knoppen Terug en Home linksboven, zichtbaar samen met de balk.
     if (!window.SpelerMotor) {
-      el.classList.add('sp-touch');
-      var nav = h('div', { class: 'sp-nav' });
+      var nav = h('div', { class: 'sp-nav' });   // klasse sp-touch zet open()
       var nb = function (label, d, fn) { var b = h('button', { class: 'sp-rb', 'aria-label': label }, '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>'); b.onclick = function (e) { e.stopPropagation(); fn(); }; return b; };
       nav.appendChild(nb('Terug', '<path d="M15 5l-7 7 7 7"/>', function () {
         if (menu) return menuClose(); if (gd) return guideClose(); if (list) return listHide(); if (choice) return choiceHide();
@@ -743,7 +742,7 @@
   function open(isLive) {
     if (!el) build();
     clearInterval(tickT); tickT = setInterval(tick, 250);
-    el.hidden = false; el.className = 'sp ' + (isLive ? 'is-live' : 'is-vod') + (E.transparent ? ' native' : '');
+    el.hidden = false; el.className = 'sp ' + (isLive ? 'is-live' : 'is-vod') + (E.transparent ? ' native' : '') + (window.SpelerMotor ? '' : ' sp-touch');
     document.documentElement.classList.add('sp-open'); if (E.transparent) document.documentElement.classList.add('sp-native');
     if (!K.N) history.pushState({ speler: 1 }, '');   // webversie: terugvegen sluit de speler
   }
