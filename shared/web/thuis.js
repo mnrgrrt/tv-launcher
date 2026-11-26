@@ -217,6 +217,8 @@
     });
     // Alle apps en Instellingen staan onderaan in hetzelfde scrollende blok als de diensten.
     var tail = [item('apps', 'Alle apps', NAVICON.apps, function () { go('apps'); }), item('settings', 'Instellingen', NAVICON.settings, function () { go('settings'); })];
+    // Samsung: het eigen startscherm van de tv blijft altijd bereikbaar (tv-instellingen, Art Mode, bronnen).
+    if (N && N.samsungHome) tail.push(item('samsung', 'Samsung-startscherm', NAVICON.home, function () { closeOverlay(); if (!N.samsungHome()) toast('Het Samsung-startscherm openen lukt niet'); }));
     tail.forEach(function (b) { svcBox.appendChild(b); });
     openOverlay(nav);
     overlay.classList.add('side-ov');

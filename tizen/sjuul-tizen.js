@@ -58,6 +58,12 @@
       } catch (e) { cb(id, false, e.message); }
     },
     launch: function (pkg) { try { tizen.application.launch(pkg); } catch (e) {} },
+    // Het eigen startscherm van Samsung (Smart Hub). Op nieuwere tv's heet dat com.samsung.tv.csfs; staat dat er niet,
+    // dan zoeken we het in de lijst met apps (ook verborgen apps). Geeft false als er niets te openen is.
+    samsungHome: function () {
+      var id = homeId || 'com.samsung.tv.csfs';
+      try { tizen.application.launch(id, null, function () { findHome(true); }); return true; } catch (e) { return findHome(true); }
+    },
     // Trailers en YouTube: in de YouTube-app van Samsung.
     openUrl: function (u) {
       var m = /[?&]v=([\w-]{6,})/.exec(u || '');
@@ -67,6 +73,19 @@
       } catch (e) {}
     }
   };
+
+  // Id van het Samsung-startscherm op deze tv, opgezocht bij het opstarten.
+  var homeId = '';
+  function findHome(open) {
+    try {
+      tizen.application.getAppsInfo(function (l) {
+        var a = l.filter(function (x) { return /csfs|homescreen|smarthub|smart-hub/i.test(x.id); })[0];
+        if (a) { homeId = a.id; if (open) try { tizen.application.launch(a.id); } catch (e) {} }
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  findHome(false);
 
   var inputs = [];
   function loadInputs() {
