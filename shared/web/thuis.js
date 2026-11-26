@@ -320,14 +320,13 @@
     if (x.app.input) t.classList.add('hdmi');
     else if (x.app.banner) t.querySelector('.thumb').style.backgroundImage = "url('" + x.app.banner + "')";
     else {
-      // Alleen een vierkant icoon (Samsung, sommige Android-apps): icoon in het midden op een vervaagde versie van zichzelf.
-      // Geen icoon of laadt het niet, dan de naam in de tegel.
+      // Alleen een vierkant icoon (Samsung geeft geen brede banner zoals Android TV): icoon netjes in het midden op
+      // een rustige tegel. Geen icoon of laadt het niet, dan de naam in de tegel.
       var th = t.querySelector('.thumb'), ic = x.app.icon;
       t.classList.add('icon');
-      th.innerHTML = '<i class="ab"></i>' + (ic ? '<img class="ai" alt="" src="' + esc(ic) + '">' : '') + '<b class="an">' + esc(x.svc.name) + '</b>';
+      th.innerHTML = ic ? '<img class="ai" alt="" src="' + esc(ic) + '">' : '<b class="an">' + esc(x.svc.name) + '</b>';
       var im = th.querySelector('.ai');
-      if (ic) th.querySelector('.ab').style.backgroundImage = "url('" + ic.replace(/'/g, '%27') + "')";   // eigen pad van het apparaat, niet via de server
-      if (im) im.onerror = function () { th.classList.add('noicon'); }; else th.classList.add('noicon');
+      if (im) im.onerror = function () { th.innerHTML = '<b class="an">' + esc(x.svc.name) + '</b>'; };
     }
     return t;
   }

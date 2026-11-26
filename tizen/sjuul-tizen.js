@@ -87,7 +87,7 @@
   }
   findHome(false);
 
-  var inputs = [];
+  // Taalnaam bij een spoor (zelfde lijst als de webversie, kort gehouden).\n  var LANGNAMES = { nl:'Nederlands', nld:'Nederlands', dut:'Nederlands', en:'Engels', eng:'Engels', de:'Duits', deu:'Duits', ger:'Duits', fr:'Frans', fra:'Frans', fre:'Frans', es:'Spaans', spa:'Spaans', it:'Italiaans', ita:'Italiaans' };\n  function langName(c) { c = String(c || '').toLowerCase(); return LANGNAMES[c] || (c && c !== 'und' ? c.toUpperCase() : ''); }\n\n  var inputs = [];
   function loadInputs() {
     return new Promise(function (done) {
       try { tizen.systeminfo.getPropertyValue('VIDEOSOURCE', function (v) { inputs = (v.connected || []).filter(function (s) { return s.type === 'HDMI'; }); done(); }, function () { done(); }); }
@@ -96,50 +96,86 @@
   }
 
   // ---------- Samsung-speler (AVPlay) onder de knoppen ----------
+  // ---------- Samsung-speler (AVPlay) onder de knoppen ----------
+  // Films en afleveringen: net als de webversie via HLS van tv-serverr (ffmpeg maakt er H.264/HEVC + AAC van,
+  // ondertitels lezen mee). Deze oude browser kan die HLS zelf niet afspelen (geen bruikbare MediaSource), dus
+  // AVPlay speelt de HLS van de server af. Live: rechtstreeks op de bron (sneller zappen).
+  function srvHls(path, body) {
+    return fetch(url() + path, { method: 'POST', headers: { 'X-Thuis-Key': key(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); });
+  }
+  function stopHls(id) { if (id) try { fetch(url() + '/api/hls/stop', { method: 'POST', headers: { 'X-Thuis-Key': key(), 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) }); } catch (e) {} }
   window.SpelerMotor = function (root, ev) {
     var av = webapis.avplay, obj = document.createElement('object'), paused = false;
     obj.type = 'application/avplayer'; obj.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%';
     root.insertBefore(obj, root.firstChild);
+    var base = 0, id = '', src = '', live = false, aud = [], ai = 0, loads = 0;
     function call(n) { if (ev[n]) ev[n](); }
     function shut() { try { av.stop(); } catch (e) {} try { av.close(); } catch (e) {} }
     function tracks() { try { return av.getTotalTrackInfo().filter(function (t) { return t.type === 'AUDIO'; }); } catch (e) { return []; } }
+    // Eén bron in AVPlay openen en starten. mine = volgnummer, zodat een oude aanroep niets meer doet na snel spoelen.
+    function open(mediaUrl, startAt, dur, mine, resolve, reject) {
+      if (mine !== loads) { resolve(dur || 0); return; }
+      try {
+        av.open(mediaUrl);
+        av.setDisplayRect(0, 0, 1920, 1080);
+        av.setListener({
+          onbufferingstart: function () { call('waiting'); }, onbufferingcomplete: function () { call('playing'); },
+          onstreamcompleted: function () { call('ended'); }, onerror: function () { call('error'); }
+        });
+        base = startAt || 0;
+        av.prepareAsync(function () {
+          if (mine !== loads) { shut(); resolve(dur || 0); return; }
+          av.play(); paused = false; call('playing');
+          resolve(dur || (live ? 0 : Math.round((av.getDuration() || 0) / 1000)));
+        }, function () { reject(new Error('Deze bron speelt niet af')); });
+      } catch (e) { reject(new Error('Deze bron speelt niet af')); }
+    }
     var m = {
       transparent: true,
-      load: function (src, from, live) {
+      load: function (s, from, isLive, audio) {
+        src = s; live = !!isLive; if (typeof audio === 'number') ai = audio;
+        var mine = ++loads; shut(); stopHls(id); id = '';
         return new Promise(function (resolve, reject) {
-          shut();
-          try {
-            av.open(url() + src);   // ondertekende link van tv-serverr; geen sleutels in de link
-            av.setDisplayRect(0, 0, 1920, 1080);
-            av.setListener({
-              onbufferingstart: function () { call('waiting'); }, onbufferingcomplete: function () { call('playing'); },
-              onstreamcompleted: function () { call('ended'); }, onerror: function () { call('error'); }
-            });
-            av.prepareAsync(function () {
-              var go = function () { av.play(); paused = false; call('playing'); resolve(live ? 0 : Math.round((av.getDuration() || 0) / 1000)); };
-              if (!live && from > 0) av.seekTo(from * 1000, go, go); else go();
-            }, function () { reject(new Error('Deze bron speelt niet af')); });
-          } catch (e) { reject(new Error('Deze bron speelt niet af')); }
+          if (live) { aud = []; open(url() + s, 0, 0, mine, resolve, reject); return; }
+          // Film of aflevering: eerst de HLS op de server starten (ondertekende /stream-link als bron), dan AVPlay.
+          srvHls('/api/hls/start', { src: s, from: Math.floor(from || 0), hevc: true, audio: ai }).then(function (r) {
+            if (mine !== loads) { resolve(r.dur || 0); return; }
+            id = r.id; aud = r.audio || []; if (r.audioIndex != null) ai = r.audioIndex;
+            open(url() + r.url, r.start || 0, r.dur || 0, mine, resolve, reject);
+          }, function (e) { if (mine === loads) reject(e); });
         });
       },
-      time: function () { try { return (av.getCurrentTime() || 0) / 1000; } catch (e) { return 0; } },
+      time: function () { try { return base + (av.getCurrentTime() || 0) / 1000; } catch (e) { return base; } },
       buffered: function () { return m.time(); },
-      seek: function (sec) { return new Promise(function (res) { try { av.seekTo(Math.round(sec * 1000), res, res); } catch (e) { res(); } }); },
+      // Live: gewoon AVPlay. Film: binnen wat er is meteen, anders laat de server opnieuw beginnen vanaf dat punt.
+      seek: function (sec) {
+        if (live) return new Promise(function (res) { try { av.seekTo(Math.round(sec * 1000), res, res); } catch (e) { res(); } });
+        var cur = m.time(), rel = sec - base;
+        if (rel < 0 || Math.abs(sec - cur) > 120) return m.load(src, sec, false, ai).then(function () {});
+        return new Promise(function (res) { try { av.seekTo(Math.round(rel * 1000), res, res); } catch (e) { res(); } });
+      },
       paused: function () { return paused; },
       play: function () { try { av.play(); } catch (e) {} paused = false; call('play'); },
       pause: function () { try { av.pause(); } catch (e) {} paused = true; call('pause'); },
-      stop: shut,
+      stop: function () { shut(); stopHls(id); id = ''; },
       audio: function () {
+        // Film: de sporen die de server doorgaf (daar wordt er één van gekozen). Live: de sporen in de AVPlay-stroom.
+        if (!live) return aud.map(function (t, i) { return { label: t.title || langName(t.lang) || ('Spoor ' + (i + 1)), lang: t.lang, codec: t.codec, on: i === ai }; });
         var now = -1; try { now = (av.getCurrentStreamInfo().filter(function (t) { return t.type === 'AUDIO'; })[0] || {}).index; } catch (e) {}
         return tracks().map(function (t, i) {
           var x = {}; try { x = JSON.parse(t.extra_info); } catch (e) {}
-          return { label: (x.language || 'Spoor ' + (i + 1)) + (x.channels ? ' · ' + x.channels + ' kanalen' : ''), on: t.index === now };
+          return { label: (x.language || 'Spoor ' + (i + 1)) + (x.channels ? ' \u00b7 ' + x.channels + ' kanalen' : ''), on: t.index === now };
         });
       },
-      setAudio: function (i) { var t = tracks()[i]; if (t) try { av.setSelectTrack('AUDIO', t.index); } catch (e) {} }
+      // Film: een ander geluidsspoor laat de server opnieuw omzetten. Live: in de stroom zelf wisselen.
+      setAudio: function (i) {
+        if (!live) { ai = i; return m.load(src, m.time(), false, i); }
+        var t = tracks()[i]; if (t) try { av.setSelectTrack('AUDIO', t.index); } catch (e) {}
+      }
     };
     return m;
-  };
+  }
 
   // ---------- afstandsbediening ----------
   // Testversie: alle knoppen vragen die Samsung toestaat. Een knop waar Sjuul TV niets mee doet, toont kort zijn naam,

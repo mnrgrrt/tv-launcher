@@ -744,7 +744,7 @@
   // ---------- openen en sluiten ----------
   function open(isLive) {
     if (!el) build();
-    E = (isLive && NATIVE) || WEB;
+    E = NATIVE || WEB;   // Samsung: AVPlay voor film en live; web: browserMotor (HLS via hls.js)
     clearInterval(tickT); tickT = setInterval(tick, 250);
     el.hidden = false; el.className = 'sp ' + (isLive ? 'is-live' : 'is-vod') + (E.transparent ? ' native' : '') + (window.SpelerMotor ? '' : ' sp-touch');
     document.documentElement.classList.add('sp-open'); if (E.transparent) document.documentElement.classList.add('sp-native');
