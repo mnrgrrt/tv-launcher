@@ -1063,9 +1063,9 @@
   };
 
   // ---------- zoeken ----------
-  // Zoeken: links typen of inspreken, rechts één lijst met filters (Alles, Nu live, Straks, Terugkijken, Zenders, Films en series).
   // Zoeken: links typen of inspreken, met daaronder onderwerpen en wat je eerder zocht. Rechts één lijst met filters.
-  var FILTERS = [['alles', 'Alles'], ['live', 'Nu live'], ['later', 'Straks'], ['past', 'Terugkijken'], ['channels', 'Zenders'], ['titles', 'Films en series'], ['youtube', 'YouTube']];
+  // YouTube live en straks staan gewoon tussen de resultaten. Gewone YouTube-video's alleen onder hun eigen filter.
+  var FILTERS = [['alles', 'Alles'], ['live', 'Nu live'], ['later', 'Straks'], ['past', 'Terugkijken'], ['channels', 'Zenders'], ['titles', 'Films en series'], ['youtube', 'YouTube live'], ['ytvideos', "YouTube video's"]];
   var TOPICS = ['wielrennen', 'voetbal', 'formule 1', 'darts', 'tennis'];
   // a.only = 'movie' of 'series': alleen zoeken in je eigen films of series (vanuit Films of Series).
   screens.search = function (a) {
@@ -1121,7 +1121,7 @@
       pills.innerHTML = ''; inner.innerHTML = ''; inner.dataset.y = 0; inner.style.transform = '';
       var r = st.r; if (!r) return;
       var g = r.guide || {}, yt = r.youtube || {};
-      var lists = { live: g.live || [], later: g.later || [], past: g.past || [], channels: g.channels || [], titles: r.titles || [], youtube: (yt.live || []).concat(yt.upcoming || []) };
+      var lists = { live: g.live || [], later: g.later || [], past: g.past || [], channels: g.channels || [], titles: r.titles || [], youtube: (yt.live || []).concat(yt.upcoming || []), ytvideos: yt.videos || [] };
       if (only) {   // alleen titels van deze soort, als raster
         var mine = lists.titles.filter(function (t) { return t.kind === only; });
         if (!mine.length) { inner.innerHTML = '<div class="empty" style="padding:0">Geen ' + (only === 'movie' ? 'films' : 'series') + ' gevonden voor "' + esc(st.q.trim()) + '"</div>'; return; }
@@ -1129,20 +1129,22 @@
         mine.forEach(function (t) { var e = titleTile(t, t.kind), ok = e._ok; e._ok = function () { remember(); ok(); }; grd.appendChild(e); });
         inner.appendChild(grd); return;
       }
-      var n = function (k) { return k === 'alles' ? Object.keys(lists).reduce(function (t, x) { return t + lists[x].length; }, 0) : lists[k].length; };
+      // Alles telt de gewone YouTube-video's niet mee: die staan er ook niet tussen.
+      var n = function (k) { return k === 'alles' ? Object.keys(lists).reduce(function (t, x) { return x === 'ytvideos' ? t : t + lists[x].length; }, 0) : lists[k].length; };
       FILTERS.forEach(function (f) {
         // Nu live staat er altijd, ook met 0: dan weet je dat er nu niets is.
         if (f[0] !== 'alles' && f[0] !== 'live' && !n(f[0])) return;
         pills.appendChild(F(h('button', { class: 'pill' + (st.filter === f[0] ? ' on' : '') }, esc(f[1]) + ' (' + n(f[0]) + ')'), function () { st.filter = f[0]; draw(); focus(pills.querySelector('.on')); }, { group: 'filters' }));
       });
-      if (!n('alles')) { inner.innerHTML = '<div class="empty" style="padding:0">Niets gevonden voor "' + esc(st.q.trim()) + '"</div>'; return; }
+      if (yt.error) inner.appendChild(h('div', { class: 'empty', style: 'padding:0 0 14px' }, 'YouTube reageert nu niet. Kijk bij de status op de beheerpagina.'));
+      if (!n('alles') && !lists.ytvideos.length) { inner.appendChild(h('div', { class: 'empty', style: 'padding:0' }, 'Niets gevonden voor "' + esc(st.q.trim()) + '"')); return; }
       var all = st.filter === 'alles', box = h('div', { class: 'hits' });
       if (st.filter === 'live' && !lists.live.length) inner.appendChild(h('div', { class: 'empty', style: 'padding:0 0 14px' }, 'Nu is er niets live met "' + esc(st.q.trim()) + '".' + (lists.later[0] ? ' Eerstvolgende:' : '')));
-      [['channels', 3], ['live', 6], ['later', 5], ['past', 5], ['youtube', 4]].forEach(function (k) {
+      [['channels', 3], ['live', 6], ['later', 5], ['past', 5], ['youtube', 4], ['ytvideos', 0]].forEach(function (k) {
         var list = lists[k[0]];
         if (st.filter === 'live' && k[0] === 'later' && !lists.live.length) list = list.slice(0, 1);
         else if (!all && st.filter !== k[0]) return;
-        list.slice(0, all ? k[1] : 200).forEach(function (x) { box.appendChild(k[0] === 'youtube' ? ytRow(x) : hitRow(x, k[0])); });
+        list.slice(0, all ? k[1] : 200).forEach(function (x) { box.appendChild(k[0] === 'youtube' || k[0] === 'ytvideos' ? ytRow(x) : hitRow(x, k[0])); });
       });
       if (box.children.length) inner.appendChild(box);
       if (lists.titles.length && (all || st.filter === 'titles')) {
@@ -1151,11 +1153,16 @@
         else { var gr = h('div', { class: 'grid', style: 'padding:4px 0' }); tiles.forEach(function (t) { gr.appendChild(t); }); inner.appendChild(gr); }
       }
     }
+    // Lengte als 1:02:03 of 4:05.
+    function dur(s) { var hh = Math.floor(s / 3600), mm = Math.floor(s % 3600 / 60), ss = s % 60; return (hh ? hh + ':' + (mm < 10 ? '0' : '') : '') + mm + ':' + (ss < 10 ? '0' : '') + ss; }
+    // Hoe lang geleden geplaatst.
+    function ago(t) { var d = Math.floor((Date.now() - t) / 864e5); return d < 1 ? 'vandaag' : d < 2 ? 'gisteren' : d < 31 ? d + ' dagen geleden' : d < 365 ? Math.floor(d / 30) + ' mnd geleden' : Math.floor(d / 365) + ' jaar geleden'; }
     function ytRow(x) {
-      var live = !x.start;
-      var b = h('button', { class: 'hit' }, '<span class="st yt">' + (live ? '● LIVE' : esc(dayName(x.start).length > 9 ? new Date(x.start).toLocaleDateString('nl-NL', { weekday: 'short' }) : dayName(x.start).toLowerCase()) + ' ' + clock(x.start)) + '</span>' +
+      var video = 'published' in x, live = !video && !x.start;
+      var label = video ? '▶ ' + (x.duration ? dur(x.duration) : 'video') : live ? '● LIVE' : esc(dayName(x.start).length > 9 ? new Date(x.start).toLocaleDateString('nl-NL', { weekday: 'short' }) : dayName(x.start).toLowerCase()) + ' ' + clock(x.start);
+      var b = h('button', { class: 'hit' }, '<span class="st yt">' + label + '</span>' +
         '<span class="ti">' + esc(x.title) + '</span><span class="ch"><i style="' + bg(x.thumb) + ';background-size:cover"></i>' + esc(x.channel) + '</span>' +
-        '<span class="tm">YouTube' + (live && x.viewers ? ' · ' + x.viewers.toLocaleString('nl-NL') + ' kijkers' : '') + '</span><span class="pb leeg"></span>');
+        '<span class="tm">YouTube' + (live && x.viewers ? ' · ' + x.viewers.toLocaleString('nl-NL') + ' kijkers' : video && x.published ? ' · ' + ago(x.published) : '') + '</span><span class="pb leeg"></span>');
       return F(b, function () { remember(); if (N) N.openUrl('https://www.youtube.com/watch?v=' + x.id); else toast('YouTube openen kan alleen op de tv'); });
     }
     function hitRow(x, kind) {
