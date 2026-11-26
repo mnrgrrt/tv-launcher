@@ -250,6 +250,15 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 .view-groot .g-info h2 { font-size: 38px; -webkit-line-clamp: 1; }
 .view-groot .g-info .desc { -webkit-line-clamp: 1; }
 .view-groot .guide { top: 340px; bottom: 40px; }
+.view-groot .g-row { height: 48px; }   /* 15% lager: nog een zender erbij, letters blijven even groot */
+.view-groot .g-ch img { height: 26px; }
+/* Logo's en app-tegels terug naar hun gewone grootte (--klein = 1 gedeeld door de vergroting). */
+.view-groot .app-tile { width: calc(220px * var(--klein)); }
+.view-groot .app-tile.icon .ai { max-width: calc(150px * var(--klein)); }
+.view-groot .app-tile.merk .ml { max-width: calc(104px * var(--klein)); }
+.view-groot .app-tile.hdmi .thumb::before { width: calc(64px * var(--klein)); height: calc(64px * var(--klein)); }
+.view-groot .hero .logo { max-width: calc(520px * var(--klein)); max-height: calc(170px * var(--klein)); }
+.view-groot .ilogo { max-width: calc(440px * var(--klein)); max-height: calc(130px * var(--klein)); }
 
 /* Toetsenbord */
 .kb { display: grid; grid-template-columns: repeat(6, 56px); gap: 8px; }

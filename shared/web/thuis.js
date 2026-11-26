@@ -22,6 +22,8 @@
     de.style.width = b.style.width = W + 'px'; de.style.height = b.style.height = H + 'px';
     b.classList.toggle('view-compact', f > 1);
     b.classList.toggle('view-groot', f < 1);
+    // Bij Groter blijven logo's en app-tegels even groot als bij Normaal: alleen de tekst moet groter.
+    b.style.setProperty('--klein', f < 1 ? String(f) : '1');
     // Alleen in een gewone browser (geen tv) nog verkleinen als het venster kleiner is.
     var w = window.innerWidth || W, hh = window.innerHeight || H;
     SCALE = N ? 1 : Math.min(1, w / W, hh / H); b.style.transformOrigin = '0 0'; b.style.transform = SCALE === 1 ? '' : 'scale(' + SCALE + ')';
@@ -740,7 +742,7 @@
       head.appendChild(times); guide.appendChild(head);
       var clip = h('div', { class: 'g-clip' }), body = h('div', { class: 'g-body' }); clip.appendChild(body); guide.appendChild(clip);
       // De gekozen zender blijft net onder het midden staan; de lijst schuift eronder door.
-      var ROWH = 62;
+      var ROWH = document.body.classList.contains('view-groot') ? 54 : 62;   // moet gelijk zijn aan .g-row (hoogte + marge)
       var scrollTo = function (i) { var vis = Math.max(3, Math.floor(clip.clientHeight / ROWH)), top = Math.max(0, Math.min(i - Math.floor(vis / 2), chans.length - vis)); body.style.transform = 'translateY(' + (-top * ROWH) + 'px)'; };
       var chans = cat.channels.slice(0, 120);
       get('/api/live/guide?ids=' + chans.map(function (c) { return c.id; }).join(',') + '&from=' + from + '&to=' + to).then(function (g) {
