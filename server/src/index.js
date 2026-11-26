@@ -168,7 +168,7 @@ function srcOf(src) {
 }
 on('POST', '/api/hls/start', 'device', async ({ b, dev }) => {
   const t = srcOf(b.src);
-  const s = await hls.start({ url: t.url, headers: t.headers, live: t.live, from: +b.from || 0, dev: dev.id, low: !!b.low, audio: +b.audio || 0, hevc: b.hevc === true });
+  const s = await hls.start({ url: t.url, headers: t.headers, live: t.live, from: +b.from || 0, dev: dev.id, low: !!b.low, audio: +b.audio || 0, hevc: b.hevc === true, ts: b.ts === true });
   return { url: `/hls/${s.id}/index.m3u8`, id: s.id, start: s.start, dur: s.dur, audio: s.audio, audioIndex: s.audioIndex, kf: s.kf, rondes: s.rondes };
 });
 // Sporen van een film of aflevering, en een tekstondertitel uit het bestand zelf.
@@ -344,10 +344,11 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname.startsWith('/hls/')) {
       const [, , id, name] = u.pathname.split('/'), x = hls.file(id, name);
       if (!x) return send(res, 404, { error: 'Onbekend' });
-      if (!name.endsWith('.m3u8')) { res.writeHead(200, { 'Content-Type': 'video/mp4', 'Cache-Control': 'max-age=3600' }); return fs.createReadStream(x.f).pipe(res); }
+      if (!name.endsWith('.m3u8')) { res.writeHead(200, { 'Content-Type': name.endsWith('.ts') ? 'video/mp2t' : 'video/mp4', 'Cache-Control': 'max-age=3600' }); return fs.createReadStream(x.f).pipe(res); }
       // Film of aflevering: de lijst groeit nog tijdens het omzetten; zeg de speler dat hij vooraan moet beginnen, niet bij het nieuwste stuk.
+      // Bij TS (Samsung) die tag weglaten: oude AVPlay-parser; een EVENT-lijst begint daar vanzelf vooraan.
       const list = x.list ?? fs.readFileSync(x.f, 'utf8');
-      return send(res, 200, x.live ? list : list.replace('#EXTM3U\n', '#EXTM3U\n#EXT-X-START:TIME-OFFSET=0,PRECISE=YES\n'), 'application/vnd.apple.mpegurl');
+      return send(res, 200, (x.live || x.ts) ? list : list.replace('#EXTM3U\n', '#EXTM3U\n#EXT-X-START:TIME-OFFSET=0,PRECISE=YES\n'), 'application/vnd.apple.mpegurl');
     }
     if (u.pathname.startsWith('/photo/')) {
       const f = profiles.photoPath(u.pathname.slice(7));

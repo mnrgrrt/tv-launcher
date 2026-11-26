@@ -104,7 +104,7 @@ export function subText(url, headers, i) {
 
 /** Start omzetten. live: lopende zender (korte lijst die doorschuift); anders film of aflevering vanaf `from` seconden.
  *  audio: welk geluidsspoor (0 = eerste). */
-export async function start({ url, headers, live, from = 0, dev, low, audio = 0, hevc = false }) {
+export async function start({ url, headers, live, from = 0, dev, low, audio = 0, hevc = false, ts = false }) {
   let killed = false;
   for (const [id, s] of sessions) if (s.dev === dev) { kill(id); killed = true; }   // per apparaat één tegelijk
   if (sessions.size >= MAX) kill([...sessions.entries()].sort((a, b) => a[1].seen - b[1].seen)[0][0]);
@@ -117,7 +117,8 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   const isFile = !live && /matroska|mov|mp4/.test((info.format || {}).format_name || '');
   // HEVC alleen kopiëren als de browser het zelf kan afspelen (iPad wel, Chrome zonder grafische kaart niet), en alleen uit een
   // filmbestand: uit een tv-stream mist ffmpeg dan de beeldinstellingen (PPS) en komt er niets uit. Dan omzetten naar H.264.
-  const copyV = !low && v && (v.codec_name === 'h264' || (v.codec_name === 'hevc' && hevc && isFile));
+  // Samsung (ts): geen HEVC kopiëren; die oude tv speelt HEVC-in-TS niet zeker af, dus naar H.264 omzetten (of H.264 kopiëren).
+  const copyV = !low && v && (v.codec_name === 'h264' || (!ts && v.codec_name === 'hevc' && hevc && isFile));
 
   // Film of aflevering halverwege: het gekopieerde beeld kan alleen bij een sleutelbeeld beginnen. Daar beginnen we dan ook,
   // zodat de tijd in de speler (en de ondertitels) klopt. Lukt het opzoeken niet (bij IPTV soms), dan ook het geluid bij het
@@ -149,17 +150,19 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
     // Geluid altijd opnieuw naar AAC: bij kopiëren uit een tv-stream mist soms het precieze AAC-type in het init-bestand
     // (mp4a.40 in plaats van mp4a.40.2), en dan weigert Chrome het hele stuk. Opnieuw coderen kost bijna niets.
     '-c:a', 'aac', '-b:a', low ? '128k' : '192k', '-ac', '2',
-    '-f', 'hls', '-hls_time', live ? '4' : '6', '-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', pre(k) + 'init.mp4',
-    // Geen edit list: browsers negeren die, en dan loopt het geluid voor op het beeld. Zo staat de echte begintijd in de stukjes.
-    '-hls_segment_options', 'use_editlist=0',
+    '-f', 'hls', '-hls_time', live ? '4' : '6',
+    // Samsung (ts): gewone MPEG-TS stukjes, want deze oude Frame speelt geen fMP4-HLS af. Anders fMP4 (voor de browser).
+    // Geen edit list bij fMP4: browsers negeren die, en dan loopt het geluid voor op het beeld. Zo staat de echte begintijd in de stukjes.
+    ...(ts ? ['-hls_segment_type', 'mpegts']
+           : ['-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', pre(k) + 'init.mp4', '-hls_segment_options', 'use_editlist=0']),
     // Live: de laatste 30 minuten bewaren (450 stukjes van 4 s), zodat pauzeren en even terug kan zonder de aanbieder.
     ...(live ? ['-hls_list_size', '450', '-hls_flags', 'delete_segments+independent_segments'] : ['-hls_playlist_type', 'event', '-hls_flags', 'independent_segments']),
-    '-hls_segment_filename', path.join(dir, pre(k) + 's%05d.m4s'), path.join(dir, live ? 'index.m3u8' : pre(k) + '.m3u8'),
+    '-hls_segment_filename', path.join(dir, pre(k) + (ts ? 's%05d.ts' : 's%05d.m4s')), path.join(dir, live ? 'index.m3u8' : pre(k) + '.m3u8'),
     // De ondertitels als losse srt-bestanden per ronde (tijden vanaf het begin van die ronde). flush_packets: meteen wegschrijven,
     // anders blijven ze tot het eind in een buffer en ziet de speler niets. avoid_negative_ts uit: anders schuift een zin die net
     // voor het startpunt begon alle tijden op.
     ...subIdx.flatMap(i => ['-map', '0:s:' + i, '-c:s', 'srt', '-flush_packets', '1', '-avoid_negative_ts', 'disabled', '-f', 'srt', path.join(dir, `${pre(k)}sub${i}.srt`)])];
-  const s = { dir, dev, seen: Date.now(), live: !!live, err: '', final: false, rounds: 0, log: [], url, subIdx, at: [] };
+  const s = { dir, dev, seen: Date.now(), live: !!live, ts: !!ts, err: '', final: false, rounds: 0, log: [], url, subIdx, at: [] };
   sessions.set(id, s);
   const run = (k, at, loose) => {
     s.at[k] = +at || 0;
@@ -222,17 +225,19 @@ function segments(s) {
   const out = [];
   for (let k = 0; k <= s.rounds; k++) {
     const lines = read(path.join(s.dir, 'r' + k + '.m3u8')).split('\n');
-    for (let i = 0; i < lines.length; i++) if (lines[i].startsWith('#EXTINF:') && /\.m4s$/.test(lines[i + 1] || '')) out.push({ k, len: +lines[i].slice(8).split(',')[0], uri: lines[i + 1].trim() });
+    for (let i = 0; i < lines.length; i++) if (lines[i].startsWith('#EXTINF:') && /\.(m4s|ts)$/.test(lines[i + 1] || '')) out.push({ k, len: +lines[i].slice(8).split(',')[0], uri: lines[i + 1].trim() });
   }
   return out;
 }
 /** Eén lijst voor de speler. Na een nieuwe ronde: DISCONTINUITY (de tijden beginnen daar opnieuw) en het init-bestand van die ronde. */
 function playlist(s) {
   const segs = segments(s), td = Math.max(6, ...segs.map(x => Math.ceil(x.len)));
-  const out = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-TARGETDURATION:' + td, '#EXT-X-MEDIA-SEQUENCE:0', '#EXT-X-PLAYLIST-TYPE:EVENT', '#EXT-X-INDEPENDENT-SEGMENTS'];
+  // TS (Samsung): versie 3, geen init-bestand, geen nieuwere tags (oude AVPlay-parser). fMP4 (browser): versie 7 met een EXT-X-MAP per ronde.
+  const out = ['#EXTM3U', '#EXT-X-VERSION:' + (s.ts ? 3 : 7), '#EXT-X-TARGETDURATION:' + td, '#EXT-X-MEDIA-SEQUENCE:0', '#EXT-X-PLAYLIST-TYPE:EVENT'];
+  if (!s.ts) out.push('#EXT-X-INDEPENDENT-SEGMENTS');
   let k = -1;
   for (const x of segs) {
-    if (x.k !== k) { if (k >= 0) out.push('#EXT-X-DISCONTINUITY'); out.push(`#EXT-X-MAP:URI="r${x.k}init.mp4"`); k = x.k; }
+    if (x.k !== k) { if (k >= 0) out.push('#EXT-X-DISCONTINUITY'); if (!s.ts) out.push(`#EXT-X-MAP:URI="r${x.k}init.mp4"`); k = x.k; }
     out.push('#EXTINF:' + x.len.toFixed(6) + ',', x.uri);
   }
   if (s.final) out.push('#EXT-X-ENDLIST');
@@ -244,9 +249,9 @@ export const stop = (id, dev) => { const s = sessions.get(id); if (s && s.dev ==
 /** Bestand van een sessie; het lange willekeurige nummer is de sleutel en vervalt zodra er niet meer gekeken wordt. */
 export function file(id, name) {
   const s = sessions.get(id);
-  if (!s || !/^(index\.m3u8|(r\d+)?init\.mp4|(r\d+)?s\d{5}\.m4s)$/.test(name)) return null;
+  if (!s || !/^(index\.m3u8|(r\d+)?init\.mp4|(r\d+)?s\d{5}\.(m4s|ts))$/.test(name)) return null;
   s.seen = Date.now();
-  if (name === 'index.m3u8' && !s.live) return { list: playlist(s), live: false };
+  if (name === 'index.m3u8' && !s.live) return { list: playlist(s), live: false, ts: s.ts };
   const f = path.join(s.dir, name);
   return fs.existsSync(f) ? { f, live: s.live } : null;
 }
