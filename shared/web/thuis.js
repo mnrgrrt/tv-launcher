@@ -314,20 +314,39 @@
     items.forEach(function (it) { bt.appendChild(F(h('button', { class: 'btn' }, esc(it[0])), function () { closeOverlay(); it[1](); })); });
     d.appendChild(bt); openOverlay(d);
   }
+  // Merklogo's voor de app-tegels (zoals CleanFrame e.d. doen): een wit logo of de naam op een gekleurde tegel.
+  // Alleen gebruikt als het apparaat geen eigen brede banner geeft (de JBL heeft die wel, de Samsung niet).
+  // Logovormen (netflix, youtube, ziggo, odido) uit de open set Simple Icons (CC0); de rest een nette naamtegel.
+  var MERK = {
+    netflix: { c: '#E50914', p: 'm5.398 0 8.348 23.602c2.346.059 4.856.398 4.856.398L10.113 0H5.398zm8.489 0v9.172l4.715 13.33V0h-4.715zM5.398 1.5V24c1.873-.225 2.81-.312 4.715-.398V14.83L5.398 1.5z' },
+    youtube: { c: '#FF0000', p: 'M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z' },
+    ziggo: { c: '#F48C00', p: 'M18.555 18.69a3 3 0 0 0-2.52-2.865h-6.3l7.26-6.945a2.145 2.145 0 0 0 .495-2.34 2.1 2.1 0 0 0-2.205-1.23h-9a2.79 2.79 0 0 0 2.19 2.895h5.175L6 15.375a2.01 2.01 0 0 0-.42 2.13 1.965 1.965 0 0 0 2.115 1.185zM2.85 18.6a2.535 2.535 0 0 0 2.55 2.535h13.2a2.536 2.537 0 0 0 2.55-2.535V7.92A2.865 2.865 0 0 1 24 5.31V18.6a5.385 5.385 0 0 1-5.4 5.4H5.4A5.385 5.385 0 0 1 0 18.6V5.4A5.385 5.385 0 0 1 5.4 0h13.2a5.595 5.595 0 0 1 2.07.405A5.235 5.235 0 0 1 22.635 1.8a1.5 1.5 0 0 1 .42 1.005 1.41 1.41 0 0 1-.42 1.02 1.5 1.5 0 0 1-2.025 0A2.685 2.685 0 0 0 19.59 3a2.43 2.43 0 0 0-.99-.195H5.4A2.505 2.505 0 0 0 2.865 5.4z' },
+    odido: { c: '#2C72FF', p: 'M20.923 15.077a3.077 3.077 0 1 0 0-6.154 3.077 3.077 0 0 0 0 6.154m-17.846 0a3.077 3.077 0 1 0 0-6.154 3.077 3.077 0 0 0 0 6.154m3.692 0a3.077 3.077 0 0 0 0-6.154zm10.462 0a3.077 3.077 0 0 1 0-6.154zm-3.693-6.154h-3.077v6.154h3.077z' },
+    prime: { c: '#1399FF' },
+    videoland: { c: '#E6007E' },
+    skyshowtime: { c: '#1B1340' },
+    npo: { c: '#E4610F' },
+    withlove: { c: '#E6336A' }
+  };
+
   function appTile(x, onfocus) {
     var t = wide({ title: x.svc.name, ok: function () { openService(x); }, focus: onfocus });
     t.classList.add('app-tile');
-    if (x.app.input) t.classList.add('hdmi');
-    else if (x.app.banner) t.querySelector('.thumb').style.backgroundImage = "url('" + x.app.banner + "')";
-    else {
-      // Alleen een vierkant icoon (Samsung geeft geen brede banner zoals Android TV): icoon netjes in het midden op
-      // een rustige tegel. Geen icoon of laadt het niet, dan de naam in de tegel.
-      var th = t.querySelector('.thumb'), ic = x.app.icon;
-      t.classList.add('icon');
-      th.innerHTML = ic ? '<img class="ai" alt="" src="' + esc(ic) + '">' : '<b class="an">' + esc(x.svc.name) + '</b>';
-      var im = th.querySelector('.ai');
-      if (im) im.onerror = function () { th.innerHTML = '<b class="an">' + esc(x.svc.name) + '</b>'; };
+    var th = t.querySelector('.thumb');
+    if (x.app.input) { t.classList.add('hdmi'); return t; }
+    if (x.app.banner) { th.style.backgroundImage = "url('" + x.app.banner + "')"; return t; }   // JBL: de eigen brede banner
+    var m = MERK[x.svc.key];
+    if (m) {   // merklogo of naam op een gekleurde tegel (als het apparaat geen banner geeft, zoals de Samsung)
+      t.classList.add('merk'); th.style.background = m.c;
+      th.innerHTML = m.p ? '<svg class="ml" viewBox="0 0 24 24" fill="#fff"><path d="' + m.p + '"/></svg>' : '<b class="mt">' + esc(x.svc.name) + '</b>';
+      return t;
     }
+    // Geen banner en geen merklogo: het eigen icoon netjes in het midden, anders de naam.
+    var ic = x.app.icon;
+    t.classList.add('icon');
+    th.innerHTML = ic ? '<img class="ai" alt="" src="' + esc(ic) + '">' : '<b class="an">' + esc(x.svc.name) + '</b>';
+    var im = th.querySelector('.ai');
+    if (im) im.onerror = function () { th.innerHTML = '<b class="an">' + esc(x.svc.name) + '</b>'; };
     return t;
   }
   // Titellogo alleen als het echt een los logo is. Heeft het plaatje een eigen (witte) achtergrond, dan blijft de titel in tekst staan.
