@@ -9,10 +9,10 @@
   var $app = document.getElementById('app');
   // Alles is ontworpen op 1920x1080; op een tv met een ander aantal css-pixels schalen we het geheel.
   // Weergave per apparaat: compact tekent op een groter vlak (meer tegels), ruim op een kleiner vlak (alles groter).
-  // Bij ruim kies je zelf hoeveel groter: 110 t/m 150%, in stappen van 10. Die stap staat op het apparaat zelf;
+  // Bij ruim kies je zelf hoeveel groter: 105 t/m 125%, in stappen van 5. Die stap staat op het apparaat zelf;
   // de server kent alleen normaal, compact en ruim.
   var SCALE = 1, W = 1920, H = 1080, VIEWS = { normaal: 1, compact: 1.15 };
-  function groter() { var g = 110; try { g = parseInt(localStorage.getItem('thuis-groter'), 10) || 110; } catch (e) {} return Math.min(150, Math.max(110, g)); }
+  function groter() { var g = 110; try { g = parseInt(localStorage.getItem('thuis-groter'), 10) || 110; } catch (e) {} return Math.min(125, Math.max(105, g)); }
   function fit() {
     var v = (S && S.view) || 'normaal', f = v === 'ruim' ? 100 / groter() : (VIEWS[v] || 1); W = Math.round(1920 * f); H = Math.round(1080 * f);
     // De WebView schaalt zelf: de pagina zegt hoe breed hij is (viewport) en Android past dat op het scherm.
@@ -1485,7 +1485,7 @@
     function row(title, sub, ok) { main.appendChild(F(h('button', { class: 'listrow' }, '<span style="display:flex;flex-direction:column;gap:4px;text-align:left"><b>' + esc(title) + '</b>' + (sub ? '<span class="dim" style="font-size:18px">' + esc(sub) + '</span>' : '') + '</span><span>›</span>'), ok)); }
     if (tab === 'device') {
       main.appendChild(h('h2', { style: 'font-size:36px;margin-bottom:10px' }, 'Dit apparaat'));
-      var VIEWN = [['normaal', 'Normaal'], ['compact', 'Compact: meer op het scherm'], ['110', 'Groter: 110%'], ['120', 'Groter: 120%'], ['130', 'Groter: 130%'], ['140', 'Groter: 140%'], ['150', 'Groter: 150%']];
+      var VIEWN = [['normaal', 'Normaal'], ['compact', 'Compact: meer op het scherm'], ['105', 'Groter: 105%'], ['110', 'Groter: 110%'], ['115', 'Groter: 115%'], ['120', 'Groter: 120%'], ['125', 'Groter: 125%']];
       var nu = S.view === 'ruim' ? String(groter()) : S.view;
       row('Weergave', labelOf(VIEWN, nu), function () {
         var next = nextOf(VIEWN, nu), view = /^\d+$/.test(next) ? 'ruim' : next;
