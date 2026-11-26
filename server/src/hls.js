@@ -117,8 +117,9 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
   const isFile = !live && /matroska|mov|mp4/.test((info.format || {}).format_name || '');
   // HEVC alleen kopiëren als de browser het zelf kan afspelen (iPad wel, Chrome zonder grafische kaart niet), en alleen uit een
   // filmbestand: uit een tv-stream mist ffmpeg dan de beeldinstellingen (PPS) en komt er niets uit. Dan omzetten naar H.264.
-  // Samsung (ts): geen HEVC kopiëren; die oude tv speelt HEVC-in-TS niet zeker af, dus naar H.264 omzetten (of H.264 kopiëren).
-  const copyV = !low && v && (v.codec_name === 'h264' || (!ts && v.codec_name === 'hevc' && hevc && isFile));
+  // HEVC uit een filmbestand kopiëren als de speler het aankan: de browser alleen met een grafische kaart (hevc-vlag),
+  // de Samsung (ts) altijd (de Frame speelt HEVC zelf af, net als bij live). Scheelt zwaar omzetten van 4K naar H.264.
+  const copyV = !low && v && (v.codec_name === 'h264' || (v.codec_name === 'hevc' && isFile && (hevc || ts)));
 
   // Film of aflevering halverwege: het gekopieerde beeld kan alleen bij een sleutelbeeld beginnen. Daar beginnen we dan ook,
   // zodat de tijd in de speler (en de ondertitels) klopt. Lukt het opzoeken niet (bij IPTV soms), dan ook het geluid bij het
@@ -144,7 +145,7 @@ export async function start({ url, headers, live, from = 0, dev, low, audio = 0,
     // Niet bij tv-streams (terugkijken): daar rekent de rem met rare tijdstempels en staat alles bijna stil.
     ...(isFile ? ['-readrate', '4', '-readrate_initial_burst', '30'] : []), ...hdrArgs(headers), '-i', url,
     '-map', '0:v:0?', '-map', '0:a:' + ai + '?',
-    ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' ? ['-tag:v', 'hvc1'] : [])]
+    ...(copyV ? ['-c:v', 'copy', ...(v.codec_name === 'hevc' && !ts ? ['-tag:v', 'hvc1'] : [])]
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-g', '50', '-pix_fmt', 'yuv420p',   // 8-bit: 10-bit H.264 speelt in geen enkele browser
          ...(low ? ['-vf', 'scale=-2:min(720\\,ih)', '-b:v', '1800k', '-maxrate', '2000k', '-bufsize', '4000k'] : ['-vf', 'scale=-2:min(1080\\,ih)', '-crf', '21'])]),
     // Geluid altijd opnieuw naar AAC: bij kopiëren uit een tv-stream mist soms het precieze AAC-type in het init-bestand
