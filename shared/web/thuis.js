@@ -349,6 +349,15 @@
     if (im) im.onerror = function () { th.innerHTML = '<b class="an">' + esc(x.svc.name) + '</b>'; };
     return t;
   }
+  // Tegel terug naar het Samsung-startscherm (tv-instellingen, Art Mode, bronnen). Alleen op de Samsung.
+  function samsungHomeTile(onfocus) {
+    var t = wide({ title: 'Samsung tv', ok: function () { if (!(N && N.samsungHome && N.samsungHome())) toast('Het Samsung-startscherm openen lukt niet'); }, focus: onfocus });
+    t.classList.add('app-tile', 'merk');
+    var th = t.querySelector('.thumb'); th.style.background = '#1b1b1f';
+    th.innerHTML = '<b class="mt">Samsung</b>';
+    return t;
+  }
+
   // Titellogo alleen als het echt een los logo is. Heeft het plaatje een eigen (witte) achtergrond, dan blijft de titel in tekst staan.
   function logoFor(url, use) {
     var u = img(url), k = 'logo:' + u;
@@ -645,7 +654,9 @@
     // Bovenaan de apps waar je meteen naartoe wilt: tv (Ziggo of Odido) en WithLove eerst, dan de andere diensten.
     installedServices().then(function (l) {
       l = sortServices(l.filter(function (x) { return x.svc.key !== 'plex'; }));
-      if (l.length) slots.svc.appendChild(rowSection('Kijken', l.map(function (x) { return appTile(x, showPhoto); })));
+      var tiles = l.map(function (x) { return appTile(x, showPhoto); });
+      if (N && N.samsungHome) tiles.push(samsungHomeTile(showPhoto));   // laatste tegel: terug naar Samsung
+      if (tiles.length) slots.svc.appendChild(rowSection('Kijken', tiles));
       fold([slots.svc, slots.foryou]);
     });
     return el;
