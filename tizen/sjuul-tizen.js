@@ -117,8 +117,10 @@
     var av = webapis.avplay, obj = document.createElement('object'), paused = false;
     obj.type = 'application/avplayer'; obj.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%';
     root.insertBefore(obj, root.firstChild);
-    var base = 0, id = '', src = '', live = false, aud = [], ai = 0, loads = 0;
+    var base = 0, id = '', src = '', live = false, aud = [], ai = 0, loads = 0, lastErr = '';
     function call(n) { if (ev[n]) ev[n](); }
+    // Korte tekst bij een AVPlay-fout, zodat op het scherm staat waarom het niet lukt (voor foutzoeken).
+    function emsg(e) { try { if (!e) return ''; if (typeof e === 'string') return e; return (e.name || '') + (e.message ? ': ' + e.message : '') || JSON.stringify(e); } catch (x) { return ''; } }
     function shut() { try { av.stop(); } catch (e) {} try { av.close(); } catch (e) {} }
     function tracks() { try { return av.getTotalTrackInfo().filter(function (t) { return t.type === 'AUDIO'; }); } catch (e) { return []; } }
     // Eén bron in AVPlay openen en starten. mine = volgnummer, zodat een oude aanroep niets meer doet na snel spoelen.
@@ -129,15 +131,15 @@
         av.setDisplayRect(0, 0, 1920, 1080);
         av.setListener({
           onbufferingstart: function () { call('waiting'); }, onbufferingcomplete: function () { call('playing'); },
-          onstreamcompleted: function () { call('ended'); }, onerror: function () { call('error'); }
+          onstreamcompleted: function () { call('ended'); }, onerror: function (e) { lastErr = emsg(e); call('error'); }
         });
         base = startAt || 0;
         av.prepareAsync(function () {
           if (mine !== loads) { shut(); resolve(dur || 0); return; }
           av.play(); paused = false; call('playing');
           resolve(dur || (live ? 0 : Math.round((av.getDuration() || 0) / 1000)));
-        }, function () { reject(new Error('Deze bron speelt niet af')); });
-      } catch (e) { reject(new Error('Deze bron speelt niet af')); }
+        }, function (e) { reject(new Error('Deze bron speelt niet af' + (emsg(e) ? ' [' + emsg(e) + ']' : ''))); });
+      } catch (e) { reject(new Error('Deze bron speelt niet af' + (emsg(e) ? ' [' + emsg(e) + ']' : ''))); }
     }
     var m = {
       transparent: true,
