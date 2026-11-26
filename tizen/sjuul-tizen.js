@@ -203,12 +203,21 @@
     }
     if (!KNOWN[e.keyCode] && names[e.keyCode] && window.Kern) window.Kern.ui.toast('Knop: ' + names[e.keyCode] + ' (' + e.keyCode + ')', 5000);
   }, true);
-  // Home: Samsung houdt die knop voor zichzelf. Kom je daarna terug in Sjuul TV, dan sta je op Home van Sjuul TV,
+  // Home: Samsung houdt die knop voor zichzelf. Kom je daarna terug in Sjuul TV, dan sta je weer op Home van Sjuul TV,
   // net als na Home op de andere tv. Wat speelde stopt.
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { if (window.Speler && window.Speler.isOpen()) window.Speler.close(); return; }
-    if (window.__home) window.__home();
-  });
+  // Samsung houdt de pagina in leven als je de app verlaat. Bij terugkomen sta je anders nog op het laatste scherm
+  // (bv. Films). Daarom op elk teken van "weer op de voorgrond" terug naar Home. We vangen meerdere signalen op,
+  // want op de ene tv komt visibilitychange, op de andere pageshow of de app-control bij opnieuw openen.
+  function naarVoorgrond() { if (window.__home) window.__home(); }
+  function naarAchtergrond() { if (window.Speler && window.Speler.isOpen()) window.Speler.close(); }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) naarAchtergrond(); else naarVoorgrond(); });
+  window.addEventListener('pageshow', naarVoorgrond);
+  try { window.addEventListener('appcontrol', naarVoorgrond); } catch (e) {}
+  // Tizen: sommige toestellen melden terugkomen via de application-service.
+  try {
+    var apr = tizen.application.getCurrentApplication();
+    if (apr && apr.addEventListener) apr.addEventListener('resume', naarVoorgrond);
+  } catch (e) {}
 
   // ---------- oude browser van Tizen 6 (Chromium 76) ----------
   // De schermen gebruiken `gap` in flex-rijen en `aspect-ratio` op tegels. Die kent deze browser nog niet:
