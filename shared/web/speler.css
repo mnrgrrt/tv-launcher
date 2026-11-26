@@ -11,7 +11,9 @@ html.sp-open, html.sp-open body { overflow: hidden; }
 .sp.native, html.sp-native, html.sp-native body { background: transparent !important; }
 .sp.native video { display: none; }   /* Samsung live: AVPlay tekent onder de pagina, de (lege) video mag er niet overheen */
 /* Ook kinderen die zelf visibility: visible hebben (zoals de fanart achter de hero), anders blijft dat over het beeld staan. */
-html.sp-native #app > :not(.overlay), html.sp-native #app > :not(.overlay) *, html.sp-native #tabs { visibility: hidden !important; }
+/* Samsung: AVPlay tekent onder de doorzichtige pagina, dus al het Thuis-scherm moet weg, ook losse overlays
+   (anders blijft bijvoorbeeld een Verder-kijken-kaart over de film hangen). De speler zelf staat los in document.body. */
+html.sp-native #app, html.sp-native #tabs { visibility: hidden !important; }
 /* Keuzevensters van de tv boven de speler. */
 html.sp-open .overlay { position: fixed; z-index: 40; }
 
@@ -21,7 +23,8 @@ html.sp-open .overlay { position: fixed; z-index: 40; }
 .sp.is-live .sp-msg { font-size: calc(28 * var(--dp)); font-weight: 700; padding: calc(16 * var(--dp)) calc(28 * var(--dp)); border-radius: calc(14 * var(--dp)); background: rgba(0,0,0,.7); }
 
 /* ---------- ondertitels: zelf getekend; grootte, dikte, achtergrond en hoogte zoals SubStyle ---------- */
-.sp-sub { position: absolute; left: 6%; right: 6%; bottom: var(--sub-place, 8%); text-align: center; font-size: max(16px, var(--sub-size, 4.7vh)); font-weight: var(--sub-weight, 500); line-height: 1.3; pointer-events: none; color: #fff; }
+/* Grootte in --dp (schaalt mee met de tv), niet in vh: op de Samsung viel vh onder de minimumgrens en bleef alles even klein. */
+.sp-sub { position: absolute; left: 6%; right: 6%; bottom: var(--sub-place, 8%); text-align: center; font-size: var(--sub-size, calc(26 * var(--dp))); font-weight: var(--sub-weight, 500); line-height: 1.3; pointer-events: none; color: #fff; }
 .sp-sub span { padding: 0 .25em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .sp-sub.bg0 span { text-shadow: 0 0 .12em #000, 0 .06em .18em #000, 0 0 .3em rgba(0,0,0,.8); }
 .sp-sub.bg1 span { text-shadow: -.05em -.05em 0 #000, .05em -.05em 0 #000, -.05em .05em 0 #000, .05em .05em 0 #000, 0 0 .2em #000; }

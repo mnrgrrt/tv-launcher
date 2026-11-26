@@ -352,14 +352,15 @@
   }
   function syncStop() { cur.sync = null; msgOff(); msg('Gelijkzetten gestopt'); }
   // Weergave: zelfde keuzes als SubStyle op Android, per apparaat bewaard.
-  var STYLE = { size: [['Klein', 4.0], ['Normaal', 4.7], ['Groot', 5.6], ['Extra groot', 6.8]], weight: [['Normaal', 400], ['Medium', 500], ['Vet', 700]],
+  // Grootte in --dp (zie speler.css): zo schaalt de ondertitel mee met de tv en klopt elke stand echt.
+  var STYLE = { size: [['Klein', 22], ['Normaal', 26], ['Groot', 31], ['Extra groot', 38]], weight: [['Normaal', 400], ['Medium', 500], ['Vet', 700]],
     bg: [['Schaduw'], ['Rand'], ['Zwarte balk'], ['Geel']], place: [['Laag', 4], ['Normaal', 8], ['Hoger', 15]] };
   var STYLENAME = { size: 'Grootte', weight: 'Dikte', bg: 'Achtergrond', place: 'Hoogte' };
   function style() { var s = { size: 2, weight: 1, bg: 0, place: 1 }; try { var o = JSON.parse(localStorage.getItem('sjuul-ondertitels') || '{}'); for (var k in s) if (o[k] >= 0 && o[k] < STYLE[k].length) s[k] = o[k]; } catch (e) {} return s; }
   function styleSummary() { var s = style(); return [STYLE.size[s.size][0], STYLE.weight[s.weight][0], STYLE.bg[s.bg][0]].join(' · '); }
   function applyStyle() {
     var s = style(), st = el.querySelector('.sp-sub');
-    st.style.setProperty('--sub-size', STYLE.size[s.size][1] + 'vh'); st.style.setProperty('--sub-weight', STYLE.weight[s.weight][1]);
+    st.style.setProperty('--sub-size', 'calc(' + STYLE.size[s.size][1] + ' * var(--dp))'); st.style.setProperty('--sub-weight', STYLE.weight[s.weight][1]);
     st.style.setProperty('--sub-place', STYLE.place[s.place][1] + '%'); st.className = 'sp-sub bg' + s.bg;
   }
   function styleMenu(sel) {
