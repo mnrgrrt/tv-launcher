@@ -244,6 +244,12 @@ h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -.02em; fon
 /* Weergave per apparaat: compact = meer op het scherm, tekst iets minder kleiner dan de tegels */
 .view-compact .t1 { font-size: 22px; } .view-compact .t2 { font-size: 18px; }
 .view-compact .section h2 { font-size: 32px; } .view-compact .hit { font-size: 21px; }
+/* Groter (105 t/m 125%): het scherm is minder hoog, dus in de tv-gids het blok erboven kleiner,
+   zodat er meer zenders onder elkaar passen. Titel en beschrijving dan op één regel. */
+.view-groot .g-info { top: 186px; height: 140px; gap: 4px; }
+.view-groot .g-info h2 { font-size: 38px; -webkit-line-clamp: 1; }
+.view-groot .g-info .desc { -webkit-line-clamp: 1; }
+.view-groot .guide { top: 340px; bottom: 40px; }
 
 /* Toetsenbord */
 .kb { display: grid; grid-template-columns: repeat(6, 56px); gap: 8px; }

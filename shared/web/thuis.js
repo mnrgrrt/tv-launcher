@@ -21,6 +21,7 @@
     var de = document.documentElement, b = document.body;
     de.style.width = b.style.width = W + 'px'; de.style.height = b.style.height = H + 'px';
     b.classList.toggle('view-compact', f > 1);
+    b.classList.toggle('view-groot', f < 1);
     // Alleen in een gewone browser (geen tv) nog verkleinen als het venster kleiner is.
     var w = window.innerWidth || W, hh = window.innerHeight || H;
     SCALE = N ? 1 : Math.min(1, w / W, hh / H); b.style.transformOrigin = '0 0'; b.style.transform = SCALE === 1 ? '' : 'scale(' + SCALE + ')';
