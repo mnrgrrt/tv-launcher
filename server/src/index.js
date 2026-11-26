@@ -230,10 +230,11 @@ on('GET', '/api/vod/:kind/url/:id', 'device', ({ p, q }) => ({ url: auth.sign(`/
 
 on('GET', '/api/plex/play/:key', 'device', ({ p }) => plex.playItem(+p.key));
 
-// Zoeken: de gids (zenders, nu, straks, terug), je eigen films en series (Plex en IPTV) en YouTube live.
+// Zoeken: de gids (zenders, nu, straks, terug), je eigen films en series (Plex en IPTV) en YouTube (live, straks en video's).
+// Lukt YouTube niet (sleutel, dagquota), dan komt error mee zodat de tv dat kan melden.
 on('GET', '/api/search', 'device', async ({ q }) => {
   const s = (q.get('q') || '').trim(); if (s.length < 2) return {};
-  const [own, guide, yt] = await Promise.all([catalog.search(s).catch(() => []), epg.searchGuide(s).catch(() => ({})), youtube.search(s).catch(() => ({ live: [], upcoming: [] }))]);
+  const [own, guide, yt] = await Promise.all([catalog.search(s).catch(() => []), epg.searchGuide(s).catch(() => ({})), youtube.search(s).catch(() => ({ live: [], upcoming: [], videos: [], error: true }))]);
   return { guide, titles: own.map(o => withSources(o.kind)(o)), youtube: yt };
 });
 // Laatst gezocht (per profiel)
