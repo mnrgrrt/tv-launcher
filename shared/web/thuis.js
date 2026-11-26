@@ -1208,7 +1208,7 @@
       side.appendChild(F(h('button', { class: 'listrow' + (t[0] === tab ? ' on' : '') }, esc(t[1])), function () {
         if (t[0] === 'switch') return whoDialog();
         a.tab = t[0]; go('profile', a, true);
-      }, { group: 'side' }));
+      }, { group: 'side', move: function (dir) { if (dir !== 'right') return; var f = main.querySelector('.f'); if (f) { focus(f); return true; } } }));
     });
     el.appendChild(side);
     var main = h('div', { class: 'main vscroll' }); el.appendChild(main);
@@ -1436,7 +1436,8 @@
     var el = h('div', { class: 'screen' }), tab = a.tab || 'device';
     var side = h('div', { class: 'side' }, '<h1 style="font-size:44px;margin-bottom:24px">Instellingen</h1>');
     [['device', 'Dit apparaat'], ['profile', 'Profiel op dit apparaat'], ['conn', 'Verbinding'], ['about', 'Over Sjuul TV']].forEach(function (t) {
-      side.appendChild(F(h('button', { class: 'listrow' + (t[0] === tab ? ' on' : '') }, esc(t[1])), function () { a.tab = t[0]; go('settings', a, true); }, { group: 'side' }));
+      side.appendChild(F(h('button', { class: 'listrow' + (t[0] === tab ? ' on' : '') }, esc(t[1])), function () { a.tab = t[0]; go('settings', a, true); },
+        { group: 'side', move: function (dir) { if (dir !== 'right') return; var f = main.querySelector('.f'); if (f) { focus(f); return true; } } }));
     });
     el.appendChild(side);
     var main = h('div', { class: 'main vscroll' }); el.appendChild(main);
