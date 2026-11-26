@@ -149,7 +149,7 @@
         return new Promise(function (resolve, reject) {
           if (live) { aud = []; open(url() + s, 0, 0, mine, resolve, reject); return; }
           // Film of aflevering: eerst de HLS op de server starten (ondertekende /stream-link als bron), dan AVPlay.
-          srvHls('/api/hls/start', { src: s, from: Math.floor(from || 0), hevc: true, audio: ai }).then(function (r) {
+          srvHls('/api/hls/start', { src: s, from: Math.floor(from || 0), ts: true, audio: ai }).then(function (r) {
             if (mine !== loads) { resolve(r.dur || 0); return; }
             id = r.id; aud = r.audio || []; if (r.audioIndex != null) ai = r.audioIndex;
             open(url() + r.url, r.start || 0, r.dur || 0, mine, resolve, reject);
