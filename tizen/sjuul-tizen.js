@@ -190,9 +190,10 @@
   // ---------- afstandsbediening ----------
   // Testversie: alle knoppen vragen die Samsung toestaat. Een knop waar Sjuul TV niets mee doet, toont kort zijn naam,
   // zodat we kunnen zien of bijvoorbeeld de knop rechtsboven bruikbaar is als Home.
-  var names = {};
+  // Volume en geluid uit niet: een geclaimde knop komt niet meer bij de tv, dan werkt het volume niet.
+  var names = {}, TV_HOUDT = ['VolumeUp', 'VolumeDown', 'VolumeMute'];
   try {
-    var ks = tizen.tvinputdevice.getSupportedKeys();
+    var ks = tizen.tvinputdevice.getSupportedKeys().filter(function (k) { return TV_HOUDT.indexOf(k.name) < 0; });
     ks.forEach(function (k) { names[k.code] = k.name; });
     tizen.tvinputdevice.registerKeyBatch(ks.map(function (k) { return k.name; }));
   } catch (e) {}
