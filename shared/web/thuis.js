@@ -94,7 +94,9 @@
     if (best) focus(best);
     else if (dir === 'left' && !overlay && S.profile && current && ['pair', 'who'].indexOf(current.name) < 0) openSidebar();   // links tegen de rand: zijbalk
   }
-  var okDown = 0, longFired = false;
+  // Lang indrukken van OK: een eigen klok vanaf het eerste indrukken. Niet afgaan op herhaalde toetssignalen:
+  // de Samsung stuurt die niet (of zonder `repeat`), dan gebeurde er pas iets bij loslaten.
+  var okTimer = null, okHeld = false, longFired = false;
   // Sommige tv's geven geen e.key mee maar alleen een code (23 = OK op Android).
   var CODES = { 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown', 13: 'Enter', 23: 'Enter', 66: 'Enter', 160: 'Enter', 27: 'Escape', 8: 'Backspace', 4: 'GoBack', 461: 'GoBack' };
   function keyOf(e) { return (e.key && e.key !== 'Unidentified' && e.key !== 'Process') ? e.key : (CODES[e.keyCode] || ''); }
@@ -103,8 +105,10 @@
     if (k === 'ArrowRight' || k === 'ArrowLeft' || k === 'ArrowUp' || k === 'ArrowDown') { e.preventDefault(); move(k.slice(5).toLowerCase()); return; }
     if (k === 'Enter') {
       e.preventDefault();
-      if (!e.repeat) { okDown = Date.now(); longFired = false; return; }
-      if (!longFired && Date.now() - okDown > 600 && cur && cur._long) { longFired = true; cur._long(); }
+      if (okHeld) return;   // nog steeds ingedrukt
+      okHeld = true; longFired = false;
+      var el = cur; clearTimeout(okTimer);
+      okTimer = setTimeout(function () { okTimer = null; if (okHeld && el && el === cur && el._long) { longFired = true; el._long(); } }, 600);
       return;
     }
     if (k === 'Escape' || k === 'Backspace' || k === 'GoBack') { if (!(e.target && e.target.tagName === 'INPUT')) { e.preventDefault(); back(); } }
@@ -112,9 +116,13 @@
   document.addEventListener('keyup', function (e) {
     if (keyOf(e) !== 'Enter') return;
     e.preventDefault();
+    clearTimeout(okTimer); okTimer = null; okHeld = false;
     if (!longFired && cur && cur._ok) cur._ok();
     longFired = false;
   });
+  // Loslaten gemist (app even weg terwijl OK ingedrukt was): niet blijven hangen op "ingedrukt".
+  function okReset() { clearTimeout(okTimer); okTimer = null; okHeld = false; longFired = false; }
+  window.addEventListener('blur', okReset); document.addEventListener('visibilitychange', okReset);
   document.addEventListener('click', function (e) { var f = e.target.closest('.f'); if (f) { focus(f); if (f._ok) f._ok(); } });
   window.__back = back;
   // Terug in Thuis. Na aan/uit eerst kiezen wie er kijkt (behalve op een vastgezet apparaat).
