@@ -87,15 +87,23 @@
   }
   findHome(false);
 
-  // Taalnaam bij een spoor (zelfde lijst als de webversie, kort gehouden).\n  var LANGNAMES = { nl:'Nederlands', nld:'Nederlands', dut:'Nederlands', en:'Engels', eng:'Engels', de:'Duits', deu:'Duits', ger:'Duits', fr:'Frans', fra:'Frans', fre:'Frans', es:'Spaans', spa:'Spaans', it:'Italiaans', ita:'Italiaans' };\n  function langName(c) { c = String(c || '').toLowerCase(); return LANGNAMES[c] || (c && c !== 'und' ? c.toUpperCase() : ''); }\n\n  var inputs = [];
+  // Taalnaam bij een spoor (zelfde lijst als de webversie, kort gehouden).
+  var LANGNAMES = { nl:'Nederlands', nld:'Nederlands', dut:'Nederlands', en:'Engels', eng:'Engels', de:'Duits', deu:'Duits', ger:'Duits', fr:'Frans', fra:'Frans', fre:'Frans', es:'Spaans', spa:'Spaans', it:'Italiaans', ita:'Italiaans' };
+  function langName(c) { c = String(c || '').toLowerCase(); return LANGNAMES[c] || (c && c !== 'und' ? c.toUpperCase() : ''); }
+
+  var inputs = [];
   function loadInputs() {
     return new Promise(function (done) {
-      try { tizen.systeminfo.getPropertyValue('VIDEOSOURCE', function (v) { inputs = (v.connected || []).filter(function (s) { return s.type === 'HDMI'; }); done(); }, function () { done(); }); }
-      catch (e) { done(); }
+      // Wat er ook misgaat bij het uitlezen van de HDMI-bronnen: altijd done(), anders blijft het opstarten hangen.
+      try {
+        tizen.systeminfo.getPropertyValue('VIDEOSOURCE', function (v) {
+          try { inputs = (v.connected || []).filter(function (s) { return s.type === 'HDMI'; }); } catch (e) {}
+          done();
+        }, function () { done(); });
+      } catch (e) { done(); }
     });
   }
 
-  // ---------- Samsung-speler (AVPlay) onder de knoppen ----------
   // ---------- Samsung-speler (AVPlay) onder de knoppen ----------
   // Films en afleveringen: net als de webversie via HLS van tv-serverr (ffmpeg maakt er H.264/HEVC + AAC van,
   // ondertitels lezen mee). Deze oude browser kan die HLS zelf niet afspelen (geen bruikbare MediaSource), dus
