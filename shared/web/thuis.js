@@ -245,9 +245,11 @@
       if (!pick.querySelector(':scope > .more')) pick.appendChild(h('div', { class: 'more' }, '<svg viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l9 8 9-8"/></svg>'));
     }, 0);
   }
-  function rowSection(title, items, sub) {
+  // quiet: deze rij mag bij de start niet zelf de focus pakken (voor bijrijen zoals films op Home,
+  // zodat de apps-rij "Kijken" de focus krijgt en niet een film die eerder is ingeladen).
+  function rowSection(title, items, sub, quiet) {
     if (!items.length) return document.createTextNode('');
-    setTimeout(contentReady, 0);
+    if (!quiet) setTimeout(contentReady, 0);
     var sec = h('div', { class: 'section' }, title ? '<h2>' + esc(title) + (sub ? ' <small>· ' + esc(sub) + '</small>' : '') + '</h2>' : '');
     var clip = h('div', { class: 'row-clip' }), row = h('div', { class: 'row' });
     items.forEach(function (it) { row.appendChild(it); });
@@ -640,16 +642,16 @@
       var tile = function (o) {
         return titleTile(o, o.kind, function () { if (o.tmdb) showArt(artOf(o, o.kind)); });
       };
-      if (d.now.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', d.now.map(tile)));
+      if (d.now.length) slots.foryou.appendChild(rowSection('Nieuw voor jou', d.now.map(tile), null, true));
       fold([slots.svc, slots.foryou]);
       hb.setSlides([photoSlide].concat(d.now.filter(function (o) { return o.tmdb; }).slice(0, 5).map(function (o) { return slideOf(o, o.kind); })));
-      if (d.later.length) slots.later.appendChild(rowSection('Populair, niet bij jou', d.later.map(tile)));
+      if (d.later.length) slots.later.appendChild(rowSection('Populair, niet bij jou', d.later.map(tile), null, true));
     }).catch(function (e) { slots.foryou.innerHTML = '<div class="empty">Sjuul TV kan tv-serverr nu niet bereiken. ' + esc(e.message) + '</div>'; });
     // Favoriet genre van dit profiel (Mijn profiel › Voorkeuren): de beste titels die je kunt kijken.
     var fav = (me().prefs || {}).favGenre;
     if (fav) get('/api/catalog/movie/browse?' + q + '&genre=' + encodeURIComponent(fav) + '&sort=beste').then(function (r) {
       var l = r.items.slice(0, 30);
-      if (l.length) slots.fav.appendChild(rowSection(fav + ' voor jou', l.map(function (o) { return titleTile(o, 'movie'); })));
+      if (l.length) slots.fav.appendChild(rowSection(fav + ' voor jou', l.map(function (o) { return titleTile(o, 'movie'); }), null, true));
     }).catch(function () {});
     // Bovenaan de apps waar je meteen naartoe wilt: tv (Ziggo of Odido) en WithLove eerst, dan de andere diensten.
     installedServices().then(function (l) {
