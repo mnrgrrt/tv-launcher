@@ -83,7 +83,12 @@ on('POST', '/api/admin/code', 'admin', ({ me }) => { auth.audit(me.name, 'koppel
 on('DELETE', '/api/admin/devices/:id', 'admin', ({ p, me }) => { auth.unpair(p.id); auth.audit(me.name, 'tv ontkoppeld #' + p.id); return { ok: true }; });
 on('POST', '/api/admin/devices/:id', 'admin', ({ p, b, me }) => { auth.setDevice(p.id, b); auth.audit(me.name, 'apparaat aangepast #' + p.id); return auth.devices(); });
 on('POST', '/api/admin/profiles/:id/move', 'admin', ({ p, b }) => { profiles.move(p.id, +b.dir); return profiles.list(); });
-on('POST', '/api/admin/profiles/:id/plex', 'admin', ({ p, b, me }) => { profiles.setPlexDeck(p.id, !!b.on); auth.audit(me.name, `Verder kijken van Plex ${b.on ? 'aan' : 'uit'} voor profiel #${p.id}`); return profiles.list(); });
+// Plex-profielen (Plex Home) om aan een Sjuul TV-profiel te koppelen. 'hoofd' = het hoofdaccount van de server.
+on('GET', '/api/admin/plex/users', 'admin', async () => (await plex.homeUsers()).map(u => ({ value: u.admin ? 'hoofd' : u.id, name: u.name, pin: u.pin, admin: u.admin })));
+on('POST', '/api/admin/profiles/:id/plex', 'admin', async ({ p, b, me }) => {
+  const name = await profiles.linkPlex(p.id, b.user, b.pin);
+  auth.audit(me.name, `Plex-profiel van profiel #${p.id}: ${name || 'geen'}`); return profiles.list();
+});
 on('POST', '/api/admin/profiles/:id/admin', 'admin', ({ p, b, me }) => { profiles.setAdmin(p.id, !!b.admin); auth.audit(me.name, `"mag alles" ${b.admin ? 'aan' : 'uit'} voor profiel #${p.id}`); return profiles.list(); });
 on('POST', '/api/admin/profiles/:id/avatar', 'admin', ({ p, b }) => { profiles.setAvatar(p.id, b.avatar); return profiles.list(); });
 on('POST', '/api/admin/profiles/:id/photo', 'admin', ({ p, b, me }) => { profiles.savePhoto(p.id, b.data); auth.audit(me.name, 'foto geüpload voor profiel #' + p.id); return profiles.list(); });
@@ -228,7 +233,7 @@ on('GET', '/api/catalog/:kind/browse', 'device', async ({ p, q }) => {
 });
 on('GET', '/api/vod/:kind/url/:id', 'device', ({ p, q }) => ({ url: auth.sign(`/stream/${kindOf(p.kind)}/${+p.id}.${safeExt(q.get('ext'))}`) }));
 
-on('GET', '/api/plex/play/:key', 'device', ({ p }) => plex.playItem(+p.key));
+on('GET', '/api/plex/play/:key', 'device', ({ p, q }) => plex.playItem(+p.key, profiles.plexToken(+q.get('profile') || 1)));
 
 // Zoeken: de gids (zenders, nu, straks, terug), je eigen films en series (Plex en IPTV) en YouTube (live, straks en video's).
 // Lukt YouTube niet (sleutel, dagquota), dan komt error mee zodat de tv dat kan melden.

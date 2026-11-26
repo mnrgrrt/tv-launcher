@@ -13,6 +13,7 @@ Dit bestand geldt voor elke sessie in dit project. Lees het eerst, houd je eraan
 - **Testen in de browser**: `Speler.stand()` (positie, lengte, ondertitel) en `Speler.spoel(sec)`.
 - **Eén speler** (`shared/web/speler.js` + `speler.css`): knoppen, zappen, spoelen en kijkstand voor alle apparaten. Per apparaat alleen de motor eronder: browser (HLS via `/api/hls/start`, ffmpeg op de server, ook voor films op de Samsung), AVPlay (live op de Samsung-testapp) en straks ExoPlayer (Android), via `window.SpelerMotor`. Daarna gaan de Kotlin-spelers eruit.
 - **tv-serverr**: de server (`server/`, Node 22, SQLite, geen npm-pakketten). Draait als Docker-container in docker-media (LXC 107, Proxmox-node dell), poort 8484, beheer op `/beheer`.
+- **Plex-profielen**: elk Sjuul TV-profiel kan een eigen Plex-profiel (Plex Home) hebben, te kiezen op de beheerpagina (pincode typt Gerry zelf). Verder kijken van Plex, kijkstand terug naar Plex, gezien en weghalen gaan met het token van dat Plex-profiel (`profiles.plexToken`). Bladeren door de bibliotheek blijft met het hoofdtoken. Geen Plex-profiel gekozen: niets naar Plex. Samen zonder keuze: hoofdaccount.
 - Tv's praten alleen met tv-serverr. Alle sleutels en wachtwoorden (Dispatcharr, Plex, TMDB, OpenSubtitles, Radarr, Sonarr, Home Assistant) staan alleen op de server.
 
 ## Kwaliteit: geen ding op ding

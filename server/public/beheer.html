@@ -102,7 +102,13 @@ async function upd(){const u=await api('GET','/api/admin/update');$('upd').textC
 $('updgo').onclick=err('updmsg',async()=>{await api('POST','/api/admin/update');$('updmsg').textContent='Aangevraagd. Over een minuut deze pagina verversen.';upd()});
 $('out').onclick=async()=>{await api('POST','/api/logout');show('login')};
 
+// Plex-profiel per profiel: verder kijken, kijkstand en gezien komen dan uit dat Plex-profiel.
+function plexSel(p){const cur=p.plex_user||'',none=p.id===1?'Plex: hoofdaccount (standaard)':'Geen Plex-profiel';
+ const opts=(PLEX||[]).map(u=>`<option value="${esc(u.value)}" ${u.value===cur?'selected':''}>Plex: ${esc(u.name)}${u.admin?' (hoofdaccount)':''}${u.pin?' 🔒':''}</option>`);
+ if(cur&&!(PLEX||[]).some(u=>u.value===cur))opts.push(`<option value="${esc(cur)}" selected>Plex: ${esc(p.plex_name||'?')}</option>`);
+ return `<select data-plexsel="${p.id}" style="margin-left:10px" title="Plex-profiel: verder kijken en gezien komen dan uit dat profiel in Plex"><option value="">${none}</option>${opts.join('')}</select>`}
 async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/settings');show('app');
+ if(PLEX===null)PLEX=await api('GET','/api/admin/plex/users').catch(()=>[]);
  $('status').innerHTML=Object.entries(d.status.sources).map(([k,v])=>`<div class="row"><div><span class="dot ${v.ok?'ok':'bad'}"></span>${esc(NAMES[k]||k)}</div><div class="dim">${v.ok?'bereikbaar':esc(v.error)}</div></div>`).join('');
  PROF=d.profiles;
  $('devices').innerHTML=d.devices.map(x=>`<div class="row"><div>${esc(x.name)}<div class="dim">laatst ${when(x.last_seen)} · ${esc(x.last_ip)}</div></div><div class="acts">
@@ -110,7 +116,7 @@ async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/se
   <label style="margin:0;display:flex;align-items:center;gap:4px"><input type="checkbox" data-dev="${x.id}" data-f="locked" ${x.locked?'checked':''} ${x.profile?'':'disabled'}> Vast</label>
   <button class="ghost" data-unpair="${x.id}">Ontkoppelen</button></div></div>`).join('')||'<div class="dim">Nog geen apparaten.</div>';
  drawPhotos();
- $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div class="pl"><img class="av" src="${esc(p.avatarUrl)}" alt="" data-pick="${p.id}">${esc(p.name)} <label class="dim" style="margin-left:10px;display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-admin="${p.id}" ${p.admin?'checked':''}> mag alles</label>${p.id>1?`<label class="dim" style="margin-left:10px;display:inline-flex;gap:6px;align-items:center" title="Toont wat het Plex-account van de server aan het kijken is"><input type="checkbox" data-plexdeck="${p.id}" ${p.plex_user==='1'?'checked':''}> Plex verder kijken</label>`:''}</div><div class="acts">
+ $('profiles').innerHTML=d.profiles.map(p=>`<div class="row"><div class="pl"><img class="av" src="${esc(p.avatarUrl)}" alt="" data-pick="${p.id}">${esc(p.name)} <label class="dim" style="margin-left:10px;display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-admin="${p.id}" ${p.admin?'checked':''}> mag alles</label>${plexSel(p)}</div><div class="acts">
   ${p.id>1?`<button class="ghost" data-move="${p.id}" data-dir="-1" aria-label="Omhoog">↑</button><button class="ghost" data-move="${p.id}" data-dir="1" aria-label="Omlaag">↓</button>`:''}
   <button class="ghost" data-pick="${p.id}">Avatar kiezen</button><button class="ghost" data-upload="${p.id}">Eigen foto</button><button class="ghost" data-hist="${p.id}" title="Kijkactiviteit van Netflix (csv), voor de smaak van dit profiel">Kijkgeschiedenis${p.history?' ('+p.history+')':''}</button>${p.id>1?`<button class="ghost" data-delprofile="${p.id}">Verwijderen</button>`:''}</div></div>`).join('');
  $('settings').innerHTML=Object.keys(F).map(k=>`<div><label>${F[k]}</label><input data-k="${k}" ${SECRET.includes(k)?'type="password" autocomplete="off" placeholder="'+(d.settings[k]?'••••':'')+'"':'value="'+esc(d.settings[k])+'"'}></div>`).join('');
@@ -118,9 +124,11 @@ async function load(){upd().catch(()=>{});const d=await api('GET','/api/admin/se
  $('users').innerHTML=d.users.map(u=>`<div class="row"><div>${esc(u.name)}<div class="dim">laatst ingelogd ${when(u.last_login)}</div></div><button class="ghost" data-deluser="${u.id}">Verwijderen</button></div>`).join('');
  $('log').innerHTML=d.log.map(l=>`<div class="row"><div>${esc(l.what)}</div><div class="dim">${esc(l.who)} · ${when(l.at)}</div></div>`).join('')||'<div class="dim">Nog niets.</div>'}
 
-let PROF=[],AV=null,PICK=0;
+let PROF=[],AV=null,PICK=0,PLEX=null;
 document.addEventListener('change',async e=>{const t=e.target.dataset;
- if(t.plexdeck){try{await api('POST','/api/admin/profiles/'+t.plexdeck+'/plex',{on:e.target.checked});load()}catch(x){alert(x.message)}return}
+ if(t.plexsel){const v=e.target.value,u=(PLEX||[]).find(x=>x.value===v);let pin='';
+  if(u&&u.pin){pin=prompt('Pincode van het Plex-profiel '+u.name+' (4 cijfers)');if(pin===null){load();return}pin=pin.trim()}
+  try{await api('POST','/api/admin/profiles/'+t.plexsel+'/plex',{user:v,pin});load()}catch(x){alert(x.message);load()}return}
  if(t.admin){try{await api('POST','/api/admin/profiles/'+t.admin+'/admin',{admin:e.target.checked});load()}catch(x){alert(x.message)}return}
  if(!t.dev)return;const v=e.target.type==='checkbox'?e.target.checked:e.target.value;
  try{await api('POST','/api/admin/devices/'+t.dev,{[t.f]:t.f==='profile'?+v:v});load()}catch(x){alert(x.message)}});

@@ -84,7 +84,7 @@
   }
   function playPlex(key, meta) {
     var k = 'plex:' + key;
-    return ui.askWho(k).then(function () { return get('/api/plex/play/' + key); }).then(function (it) {
+    return ui.askWho(k).then(function () { return get('/api/plex/play/' + key + '?profile=' + S.profile); }).then(function (it) {
       return position(k, it.tmdb, it.season, it.episode).then(function (p) {
         if (p.fresh) it.offsetMs = 0; else if (p.pos > 0) it.offsetMs = p.pos;
         it.resumeVia = p.via;

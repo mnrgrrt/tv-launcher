@@ -1,5 +1,5 @@
 // Profielen, kijkstand per profiel, Mijn lijst en favoriete zenders.
-import { db } from './db.js';
+import { db, S } from './db.js';
 import * as plex from './plex.js';
 import * as vod from './vod.js';
 import fs from 'node:fs';
@@ -20,6 +20,10 @@ const ident = p => ({ tmdb: Math.max(0, parseInt(p.tmdb ?? p.meta?.tmdb) || 0), 
 const srcName = key => (String(key).startsWith('plex:') ? 'Plex' : 'IPTV');
 // Terugkijken loopt via de live-speler en heeft geen kijkstand meer.
 db.prepare("DELETE FROM progress WHERE key LIKE 'catchup:%'").run();
+// Plex-profiel per Sjuul TV-profiel. plex_user: '' = geen, 'hoofd' = hoofdaccount van de server, anders het id in Plex Home.
+// Het token staat alleen in de database van de server en gaat nooit mee in een lijst.
+for (const c of ['plex_name', 'plex_token']) try { db.exec(`ALTER TABLE profiles ADD COLUMN ${c} TEXT DEFAULT ''`); } catch {}
+db.prepare("UPDATE profiles SET plex_user = 'hoofd', plex_name = 'Hoofdaccount' WHERE plex_user = '1'").run();   // oude schakelaar "Plex verder kijken"
 const PHOTOS = path.join(process.env.THUIS_DATA || '/data', 'photos');
 fs.mkdirSync(PHOTOS, { recursive: true });
 const photoFile = id => fs.readdirSync(PHOTOS).find(f => f.startsWith(`p${+id}.`));
@@ -41,7 +45,7 @@ export function savePhoto(id, b64) {
   db.prepare("UPDATE profiles SET avatar = 'photo' WHERE id = ?").run(+id);
 }
 
-export const list = () => db.prepare(`SELECT id, name, color, admin, plex_user, prefs, avatar,
+export const list = () => db.prepare(`SELECT id, name, color, admin, plex_user, plex_name, prefs, avatar,
     (SELECT COUNT(*) FROM history h WHERE h.profile = profiles.id) history FROM profiles ORDER BY sort, id`).all()
   .map(p => ({ ...p, admin: !!p.admin, prefs: JSON.parse(p.prefs || '{}'), avatarUrl: avatarUrl(p) }));
 /** Profiel een plek omhoog (-1) of omlaag (+1). Samen blijft altijd vooraan. */
@@ -53,8 +57,29 @@ export function move(id, dir) {
   db.prepare('UPDATE profiles SET sort = 0 WHERE id = 1').run();
   ids.forEach((x, k) => db.prepare('UPDATE profiles SET sort = ? WHERE id = ?').run(k + 1, x));
 }
-/** Verder kijken van Plex zelf tonen bij dit profiel, aan of uit. */
-export const setPlexDeck = (id, on) => db.prepare('UPDATE profiles SET plex_user = ? WHERE id = ?').run(on ? '1' : '', +id);
+/** Plex-profiel koppelen. user = '' (geen), 'hoofd' of een id uit Plex Home. pin alleen als dat profiel er een heeft. */
+export async function linkPlex(id, user, pin) {
+  user = String(user || ''); pin = String(pin || '');
+  if (!/^(|hoofd|\d{1,12})$/.test(user) || !/^(|\d{4})$/.test(pin)) throw Object.assign(new Error('Ongeldige keuze'), { status: 400 });
+  if (!db.prepare('SELECT 1 FROM profiles WHERE id = ?').get(+id)) throw Object.assign(new Error('Profiel bestaat niet'), { status: 404 });
+  let name = '', token = '';
+  if (user) {
+    const u = (await plex.homeUsers()).find(x => (x.admin ? 'hoofd' : x.id) === user);
+    if (!u) throw Object.assign(new Error('Dat Plex-profiel bestaat niet (meer)'), { status: 400 });
+    if (u.pin && !pin) throw Object.assign(new Error('Dit Plex-profiel heeft een pincode'), { status: 400 });
+    name = u.name;
+    if (!u.admin) token = await plex.profileToken(u.id, pin);
+  }
+  db.prepare('UPDATE profiles SET plex_user = ?, plex_name = ?, plex_token = ? WHERE id = ?').run(user, name, token, +id);
+  return name;
+}
+/** Token van het Plex-profiel van dit Sjuul TV-profiel, of '' als er geen Plex-profiel bij hoort. Samen zonder keuze: hoofdaccount. */
+export function plexToken(profile) {
+  const r = db.prepare('SELECT plex_user, plex_token FROM profiles WHERE id = ?').get(+profile);
+  if (!r) return '';
+  if (r.plex_user === 'hoofd' || (+profile === 1 && !r.plex_user)) return S('plexToken') || '';
+  return r.plex_user ? r.plex_token || '' : '';
+}
 /** "Mag alles" aan of uit. */
 export const setAdmin = (id, on) => db.prepare('UPDATE profiles SET admin = ? WHERE id = ?').run(on ? 1 : 0, +id);
 export function setAvatar(id, avatar) {
@@ -62,10 +87,11 @@ export function setAvatar(id, avatar) {
   db.prepare('UPDATE profiles SET avatar = ? WHERE id = ?').run(v, +id);
 }
 export function save(p) {
-  if (p.id) db.prepare('UPDATE profiles SET name = ?, color = ?, admin = ?, plex_user = ?, prefs = ?, sort = ? WHERE id = ?')
-    .run(p.name, p.color || '#3DDBB0', p.admin ? 1 : 0, p.plex_user || '', JSON.stringify(p.prefs || {}), +p.sort || 0, +p.id);
-  else db.prepare('INSERT INTO profiles (name, color, admin, plex_user, prefs, sort) VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM profiles))')
-    .run(p.name, p.color || '#3DDBB0', p.admin ? 1 : 0, p.plex_user || '', JSON.stringify(p.prefs || {}));
+  // Het Plex-profiel gaat apart via linkPlex.
+  if (p.id) db.prepare('UPDATE profiles SET name = ?, color = ?, admin = ?, prefs = ?, sort = ? WHERE id = ?')
+    .run(p.name, p.color || '#3DDBB0', p.admin ? 1 : 0, JSON.stringify(p.prefs || {}), +p.sort || 0, +p.id);
+  else db.prepare('INSERT INTO profiles (name, color, admin, prefs, sort) VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM profiles))')
+    .run(p.name, p.color || '#3DDBB0', p.admin ? 1 : 0, JSON.stringify(p.prefs || {}));
 }
 export const remove = id => {
   if (+id === 1) return;                     // Samen blijft altijd
@@ -87,7 +113,7 @@ export function progress(profile, p) {
     ON CONFLICT(profile, key) DO UPDATE SET pos = excluded.pos, dur = excluded.dur, watched = MAX(progress.watched, excluded.watched), meta = excluded.meta, updated = excluded.updated, series_key = excluded.series_key, hidden = 0,
       tmdb = CASE WHEN excluded.tmdb > 0 THEN excluded.tmdb ELSE progress.tmdb END, season = CASE WHEN excluded.tmdb > 0 THEN excluded.season ELSE progress.season END, episode = CASE WHEN excluded.tmdb > 0 THEN excluded.episode ELSE progress.episode END`)
     .run(+profile, p.key, p.seriesKey || '', p.kind || '', Math.round(p.pos || 0), Math.round(p.dur || 0), watched, JSON.stringify(p.meta || {}), Date.now(), id.tmdb, id.season, id.episode);
-  if (p.plexKey) plex.timeline(p.plexKey, p.state || (watched ? 'stopped' : 'playing'), p.pos, p.dur);
+  if (p.plexKey) plex.timeline(plexToken(profile), p.plexKey, p.state || (watched ? 'stopped' : 'playing'), p.pos, p.dur);
 }
 /** Waar ben je gebleven? Eerst bij deze bron; anders bij dezelfde titel via de andere bron (Plex of IPTV), 10 seconden eerder. */
 export function position(profile, key, tmdb = 0, season = 0, episode = 0) {
@@ -129,10 +155,10 @@ export async function continueWatching(profile) {
       if (next) out.push({ ...meta, ...next, when: r.updated, next: true });
     }
   }
-  // Wat Plex zelf als "verder kijken" heeft (dat is van het Plex-account van de server, dus van één persoon):
-  // alleen bij Samen en bij profielen waar dat op de beheerpagina aan staat. Anders zien alle profielen hetzelfde.
-  if (usesPlex(profile)) try {
-    (await plex.deck()).slice(0, 8).forEach(p => {
+  // Wat Plex zelf als "verder kijken" heeft, van het Plex-profiel dat bij dit profiel hoort (ook wat je in de Plex-app keek).
+  const tok = plexToken(profile);
+  if (tok) try {
+    (await plex.deck(tok)).slice(0, 8).forEach(p => {
       if (seen.has('plex:' + p.key) || (p.show && seen.has('plex:' + p.show))) return;
       if (p.type === 'movie' && ((p.tmdb && seen.has('m' + p.tmdb)) || seen.has(tkey(p.title)))) return;
       out.push({ ...p, kind: p.type === 'movie' && !EPISODE.test(p.title) ? 'movie' : 'series', key: 'plex:' + p.key, when: p.added, resume: true });
@@ -141,23 +167,21 @@ export async function continueWatching(profile) {
   return out.sort((a, b) => (b.when || 0) - (a.when || 0)).slice(0, 20);
 }
 
-/** Hoort het Plex-account van de server bij dit profiel? (Samen, en profielen waar dat in beheer aan staat.) */
-export const usesPlex = profile => +profile === 1 || db.prepare('SELECT plex_user FROM profiles WHERE id = ?').get(+profile)?.plex_user === '1';
-
-/** Gezien of niet gezien zetten. items = [{ key, seriesKey, kind, meta }]. Bij Plex ook in Plex, als het Plex-account van dit profiel is. */
+/** Gezien of niet gezien zetten. items = [{ key, seriesKey, kind, meta }]. Bij Plex ook in het Plex-profiel van dit profiel. */
 export function setWatched(profile, items, yes) {
   const put = db.prepare(`INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated, tmdb, season, episode) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(profile, key) DO UPDATE SET pos = 0, watched = excluded.watched, updated = excluded.updated, hidden = 0,
       tmdb = CASE WHEN excluded.tmdb > 0 THEN excluded.tmdb ELSE progress.tmdb END, season = CASE WHEN excluded.tmdb > 0 THEN excluded.season ELSE progress.season END, episode = CASE WHEN excluded.tmdb > 0 THEN excluded.episode ELSE progress.episode END,
       series_key = CASE WHEN excluded.series_key = '' THEN progress.series_key ELSE excluded.series_key END,
       meta = CASE WHEN excluded.meta = '{}' THEN progress.meta ELSE excluded.meta END`);
+  const tok = plexToken(profile);
   for (const it of (items || []).slice(0, 500)) {
     const key = String(it.key || ''); if (!/^(plex|movie|series):\d+$/.test(key)) continue;
     const id = ident(it);
     put.run(+profile, key, String(it.seriesKey || ''), String(it.kind || ''), yes ? 1 : 0, JSON.stringify(it.meta || {}).slice(0, 4000), Date.now(), id.tmdb, id.season, id.episode);
     // Ook de andere bron van dezelfde titel (of aflevering) gelijkzetten.
     if (id.tmdb > 0) db.prepare('UPDATE progress SET watched = ?, pos = 0, updated = ? WHERE profile = ? AND key != ? AND tmdb = ? AND season = ? AND episode = ?').run(yes ? 1 : 0, Date.now(), +profile, key, id.tmdb, id.season, id.episode);
-    if (key.startsWith('plex:') && usesPlex(profile)) plex.setWatched(key.slice(5), yes);
+    if (key.startsWith('plex:')) plex.setWatched(tok, key.slice(5), yes);
   }
 }
 export const isWatched = (profile, key) => !!db.prepare('SELECT watched FROM progress WHERE profile = ? AND key = ?').get(+profile, key)?.watched;
@@ -168,8 +192,8 @@ export const watchedList = profile => db.prepare('SELECT key, kind, meta, update
 /** Seizoenen en afleveringen van een serie, met gezien en kijkstand van dit profiel. src = { plex } of { vod }. */
 export async function showState(profile, src) {
   const mine = new Map(db.prepare("SELECT key, pos, dur, watched FROM progress WHERE profile = ? AND (key LIKE 'plex:%' OR key LIKE 'series:%')").all(+profile).map(r => [r.key, r]));
-  const own = usesPlex(profile);
-  const d = src.plex ? await plex.show(+src.plex) : await vod.info('series', +src.vod);
+  const tok = plexToken(profile), own = !!tok;
+  const d = src.plex ? await plex.show(+src.plex, tok || undefined) : await vod.info('series', +src.vod);
   const other = watchedEps(profile, d.tmdb);   // gezien via de andere bron
   for (const s of d.seasons) for (const e of s.episodes) {
     const key = src.plex ? 'plex:' + e.key : 'series:' + e.id, r = mine.get(key);
@@ -189,7 +213,7 @@ export function hide(profile, key) {
   else db.prepare('INSERT INTO progress (profile, key, series_key, kind, pos, dur, watched, meta, updated, hidden) VALUES (?, ?, \'\', \'\', 0, 0, 0, \'{}\', ?, 1)').run(+profile, key, Date.now());
   const t = db.prepare('SELECT tmdb, kind FROM progress WHERE profile = ? AND key = ?').get(+profile, key);
   if (t && t.tmdb > 0) db.prepare('UPDATE progress SET hidden = 1 WHERE profile = ? AND tmdb = ?').run(+profile, t.tmdb);
-  if (key.startsWith('plex:')) plex.removeFromDeck(key.slice(5));
+  if (key.startsWith('plex:')) plex.removeFromDeck(plexToken(profile), key.slice(5));
 }
 
 /** Eerstvolgende niet-geziene aflevering van een IPTV-serie. */
